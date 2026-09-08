@@ -10,8 +10,10 @@ import {
   Film,
   FlaskConical,
   ImagePlus,
+  Pencil,
   Play,
   Plus,
+  Save,
   ShieldCheck,
   Sparkles,
   WandSparkles,
@@ -58,6 +60,24 @@ function Chip({
   return <span className={`chip chip-${kind}`}>{children}</span>;
 }
 
+function EditorNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        padding: "10px 12px",
+        border: "1px solid rgba(255,255,255,.12)",
+        borderRadius: 12,
+        fontSize: 13,
+        lineHeight: 1.5,
+        opacity: 0.86,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function StudioPage() {
   const [project, setProject] = useState<EpisodeProject>(initial);
   const [topic, setTopic] = useState("Changed payment amount");
@@ -88,6 +108,13 @@ export default function StudioPage() {
   >(null);
   const [renderError, setRenderError] = useState("");
 
+  // Manual editing state
+  const [editingSceneId, setEditingSceneId] = useState<string | null>(null);
+  const [editingShortIndex, setEditingShortIndex] = useState<number | null>(null);
+  const [editingThumbIndex, setEditingThumbIndex] = useState<number | null>(null);
+  const [editingTitleIndex, setEditingTitleIndex] = useState<number | null>(null);
+  const [manualScriptEdits, setManualScriptEdits] = useState(false);
+
   const durationInFrames = useMemo(
     () =>
       Math.max(
@@ -99,6 +126,77 @@ export default function StudioPage() {
     [project]
   );
 
+  function invalidateNarration(current: EpisodeProject): EpisodeProject {
+    if (!current.narration) return current;
+    const next = { ...current };
+    delete next.narration;
+    return next;
+  }
+
+  function updateScene(
+    sceneId: string,
+    field: "eyebrow" | "headline" | "body" | "narration" | "retentionPurpose",
+    value: string
+  ) {
+    setProject((current) => {
+      const base = invalidateNarration(current);
+      return {
+        ...base,
+        scenes: base.scenes.map((scene) =>
+          scene.id === sceneId ? { ...scene, [field]: value } : scene
+        ),
+      };
+    });
+    setManualScriptEdits(true);
+    setNarrationError("");
+  }
+
+  function updateShort(
+    index: number,
+    field: "title" | "hook" | "script",
+    value: string
+  ) {
+    setProject((current) => ({
+      ...current,
+      shorts: current.shorts.map((short, i) =>
+        i === index ? { ...short, [field]: value } : short
+      ),
+    }));
+  }
+
+  function updateThumbnail(
+    index: number,
+    field: "title" | "kicker" | "visual",
+    value: string
+  ) {
+    setProject((current) => ({
+      ...current,
+      thumbnails: current.thumbnails.map((thumb, i) =>
+        i === index ? { ...thumb, [field]: value } : thumb
+      ),
+    }));
+  }
+
+  function updateTitle(index: number, value: string) {
+    setProject((current) => ({
+      ...current,
+      titles: current.titles.map((title, i) => (i === index ? value : title)),
+    }));
+  }
+
+  function updatePublishing(
+    field: "description" | "pinnedComment" | "linkedinPost",
+    value: string
+  ) {
+    setProject((current) => ({
+      ...current,
+      publishing: {
+        ...current.publishing,
+        [field]: value,
+      },
+    }));
+  }
+
   async function ingestHps() {
     setIngestBusy(true);
     setIngestError("");
@@ -107,7 +205,9 @@ export default function StudioPage() {
       const input = hpsUrl.trim() || hpsInput.trim();
 
       if (!input) {
-        throw new Error("Paste an HPS verification result, record ID or public HPS URL.");
+        throw new Error(
+          "Paste an HPS verification result, record ID or public HPS URL."
+        );
       }
 
       const response = await fetch("/api/hps-ingest", {
@@ -144,6 +244,8 @@ export default function StudioPage() {
       next.hpsIngestion = parsed.ingestion;
 
       setProject(next);
+      setManualScriptEdits(false);
+      setEditingSceneId(null);
       setActiveTab("story");
     } catch (error: any) {
       setIngestError(error.message || "Unable to ingest HPS result.");
@@ -173,8 +275,11 @@ export default function StudioPage() {
       }
 
       setProject(syncSceneDurationsToNarration(project, data.track));
+      setManualScriptEdits(false);
     } catch (error: any) {
-      setNarrationError(error.message || "Unable to create narration timing.");
+      setNarrationError(
+        error.message || "Unable to create narration timing."
+      );
     } finally {
       setNarrationBusy(false);
     }
@@ -203,6 +308,7 @@ export default function StudioPage() {
       }
 
       setProject(syncSceneDurationsToNarration(project, data.track));
+      setManualScriptEdits(false);
     } catch (error: any) {
       setNarrationError(error.message || "Unable to generate narration.");
     } finally {
@@ -281,6 +387,8 @@ export default function StudioPage() {
     next.assets = project.assets;
     next.hpsIngestion = project.hpsIngestion;
     setProject(next);
+    setManualScriptEdits(false);
+    setEditingSceneId(null);
     setActiveTab("story");
   }
 
@@ -384,7 +492,6 @@ export default function StudioPage() {
         ))}
       </nav>
 
-
       {activeTab === "ingest" && (
         <section className="workspace ingestGrid">
           <div className="panel">
@@ -397,7 +504,11 @@ export default function StudioPage() {
             </div>
 
             <p className="muted">
-              Paste the visible HPS verification result exactly as you saw it. You can also use a public HPS record ID or URL. The Studio extracts the record ID, relationship, confidence, integrity result, signatures, witness status and explicit before → after changes when present.
+              Paste the visible HPS verification result exactly as you saw it.
+              You can also use a public HPS record ID or URL. The Studio extracts
+              the record ID, relationship, confidence, integrity result,
+              signatures, witness status and explicit before → after changes
+              when present.
             </p>
 
             <label>
@@ -406,11 +517,13 @@ export default function StudioPage() {
                 rows={15}
                 value={hpsInput}
                 onChange={(e) => setHpsInput(e.target.value)}
-                placeholder="HPS✓RELATED / MODIFIED&#10;HPS-2026-...&#10;Asset identity Different bytes&#10;Relationship confidence 79/100&#10;..."
+                placeholder={"HPS✓RELATED / MODIFIED\nHPS-2026-...\nAsset identity Different bytes\nRelationship confidence 79/100\n..."}
               />
             </label>
 
-            <div className="orDivider"><span>OR</span></div>
+            <div className="orDivider">
+              <span>OR</span>
+            </div>
 
             <label>
               Public HPS record/result URL
@@ -429,7 +542,9 @@ export default function StudioPage() {
               disabled={ingestBusy}
             >
               <WandSparkles size={18} />
-              {ingestBusy ? "Reading HPS evidence…" : "Ingest HPS result & build episode"}
+              {ingestBusy
+                ? "Reading HPS evidence…"
+                : "Ingest HPS result & build episode"}
             </button>
           </div>
 
@@ -439,12 +554,36 @@ export default function StudioPage() {
 
             <div className="automationSteps">
               {[
-                ["01", "Parse", "Record ID, relationship, confidence, integrity and witness results."],
-                ["02", "Evidence", "Convert observed HPS output into truth-labelled evidence."],
-                ["03", "Question", "Turn the experiment into a viewer-first central question."],
-                ["04", "Story", "Generate hook, setup, proof, interpretation, limitation and payoff."],
-                ["05", "Narration", "Create a timing-ready narration track."],
-                ["06", "Captions", "Use sentence timings to animate captions in the final render."],
+                [
+                  "01",
+                  "Parse",
+                  "Record ID, relationship, confidence, integrity and witness results.",
+                ],
+                [
+                  "02",
+                  "Evidence",
+                  "Convert observed HPS output into truth-labelled evidence.",
+                ],
+                [
+                  "03",
+                  "Question",
+                  "Turn the experiment into a viewer-first central question.",
+                ],
+                [
+                  "04",
+                  "Story",
+                  "Generate hook, setup, proof, interpretation, limitation and payoff.",
+                ],
+                [
+                  "05",
+                  "Narration",
+                  "Create a timing-ready narration track.",
+                ],
+                [
+                  "06",
+                  "Captions",
+                  "Use sentence timings to animate captions in the final render.",
+                ],
               ].map(([n, title, body]) => (
                 <article key={n}>
                   <span>{n}</span>
@@ -558,9 +697,7 @@ export default function StudioPage() {
                   <Chip kind={item.kind}>{item.kind}</Chip>
                   <textarea
                     value={item.statement}
-                    onChange={(e) =>
-                      updateEvidence(item.id, e.target.value)
-                    }
+                    onChange={(e) => updateEvidence(item.id, e.target.value)}
                     rows={2}
                   />
                 </div>
@@ -570,9 +707,7 @@ export default function StudioPage() {
             <label className="uploadBox">
               <ImagePlus />
               <strong>Upload screenshots / evidence</strong>
-              <span>
-                Images are stored inside the exported project as data URLs.
-              </span>
+              <span>Images are stored inside the exported project as data URLs.</span>
               <input
                 type="file"
                 accept="image/*"
@@ -623,41 +758,147 @@ export default function StudioPage() {
                 <Sparkles size={15} />{" "}
                 {project.narration
                   ? `${project.narration.sentences.length} timed captions`
-                  : "captions pending"}
+                  : manualScriptEdits
+                    ? "timing needs rebuild"
+                    : "captions pending"}
               </span>
             </div>
+
+            {manualScriptEdits && (
+              <EditorNotice>
+                <strong>Script changed.</strong> The old narration timing was
+                cleared so captions and voice cannot drift from the edited
+                script. When you finish editing, open <strong>Narration</strong>{" "}
+                and build timing again.
+              </EditorNotice>
+            )}
           </div>
 
           <div className="panel">
             <div className="panelHead">
               <div>
                 <p className="micro">STORY MAP</p>
-                <h2>Every scene has a job.</h2>
+                <h2>Every scene has a job — and is now editable.</h2>
               </div>
               <Sparkles />
             </div>
 
             <div className="sceneList">
-              {project.scenes.map((scene, index) => (
-                <article className="sceneCard" key={scene.id}>
-                  <div className="sceneIndex">{String(index + 1).padStart(2, "0")}</div>
-                  <div>
-                    <p className="micro">{scene.eyebrow}</p>
-                    <h3>{scene.headline}</h3>
-                    <p>{scene.narration}</p>
-                    {scene.retentionPurpose && (
-                      <div className="retentionPurpose">
-                        <strong>Retention job:</strong> {scene.retentionPurpose}
-                      </div>
-                    )}
-                    <div className="sceneMeta">
-                      <span>{scene.kind}</span>
-                      <span>{scene.durationSec}s</span>
-                      <span>{scene.factIds.length} evidence links</span>
+              {project.scenes.map((scene, index) => {
+                const isEditing = editingSceneId === scene.id;
+                return (
+                  <article className="sceneCard" key={scene.id}>
+                    <div className="sceneIndex">
+                      {String(index + 1).padStart(2, "0")}
                     </div>
-                  </div>
-                </article>
-              ))}
+                    <div style={{ width: "100%" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                        }}
+                      >
+                        <p className="micro">{scene.eyebrow}</p>
+                        <button
+                          className="button ghost"
+                          onClick={() =>
+                            setEditingSceneId(isEditing ? null : scene.id)
+                          }
+                        >
+                          {isEditing ? (
+                            <>
+                              <Save size={14} /> Done
+                            </>
+                          ) : (
+                            <>
+                              <Pencil size={14} /> Edit scene
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {isEditing ? (
+                        <>
+                          <label>
+                            Scene label
+                            <input
+                              value={scene.eyebrow}
+                              onChange={(e) =>
+                                updateScene(scene.id, "eyebrow", e.target.value)
+                              }
+                            />
+                          </label>
+                          <label>
+                            Headline
+                            <input
+                              value={scene.headline}
+                              onChange={(e) =>
+                                updateScene(scene.id, "headline", e.target.value)
+                              }
+                            />
+                          </label>
+                          <label>
+                            Narration
+                            <textarea
+                              rows={8}
+                              value={scene.narration}
+                              onChange={(e) =>
+                                updateScene(
+                                  scene.id,
+                                  "narration",
+                                  e.target.value
+                                )
+                              }
+                            />
+                          </label>
+                          <label>
+                            On-screen body / supporting copy
+                            <textarea
+                              rows={4}
+                              value={scene.body}
+                              onChange={(e) =>
+                                updateScene(scene.id, "body", e.target.value)
+                              }
+                            />
+                          </label>
+                          <label>
+                            Retention job
+                            <input
+                              value={scene.retentionPurpose || ""}
+                              onChange={(e) =>
+                                updateScene(
+                                  scene.id,
+                                  "retentionPurpose",
+                                  e.target.value
+                                )
+                              }
+                            />
+                          </label>
+                        </>
+                      ) : (
+                        <>
+                          <h3>{scene.headline}</h3>
+                          <p>{scene.narration}</p>
+                          {scene.retentionPurpose && (
+                            <div className="retentionPurpose">
+                              <strong>Retention job:</strong>{" "}
+                              {scene.retentionPurpose}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      <div className="sceneMeta">
+                        <span>{scene.kind}</span>
+                        <span>{scene.durationSec}s</span>
+                        <span>{scene.factIds.length} evidence links</span>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
 
             <div className="exportRow">
@@ -690,36 +931,53 @@ export default function StudioPage() {
         </section>
       )}
 
-
-
       {activeTab === "narration" && (
         <section className="workspace narrationGrid">
           <div className="panel">
             <div className="panelHead">
               <div>
                 <p className="micro">PREMIUM NARRATION</p>
-                <h2>Voice, timing and captions from one track.</h2>
+                <h2>Voice, timing and captions from one approved script.</h2>
               </div>
               <Sparkles />
             </div>
 
             <div className="narrationStatus">
-              <span className={project.narration?.audioDataUrl ? "statusDot live" : "statusDot"} />
+              <span
+                className={
+                  project.narration?.audioDataUrl ? "statusDot live" : "statusDot"
+                }
+              />
               <div>
                 <strong>
                   {project.narration?.provider === "elevenlabs"
                     ? "Premium narration ready"
                     : project.narration
                       ? "Estimated timing ready"
-                      : "No narration track yet"}
+                      : manualScriptEdits
+                        ? "Script edited — rebuild timing"
+                        : "No narration track yet"}
                 </strong>
                 <p>
                   {project.narration
                     ? `${project.narration.sentences.length} timed sentences · ${project.narration.durationSec.toFixed(1)} sec`
-                    : "Generate estimated timing free, or connect ElevenLabs for real audio + character timing."}
+                    : manualScriptEdits
+                      ? "Your edited Story Map is now the source narration. Build timing again before generating audio."
+                      : "Generate estimated timing free, or connect ElevenLabs for real audio + character timing."}
                 </p>
               </div>
             </div>
+
+            <button
+              className="button"
+              onClick={() => {
+                setEditingSceneId(project.scenes[0]?.id || null);
+                setActiveTab("story");
+              }}
+              style={{ marginBottom: 14 }}
+            >
+              <Pencil size={16} /> Edit source script
+            </button>
 
             <label>
               ElevenLabs voice ID
@@ -744,8 +1002,15 @@ export default function StudioPage() {
             )}
 
             <div className="narrationActions">
-              <button className="button" onClick={applyEstimatedNarration}>
-                <Clapperboard size={16} /> Build timing without TTS
+              <button
+                className="button"
+                onClick={applyEstimatedNarration}
+                disabled={narrationBusy}
+              >
+                <Clapperboard size={16} />{" "}
+                {manualScriptEdits
+                  ? "Rebuild timing from edited script"
+                  : "Build timing without TTS"}
               </button>
               <button
                 className="button primary"
@@ -753,7 +1018,9 @@ export default function StudioPage() {
                 disabled={narrationBusy}
               >
                 <WandSparkles size={16} />
-                {narrationBusy ? "Generating voice…" : "Generate premium narration"}
+                {narrationBusy
+                  ? "Generating voice…"
+                  : "Generate premium narration"}
               </button>
             </div>
 
@@ -765,10 +1032,9 @@ export default function StudioPage() {
             )}
 
             <p className="muted narrationPrivacy">
-              API keys stay server-side in <code>.env.local</code>. The
-              narration route sends only the approved narration text and
-              selected voice/model identifiers to the configured voice
-              provider.
+              API keys stay server-side in <code>.env.local</code>. The narration
+              route sends only the approved narration text and selected
+              voice/model identifiers to the configured voice provider.
             </p>
           </div>
 
@@ -783,26 +1049,39 @@ export default function StudioPage() {
 
             {project.narration ? (
               <div className="sentenceTimeline">
-                {project.narration.sentences.slice(0, 80).map((sentence, index) => (
-                  <article key={sentence.id}>
-                    <span className="sentenceTime">
-                      {sentence.startSec.toFixed(1)}–{sentence.endSec.toFixed(1)}
-                    </span>
-                    <div>
-                      <strong>{String(index + 1).padStart(2, "0")}</strong>
-                      <p>{sentence.text}</p>
-                      <span className="timedWordCount">
-                        {sentence.words.length} word-level timestamps
+                {project.narration.sentences
+                  .slice(0, 80)
+                  .map((sentence, index) => (
+                    <article key={sentence.id}>
+                      <span className="sentenceTime">
+                        {sentence.startSec.toFixed(1)}–
+                        {sentence.endSec.toFixed(1)}
                       </span>
-                    </div>
-                  </article>
-                ))}
+                      <div>
+                        <strong>
+                          {String(index + 1).padStart(2, "0")}
+                        </strong>
+                        <p>{sentence.text}</p>
+                        <span className="timedWordCount">
+                          {sentence.words.length} word-level timestamps
+                        </span>
+                      </div>
+                    </article>
+                  ))}
               </div>
             ) : (
               <div className="emptyNarration">
                 <Clapperboard />
-                <strong>No timed narration yet.</strong>
-                <p>Generate timing to see every caption sentence on the timeline.</p>
+                <strong>
+                  {manualScriptEdits
+                    ? "Edited script is waiting for new timing."
+                    : "No timed narration yet."}
+                </strong>
+                <p>
+                  {manualScriptEdits
+                    ? "Click Rebuild timing from edited script when your Story Map edits are finished."
+                    : "Generate timing to see every caption sentence on the timeline."}
+                </p>
               </div>
             )}
           </div>
@@ -836,11 +1115,19 @@ export default function StudioPage() {
                 </h3>
                 <p className="muted">
                   This is an editorial quality score, not a YouTube guarantee.
-                  It measures hook strength, pacing, proof density, curiosity
-                  and clarity before publishing.
+                  It measures hook strength, pacing, proof density, curiosity and
+                  clarity before publishing.
                 </p>
               </div>
             </div>
+
+            {manualScriptEdits && (
+              <EditorNotice>
+                <strong>Note:</strong> you edited the generated script after this
+                retention score was created. Treat the score as guidance for the
+                generated draft. Your manual edits are preserved.
+              </EditorNotice>
+            )}
 
             <div className="retentionMetrics">
               {[
@@ -871,7 +1158,21 @@ export default function StudioPage() {
                 {project.retention.warnings.map((warning, index) => (
                   <div key={index}>
                     <span>{String(index + 1).padStart(2, "0")}</span>
-                    <p>{warning}</p>
+                    <div style={{ flex: 1 }}>
+                      <p>{warning}</p>
+                      {index === 0 && project.scenes[0] && (
+                        <button
+                          className="button ghost"
+                          onClick={() => {
+                            setEditingSceneId(project.scenes[0]!.id);
+                            setActiveTab("story");
+                          }}
+                          style={{ marginTop: 8 }}
+                        >
+                          <Pencil size={14} /> Edit opening hook
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -893,7 +1194,10 @@ export default function StudioPage() {
                   <div className={`beatDot beat-${beat.type}`} />
                   <div>
                     <div className="beatTop">
-                      <span>{Math.floor(beat.atSec / 60)}:{String(beat.atSec % 60).padStart(2, "0")}</span>
+                      <span>
+                        {Math.floor(beat.atSec / 60)}:
+                        {String(beat.atSec % 60).padStart(2, "0")}
+                      </span>
                       <strong>{beat.type.replace("_", " ")}</strong>
                     </div>
                     <p>{beat.label}</p>
@@ -904,12 +1208,37 @@ export default function StudioPage() {
 
             <div className="watchRules">
               <p className="micro">WATCH-TIME RULES</p>
-              <div><strong>First seconds</strong><span>Show the object, the controlled change and the question. No long intro.</span></div>
-              <div><strong>Open loop</strong><span>Promise a specific result viewers will see later.</span></div>
-              <div><strong>Proof cadence</strong><span>Keep introducing visible evidence, not just narration.</span></div>
-              <div><strong>Pattern resets</strong><span>Switch visual grammar before a section starts feeling static.</span></div>
-              <div><strong>Payoff</strong><span>Deliver the answer before asking for a subscription.</span></div>
-              <div><strong>Next-video bridge</strong><span>End with the next unresolved experiment, not a generic CTA.</span></div>
+              <div>
+                <strong>First seconds</strong>
+                <span>
+                  Show the object, the controlled change and the question. No
+                  long intro.
+                </span>
+              </div>
+              <div>
+                <strong>Open loop</strong>
+                <span>Promise a specific result viewers will see later.</span>
+              </div>
+              <div>
+                <strong>Proof cadence</strong>
+                <span>Keep introducing visible evidence, not just narration.</span>
+              </div>
+              <div>
+                <strong>Pattern resets</strong>
+                <span>
+                  Switch visual grammar before a section starts feeling static.
+                </span>
+              </div>
+              <div>
+                <strong>Payoff</strong>
+                <span>Deliver the answer before asking for a subscription.</span>
+              </div>
+              <div>
+                <strong>Next-video bridge</strong>
+                <span>
+                  End with the next unresolved experiment, not a generic CTA.
+                </span>
+              </div>
             </div>
           </div>
         </section>
@@ -921,50 +1250,197 @@ export default function StudioPage() {
             <div className="panelHead">
               <div>
                 <p className="micro">SHORTS ENGINE</p>
-                <h2>One experiment. Three vertical hooks.</h2>
+                <h2>One experiment. Three editable vertical hooks.</h2>
               </div>
               <Clapperboard />
             </div>
 
-            {project.shorts.map((short, index) => (
-              <article className="shortCard" key={short.title}>
-                <span className="shortNumber">SHORT {index + 1}</span>
-                <h3>{short.title}</h3>
-                <strong>{short.hook}</strong>
-                <p>{short.script}</p>
-              </article>
-            ))}
+            {project.shorts.map((short, index) => {
+              const isEditing = editingShortIndex === index;
+              return (
+                <article className="shortCard" key={`short-${index}`}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                    }}
+                  >
+                    <span className="shortNumber">SHORT {index + 1}</span>
+                    <button
+                      className="button ghost"
+                      onClick={() =>
+                        setEditingShortIndex(isEditing ? null : index)
+                      }
+                    >
+                      {isEditing ? (
+                        <>
+                          <Save size={14} /> Done
+                        </>
+                      ) : (
+                        <>
+                          <Pencil size={14} /> Edit
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {isEditing ? (
+                    <>
+                      <label>
+                        Short title
+                        <input
+                          value={short.title}
+                          onChange={(e) =>
+                            updateShort(index, "title", e.target.value)
+                          }
+                        />
+                      </label>
+                      <label>
+                        Hook
+                        <textarea
+                          rows={3}
+                          value={short.hook}
+                          onChange={(e) =>
+                            updateShort(index, "hook", e.target.value)
+                          }
+                        />
+                      </label>
+                      <label>
+                        Script
+                        <textarea
+                          rows={7}
+                          value={short.script}
+                          onChange={(e) =>
+                            updateShort(index, "script", e.target.value)
+                          }
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <h3>{short.title}</h3>
+                      <strong>{short.hook}</strong>
+                      <p>{short.script}</p>
+                    </>
+                  )}
+                </article>
+              );
+            })}
           </div>
 
           <div className="panel">
             <div className="panelHead">
               <div>
                 <p className="micro">THUMBNAIL LAB</p>
-                <h2>Curiosity without clickbait.</h2>
+                <h2>Curiosity without clickbait — now editable.</h2>
               </div>
               <ImagePlus />
             </div>
 
             <div className="thumbGrid">
-              {project.thumbnails.map((thumb) => (
-                <article className="thumbCard" key={thumb.title}>
-                  <div className="thumbMock">
-                    <span>{thumb.title}</span>
-                    <strong>{thumb.kicker}</strong>
-                  </div>
-                  <p>{thumb.visual}</p>
-                </article>
-              ))}
+              {project.thumbnails.map((thumb, index) => {
+                const isEditing = editingThumbIndex === index;
+                return (
+                  <article className="thumbCard" key={`thumb-${index}`}>
+                    <div className="thumbMock">
+                      <span>{thumb.title}</span>
+                      <strong>{thumb.kicker}</strong>
+                    </div>
+
+                    {isEditing ? (
+                      <>
+                        <label>
+                          Main thumbnail text
+                          <input
+                            value={thumb.title}
+                            onChange={(e) =>
+                              updateThumbnail(index, "title", e.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          Kicker
+                          <input
+                            value={thumb.kicker}
+                            onChange={(e) =>
+                              updateThumbnail(index, "kicker", e.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          Visual direction
+                          <textarea
+                            rows={3}
+                            value={thumb.visual}
+                            onChange={(e) =>
+                              updateThumbnail(index, "visual", e.target.value)
+                            }
+                          />
+                        </label>
+                      </>
+                    ) : (
+                      <p>{thumb.visual}</p>
+                    )}
+
+                    <button
+                      className="button ghost"
+                      onClick={() =>
+                        setEditingThumbIndex(isEditing ? null : index)
+                      }
+                      style={{ marginTop: 8 }}
+                    >
+                      {isEditing ? (
+                        <>
+                          <Save size={14} /> Done
+                        </>
+                      ) : (
+                        <>
+                          <Pencil size={14} /> Edit thumbnail
+                        </>
+                      )}
+                    </button>
+                  </article>
+                );
+              })}
             </div>
 
             <div className="titleStack">
               <p className="micro">TITLE OPTIONS</p>
-              {project.titles.map((title, index) => (
-                <div key={title}>
-                  <span>{index + 1}</span>
-                  <strong>{title}</strong>
-                </div>
-              ))}
+              {project.titles.map((title, index) => {
+                const isEditing = editingTitleIndex === index;
+                return (
+                  <div key={`title-${index}`}>
+                    <span>{index + 1}</span>
+                    {isEditing ? (
+                      <input
+                        value={title}
+                        onChange={(e) => updateTitle(index, e.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                    ) : (
+                      <strong style={{ flex: 1 }}>{title}</strong>
+                    )}
+                    <button
+                      className="button ghost"
+                      onClick={() =>
+                        setEditingTitleIndex(isEditing ? null : index)
+                      }
+                    >
+                      {isEditing ? (
+                        <>
+                          <Save size={14} /> Done
+                        </>
+                      ) : (
+                        <>
+                          <Pencil size={14} /> Edit
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -974,24 +1450,53 @@ export default function StudioPage() {
         <section className="workspace publishGrid">
           <div className="panel">
             <p className="micro">YOUTUBE DESCRIPTION</p>
-            <pre className="copyBlock">{project.publishing.description}</pre>
+            <textarea
+              rows={14}
+              value={project.publishing.description}
+              onChange={(e) =>
+                updatePublishing("description", e.target.value)
+              }
+            />
           </div>
+
           <div className="panel">
             <p className="micro">PINNED COMMENT</p>
-            <pre className="copyBlock">{project.publishing.pinnedComment}</pre>
+            <textarea
+              rows={9}
+              value={project.publishing.pinnedComment}
+              onChange={(e) =>
+                updatePublishing("pinnedComment", e.target.value)
+              }
+            />
           </div>
+
           <div className="panel">
             <p className="micro">LINKEDIN LAUNCH</p>
-            <pre className="copyBlock">{project.publishing.linkedinPost}</pre>
+            <textarea
+              rows={12}
+              value={project.publishing.linkedinPost}
+              onChange={(e) =>
+                updatePublishing("linkedinPost", e.target.value)
+              }
+            />
           </div>
+
           <div className="panel renderMasterPanel">
             <p className="micro">ONE-CLICK CLOUD RENDER</p>
             <h2>Generate the actual video here.</h2>
             <p className="muted">
-              Proof of Origin Studio now sends the current project to the
+              Proof of Origin Studio sends the current edited project to the
               server, renders it with Remotion, and downloads the finished media.
               The JSON remains available as your editable production blueprint.
             </p>
+
+            {!project.narration && manualScriptEdits && (
+              <EditorNotice>
+                Your source script changed after timing was generated. Rebuild
+                narration timing before the final render so captions match the
+                edited narration.
+              </EditorNotice>
+            )}
 
             <div className="renderActionGrid">
               <button
@@ -1034,8 +1539,8 @@ export default function StudioPage() {
                 <div>
                   <strong>Cloud rendering in progress</strong>
                   <span>
-                    Keep this tab open. Video rendering can take several
-                    minutes depending on your Render instance.
+                    Keep this tab open. Video rendering can take several minutes
+                    depending on your Render instance.
                   </span>
                 </div>
               </div>
