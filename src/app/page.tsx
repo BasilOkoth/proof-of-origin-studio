@@ -32,6 +32,7 @@ import type {
 } from "@/lib/types";
 import { OriginEpisode } from "@/remotion/OriginEpisode";
 import { postForDownload } from "@/lib/render-client";
+import { downloadLocalRenderPackage } from "@/lib/local-render-package";
 
 const initial = makeSample();
 
@@ -1549,6 +1550,30 @@ export default function StudioPage() {
             {renderError && (
               <div className="narrationError">{renderError}</div>
             )}
+
+            <div
+              style={{
+                marginTop: 18,
+                padding: 16,
+                border: "1px solid rgba(255,255,255,.12)",
+                borderRadius: 16,
+                background: "rgba(255,255,255,.025)",
+              }}
+            >
+              <p className="micro">LOCAL RENDER — RECOMMENDED</p>
+              <h3 style={{ margin: "6px 0 8px" }}>Render on your own computer.</h3>
+              <p className="muted" style={{ marginBottom: 14 }}>
+                Download a self-contained episode package with the current project,
+                narration data, evidence assets and one-click Windows/macOS/Linux
+                instructions. This avoids the cloud server memory limit.
+              </p>
+              <button
+                className="button primary"
+                onClick={() => downloadLocalRenderPackage(project)}
+              >
+                <Download size={16} /> Download Local Render Package
+              </button>
+            </div>
 
             <div className="manifestBackup">
               <span>Need the editable production blueprint?</span>
