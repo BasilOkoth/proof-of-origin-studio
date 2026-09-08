@@ -29,6 +29,7 @@ import type {
   EvidenceKind,
 } from "@/lib/types";
 import { OriginEpisode } from "@/remotion/OriginEpisode";
+import { postForDownload } from "@/lib/render-client";
 
 const initial = makeSample();
 
@@ -82,6 +83,10 @@ export default function StudioPage() {
   const [modelId, setModelId] = useState("eleven_multilingual_v2");
   const [narrationBusy, setNarrationBusy] = useState(false);
   const [narrationError, setNarrationError] = useState("");
+  const [renderBusy, setRenderBusy] = useState<
+    "video" | "short" | "thumbnail" | null
+  >(null);
+  const [renderError, setRenderError] = useState("");
 
   const durationInFrames = useMemo(
     () =>
@@ -202,6 +207,63 @@ export default function StudioPage() {
       setNarrationError(error.message || "Unable to generate narration.");
     } finally {
       setNarrationBusy(false);
+    }
+  }
+
+  async function renderFinalVideo() {
+    setRenderBusy("video");
+    setRenderError("");
+
+    try {
+      await postForDownload(
+        "/api/render/video",
+        project,
+        `proof-of-origin-${project.id}.mp4`
+      );
+    } catch (error: any) {
+      setRenderError(error.message || "Unable to render final video.");
+    } finally {
+      setRenderBusy(null);
+    }
+  }
+
+  async function renderShort(index = 0) {
+    setRenderBusy("short");
+    setRenderError("");
+
+    try {
+      await postForDownload(
+        "/api/render/short",
+        {
+          project,
+          shortIndex: index,
+        },
+        `proof-of-origin-${project.id}-short-${index + 1}.mp4`
+      );
+    } catch (error: any) {
+      setRenderError(error.message || "Unable to render Short.");
+    } finally {
+      setRenderBusy(null);
+    }
+  }
+
+  async function renderThumbnail(index = 0) {
+    setRenderBusy("thumbnail");
+    setRenderError("");
+
+    try {
+      await postForDownload(
+        "/api/render/thumbnail",
+        {
+          project,
+          thumbnailIndex: index,
+        },
+        `proof-of-origin-${project.id}-thumbnail-${index + 1}.png`
+      );
+    } catch (error: any) {
+      setRenderError(error.message || "Unable to render thumbnail.");
+    } finally {
+      setRenderBusy(null);
     }
   }
 
@@ -922,25 +984,82 @@ export default function StudioPage() {
             <p className="micro">LINKEDIN LAUNCH</p>
             <pre className="copyBlock">{project.publishing.linkedinPost}</pre>
           </div>
-          <div className="panel">
-            <p className="micro">RENDER MASTER</p>
-            <h2>Production-ready project JSON</h2>
+          <div className="panel renderMasterPanel">
+            <p className="micro">ONE-CLICK CLOUD RENDER</p>
+            <h2>Generate the actual video here.</h2>
             <p className="muted">
-              Export the project, place it in this repository, then run the
-              Remotion render command described in README.md.
+              Proof of Origin Studio now sends the current project to the
+              server, renders it with Remotion, and downloads the finished media.
+              The JSON remains available as your editable production blueprint.
             </p>
-            <button
-              className="button primary"
-              onClick={() =>
-                downloadText(
-                  `episode-${project.id}.json`,
-                  JSON.stringify(project, null, 2),
-                  "application/json"
-                )
-              }
-            >
-              <Download size={16} /> Download render project
-            </button>
+
+            <div className="renderActionGrid">
+              <button
+                className="button primary"
+                onClick={renderFinalVideo}
+                disabled={Boolean(renderBusy)}
+              >
+                <Film size={16} />
+                {renderBusy === "video"
+                  ? "Rendering final video…"
+                  : "Generate Final Video"}
+              </button>
+
+              <button
+                className="button"
+                onClick={() => renderShort(0)}
+                disabled={Boolean(renderBusy)}
+              >
+                <Clapperboard size={16} />
+                {renderBusy === "short"
+                  ? "Rendering Short…"
+                  : "Generate Short 1"}
+              </button>
+
+              <button
+                className="button"
+                onClick={() => renderThumbnail(0)}
+                disabled={Boolean(renderBusy)}
+              >
+                <ImagePlus size={16} />
+                {renderBusy === "thumbnail"
+                  ? "Rendering thumbnail…"
+                  : "Generate Thumbnail"}
+              </button>
+            </div>
+
+            {renderBusy && (
+              <div className="renderProgress">
+                <div className="renderPulse" />
+                <div>
+                  <strong>Cloud rendering in progress</strong>
+                  <span>
+                    Keep this tab open. Video rendering can take several
+                    minutes depending on your Render instance.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {renderError && (
+              <div className="narrationError">{renderError}</div>
+            )}
+
+            <div className="manifestBackup">
+              <span>Need the editable production blueprint?</span>
+              <button
+                className="button ghost"
+                onClick={() =>
+                  downloadText(
+                    `episode-${project.id}.json`,
+                    JSON.stringify(project, null, 2),
+                    "application/json"
+                  )
+                }
+              >
+                <Download size={16} /> Export JSON manifest
+              </button>
+            </div>
           </div>
         </section>
       )}

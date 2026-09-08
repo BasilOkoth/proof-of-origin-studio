@@ -1,6 +1,6 @@
 {
   "name": "proof-of-origin-studio",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "A truth-first, premium video production studio for HPS, digital trust, provenance and authenticity content.",
   "scripts": {

@@ -355,6 +355,28 @@ See:
 
 
 
+## One-click cloud rendering
+
+The **Publish** tab now includes:
+
+```text
+Generate Final Video
+Generate Short 1
+Generate Thumbnail
+```
+
+The hosted app renders the Remotion composition and downloads the finished
+MP4/PNG automatically.
+
+The JSON export remains as the editable production manifest.
+
+See:
+
+`docs/RENDER_CLOUD_RENDERING.md`
+
+> Test the thumbnail first. Full 1080p rendering is CPU- and memory-intensive,
+> so a very small Render.com instance may need an upgrade.
+
 ## Automatic HPS → narrated episode
 
 The fastest production path is now:
