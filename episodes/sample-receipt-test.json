@@ -1,0 +1,209 @@
+{
+  "version": "origin-studio-1",
+  "id": "sample-receipt-test",
+  "createdAt": "2026-09-08T00:00:00.000Z",
+  "brand": {
+    "channelName": "Proof of Origin",
+    "byline": "by Human Provenance Standard",
+    "accentLabel": "TRUTH-FIRST VIDEO SYSTEM"
+  },
+  "episode": {
+    "workingTitle": "I changed one number in a registered document. Could HPS detect it?",
+    "question": "I changed one number in a registered document. Could HPS detect it?",
+    "experiment": "Change the Amount paid field from $74.34 to $70.00 and verify only the candidate document.",
+    "targetMinutes": 6.5,
+    "audience": "People curious about digital trust, AI, misinformation and verification."
+  },
+  "evidence": [
+    {
+      "id": "fact-1",
+      "kind": "observed",
+      "statement": "The candidate was classified as RELATED / MODIFIED.",
+      "source": "HPS verifier"
+    },
+    {
+      "id": "fact-2",
+      "kind": "observed",
+      "statement": "The Amount paid field was changed from $74.34 to $70.00.",
+      "source": "Controlled experiment"
+    },
+    {
+      "id": "fact-3",
+      "kind": "observed",
+      "statement": "Relationship confidence was 79%, while strict canonical text integrity changed.",
+      "source": "HPS verifier"
+    },
+    {
+      "id": "inf-1",
+      "kind": "inference",
+      "statement": "A high relationship score should not be interpreted as proof that the candidate content is unchanged."
+    },
+    {
+      "id": "lim-1",
+      "kind": "limitation",
+      "statement": "HPS establishes provenance and integrity evidence; it does not prove that every factual statement inside a document is true."
+    }
+  ],
+  "assets": [],
+  "scenes": [
+    {
+      "id": "s1",
+      "kind": "hook",
+      "durationSec": 27,
+      "eyebrow": "REAL EXPERIMENT",
+      "headline": "I changed one number in a registered document. Could HPS detect it?",
+      "body": "The candidate was classified as RELATED / MODIFIED.",
+      "narration": "Here is the question: I changed one number in a registered document. Could HPS detect it? The candidate was classified as RELATED / MODIFIED. I wanted to see what would happen when the file was actually tested.",
+      "factIds": [
+        "fact-1"
+      ]
+    },
+    {
+      "id": "s2",
+      "kind": "document",
+      "durationSec": 31,
+      "eyebrow": "THE SETUP",
+      "headline": "Change one thing. Keep everything else stable.",
+      "body": "Change the Amount paid field from $74.34 to $70.00.",
+      "narration": "The setup is simple. Start with the registered object, change one controlled field, and keep everything else as close as possible.",
+      "factIds": [
+        "fact-2"
+      ]
+    },
+    {
+      "id": "s3",
+      "kind": "value_swap",
+      "durationSec": 39,
+      "eyebrow": "THE CHANGE",
+      "headline": "One small edit can carry a large meaning.",
+      "body": "Amount paid changed from $74.34 to $70.00.",
+      "narration": "Now for the change. The Amount paid field moved from $74.34 to $70.00. Visually small. Semantically important.",
+      "factIds": [
+        "fact-2"
+      ],
+      "before": "$74.34",
+      "after": "$70.00"
+    },
+    {
+      "id": "s4",
+      "kind": "proof_card",
+      "durationSec": 39,
+      "eyebrow": "WHAT HPS CHECKS",
+      "headline": "Identity first. Relationship second.",
+      "body": "Exact SHA-256 answers whether the bytes are identical. Resilient fingerprints help determine whether a changed file is still related.",
+      "narration": "HPS separates exact identity from resilient relationship evidence.",
+      "factIds": []
+    },
+    {
+      "id": "s5",
+      "kind": "confidence",
+      "durationSec": 47,
+      "eyebrow": "THE RESULT",
+      "headline": "Relationship confidence was 79%.",
+      "body": "Strict canonical text integrity changed.",
+      "narration": "The candidate stayed strongly related, but the strict canonical text did not match.",
+      "factIds": [
+        "fact-3"
+      ],
+      "metric": 79
+    },
+    {
+      "id": "s6",
+      "kind": "diagram",
+      "durationSec": 43,
+      "eyebrow": "HOW TO READ IT",
+      "headline": "Related does not mean identical.",
+      "body": "A high relationship score should not be interpreted as proof that the candidate content is unchanged.",
+      "narration": "A strong relationship can coexist with a meaningful edit.",
+      "factIds": [
+        "inf-1"
+      ]
+    },
+    {
+      "id": "s7",
+      "kind": "proof_card",
+      "durationSec": 47,
+      "eyebrow": "THE TRUST BOUNDARY",
+      "headline": "Provenance is not the same thing as truth.",
+      "body": "HPS establishes provenance and integrity evidence; it does not prove that every factual statement inside a document is true.",
+      "narration": "This is a hard boundary in the claim.",
+      "factIds": [
+        "lim-1"
+      ]
+    },
+    {
+      "id": "s8",
+      "kind": "timeline",
+      "durationSec": 39,
+      "eyebrow": "WHY THIS MATTERS",
+      "headline": "Digital files move through messy real-world workflows.",
+      "body": "Sharing, conversion, OCR, screenshots and editing all leave different traces.",
+      "narration": "Real documents do not remain pristine.",
+      "factIds": []
+    },
+    {
+      "id": "s9",
+      "kind": "quote",
+      "durationSec": 39,
+      "eyebrow": "THE BIGGER IDEA",
+      "headline": "Stop asking: Does this look official?",
+      "body": "Start asking: Can the claimed source prove it issued this exact or related object?",
+      "narration": "The larger shift is from appearance to evidence.",
+      "factIds": []
+    },
+    {
+      "id": "s10",
+      "kind": "cta",
+      "durationSec": 39,
+      "eyebrow": "NEXT TEST",
+      "headline": "What should we try to break next?",
+      "body": "Documents. Images. Screenshots. AI-generated content. Research outputs.",
+      "narration": "Subscribe and tell me what digital object I should stress-test next.",
+      "factIds": []
+    }
+  ],
+  "titles": [
+    "I Changed One Number in a Registered Document. Could HPS Detect It?",
+    "This File Looked Fine. The Provenance Evidence Said Otherwise.",
+    "Can You Tell When a Digital Document Has Been Altered?"
+  ],
+  "shorts": [
+    {
+      "title": "One change. Would HPS catch it?",
+      "hook": "I changed one thing in this file.",
+      "script": "I changed one thing in this file. Could a verifier find it without already knowing what I changed?"
+    },
+    {
+      "title": "Related does not mean identical",
+      "hook": "A high similarity score can still hide an important edit.",
+      "script": "A file can remain strongly related to the original while a material value changes."
+    },
+    {
+      "title": "Stop trusting letterheads",
+      "hook": "A logo can look official and still tell you nothing about origin.",
+      "script": "The better question is whether the claimed issuer can prove its relationship to the digital object."
+    }
+  ],
+  "thumbnails": [
+    {
+      "title": "ONE CHANGE",
+      "kicker": "CAUGHT?",
+      "visual": "Large $74.34 \u2192 $70.00 over blurred document"
+    },
+    {
+      "title": "LOOKS REAL",
+      "kicker": "BUT CHANGED",
+      "visual": "Official document + warning card"
+    },
+    {
+      "title": "SAME FILE?",
+      "kicker": "NOT QUITE",
+      "visual": "Two near-identical docs with one highlighted edit"
+    }
+  ],
+  "publishing": {
+    "description": "A controlled HPS document-integrity experiment.",
+    "pinnedComment": "What should I test next?",
+    "linkedinPost": "One of the hardest problems in digital trust is that tiny edits can carry huge meaning."
+  }
+}

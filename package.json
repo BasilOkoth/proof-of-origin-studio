@@ -1,0 +1,33 @@
+{
+  "name": "proof-of-origin-studio",
+  "version": "0.3.0",
+  "private": true,
+  "description": "A truth-first, premium video production studio for HPS, digital trust, provenance and authenticity content.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "render": "tsx scripts/render.ts",
+    "render:short": "tsx scripts/render-short.ts",
+    "render:thumbnail": "tsx scripts/render-thumbnail.ts"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.289",
+    "@remotion/player": "^4.0.289",
+    "@remotion/renderer": "^4.0.289",
+    "lucide-react": "^0.468.0",
+    "next": "^15.2.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.289",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.3",
+    "@types/react-dom": "^19.0.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
