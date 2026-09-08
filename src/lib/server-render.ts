@@ -12,6 +12,12 @@ import {
 
 import type { EpisodeProject } from "@/lib/types";
 
+export type RenderedFile = {
+  path: string;
+  size: number;
+  cleanup: () => Promise<void>;
+};
+
 let cachedBundle: Promise<string> | null = null;
 
 function getServeUrl() {
@@ -28,7 +34,37 @@ function getServeUrl() {
   return cachedBundle;
 }
 
-export async function renderEpisodeBuffer(project: EpisodeProject) {
+async function finalizeRenderedFile(output: string): Promise<RenderedFile> {
+  const stats = await fs.stat(output);
+  let cleaned = false;
+
+  return {
+    path: output,
+    size: stats.size,
+    cleanup: async () => {
+      if (cleaned) return;
+      cleaned = true;
+      await fs.rm(output, { force: true }).catch(() => undefined);
+    },
+  };
+}
+
+async function removeFailedOutput(output: string) {
+  await fs.rm(output, { force: true }).catch(() => undefined);
+}
+
+/**
+ * Render the long-form episode to a temporary file.
+ *
+ * Important:
+ * - We return the file path instead of reading the complete MP4 into Node memory.
+ * - concurrency: 1 reduces simultaneous Chromium/frame-render pressure on
+ *   memory-constrained Render instances.
+ * - The API route owns cleanup after the response stream closes.
+ */
+export async function renderEpisodeFile(
+  project: EpisodeProject
+): Promise<RenderedFile> {
   const serveUrl = await getServeUrl();
 
   const composition = await selectComposition({
@@ -49,21 +85,26 @@ export async function renderEpisodeBuffer(project: EpisodeProject) {
       codec: "h264",
       outputLocation: output,
       inputProps: project,
+      concurrency: 1,
       chromiumOptions: {
         disableWebSecurity: true,
       },
     });
 
-    return await fs.readFile(output);
-  } finally {
-    await fs.rm(output, { force: true }).catch(() => undefined);
+    return await finalizeRenderedFile(output);
+  } catch (error) {
+    await removeFailedOutput(output);
+    throw error;
   }
 }
 
-export async function renderShortBuffer(
+/**
+ * Render a Short to a temporary MP4 without loading the finished file into RAM.
+ */
+export async function renderShortFile(
   project: EpisodeProject,
   shortIndex: number
-) {
+): Promise<RenderedFile> {
   const serveUrl = await getServeUrl();
 
   const inputProps = {
@@ -89,21 +130,27 @@ export async function renderShortBuffer(
       codec: "h264",
       outputLocation: output,
       inputProps,
+      concurrency: 1,
       chromiumOptions: {
         disableWebSecurity: true,
       },
     });
 
-    return await fs.readFile(output);
-  } finally {
-    await fs.rm(output, { force: true }).catch(() => undefined);
+    return await finalizeRenderedFile(output);
+  } catch (error) {
+    await removeFailedOutput(output);
+    throw error;
   }
 }
 
-export async function renderThumbnailBuffer(
+/**
+ * Render a thumbnail to a temporary PNG. It is streamed too, keeping all
+ * render/download paths consistent and avoiding unnecessary Buffer copies.
+ */
+export async function renderThumbnailFile(
   project: EpisodeProject,
   thumbnailIndex: number
-) {
+): Promise<RenderedFile> {
   const serveUrl = await getServeUrl();
 
   const inputProps = {
@@ -134,8 +181,9 @@ export async function renderThumbnailBuffer(
       },
     });
 
-    return await fs.readFile(output);
-  } finally {
-    await fs.rm(output, { force: true }).catch(() => undefined);
+    return await finalizeRenderedFile(output);
+  } catch (error) {
+    await removeFailedOutput(output);
+    throw error;
   }
 }
