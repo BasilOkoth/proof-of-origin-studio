@@ -1,6 +1,9 @@
 import type { EpisodeProject, Scene } from "./types";
 import type { AudioCue, AudioDirection } from "./audio-types";
 
+type AudioTransition = NonNullable<AudioCue["transition"]>;
+type ActiveAudioTransition = Exclude<AudioTransition, "none">;
+
 function episodeDuration(project: EpisodeProject) {
   return project.scenes.reduce((sum, scene) => sum + scene.durationSec, 0);
 }
@@ -28,7 +31,7 @@ function ambienceFor(scene: Scene) {
   return "none";
 }
 
-function transitionFor(scene: Scene, index: number): AudioCue["transition"] {
+function transitionFor(scene: Scene, index: number): AudioTransition {
   if (scene.kind === "hook") return "riser";
   if (scene.kind === "value_swap") return "hit";
   if (scene.kind === "data_chart" || scene.kind === "map_story") return index % 2 ? "tick" : "whoosh";
@@ -82,7 +85,7 @@ export function buildAudioDirectionPlan(project: EpisodeProject): AudioDirection
     }
 
     if (transition !== "none") {
-      const prompts: Record<string, string> = {
+      const prompts: Record<ActiveAudioTransition, string> = {
         hit: "Short restrained documentary impact, clean low-mid transient, sophisticated, not cinematic trailer boom, about half a second",
         whoosh: "Short elegant editorial transition whoosh, clean air movement, modern documentary explainer, subtle, no sci-fi character",
         tick: "Clean editorial evidence tick, precise soft click with slight tonal body, understated, professional",
@@ -105,7 +108,6 @@ export function buildAudioDirectionPlan(project: EpisodeProject): AudioDirection
     }
   });
 
-  // De-duplicate reusable ambience/SFX prompts. The renderer can reuse the same asset at many cue positions.
   const unique = new Map<string, AudioCue>();
   for (const cue of cues) {
     const key = `${cue.kind}:${cue.label}:${cue.prompt}`;
