@@ -1,5 +1,14 @@
 export type EvidenceKind = "observed" | "inference" | "limitation";
 
+export type StoryMode =
+  | "hps"
+  | "experiment"
+  | "research"
+  | "report"
+  | "investigation"
+  | "explainer"
+  | "case_study";
+
 export type EvidenceItem = {
   id: string;
   kind: EvidenceKind;
@@ -144,6 +153,7 @@ export type EpisodeProject = {
     experiment: string;
     targetMinutes: number;
     audience: string;
+    storyMode?: StoryMode;
   };
   evidence: EvidenceItem[];
   assets: EvidenceAsset[];
