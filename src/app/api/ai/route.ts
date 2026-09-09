@@ -1,12 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
-
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   const baseUrl = process.env.AI_BASE_URL?.replace(/\/$/, "");
   const apiKey = process.env.AI_API_KEY;
   const model = process.env.AI_MODEL;
 
   if (!baseUrl || !apiKey || !model) {
-    return NextResponse.json(
+    return Response.json(
       {
         configured: false,
         error:
@@ -53,13 +51,13 @@ Non-negotiable editorial rules:
   const data = await response.json();
 
   if (!response.ok) {
-    return NextResponse.json(
+    return Response.json(
       { configured: true, error: data?.error || "AI provider request failed." },
       { status: response.status }
     );
   }
 
-  return NextResponse.json({
+  return Response.json({
     configured: true,
     content: data?.choices?.[0]?.message?.content || "",
   });

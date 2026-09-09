@@ -1,7 +1,6 @@
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { renderThumbnailFile } from "@/lib/server-render";
@@ -30,18 +29,15 @@ function streamRenderedFile(
   return Readable.toWeb(nodeStream) as unknown as ReadableStream<Uint8Array>;
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const body = BodySchema.parse(await request.json());
     const project = body.project as EpisodeProject;
 
-    const rendered = await renderThumbnailFile(
-      project,
-      body.thumbnailIndex
-    );
+    const rendered = await renderThumbnailFile(project, body.thumbnailIndex);
     const stream = streamRenderedFile(rendered);
 
-    return new NextResponse(stream, {
+    return new Response(stream, {
       headers: {
         "content-type": "image/png",
         "content-length": String(rendered.size),
@@ -53,7 +49,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Thumbnail render failed:", error);
 
-    return NextResponse.json(
+    return Response.json(
       {
         error:
           error?.message ||

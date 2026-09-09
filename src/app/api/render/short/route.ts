@@ -1,7 +1,6 @@
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { renderShortFile } from "@/lib/server-render";
@@ -30,7 +29,7 @@ function streamRenderedFile(
   return Readable.toWeb(nodeStream) as unknown as ReadableStream<Uint8Array>;
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const body = BodySchema.parse(await request.json());
     const project = body.project as EpisodeProject;
@@ -38,7 +37,7 @@ export async function POST(request: NextRequest) {
     const rendered = await renderShortFile(project, body.shortIndex);
     const stream = streamRenderedFile(rendered);
 
-    return new NextResponse(stream, {
+    return new Response(stream, {
       headers: {
         "content-type": "video/mp4",
         "content-length": String(rendered.size),
@@ -50,7 +49,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Short render failed:", error);
 
-    return NextResponse.json(
+    return Response.json(
       {
         error:
           error?.message ||

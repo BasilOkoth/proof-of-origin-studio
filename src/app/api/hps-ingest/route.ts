@@ -1,4 +1,3 @@
-import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import {
@@ -63,11 +62,11 @@ function enrich(rawText: string, sourceUrl?: string) {
   };
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   const body = BodySchema.safeParse(await request.json());
 
   if (!body.success) {
-    return NextResponse.json(
+    return Response.json(
       { error: "Paste an HPS verification result, record ID or public HPS URL." },
       { status: 400 }
     );
@@ -76,9 +75,8 @@ export async function POST(request: NextRequest) {
   const input = body.data.input;
   const url = publicHpsUrl(input);
 
-  // Long/multiline input is a verifier receipt and should be parsed directly.
   if (!url || input.includes("\n") || input.length > 300) {
-    return NextResponse.json({
+    return Response.json({
       result: enrich(input),
       fetched: false,
     });
@@ -93,7 +91,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
-      return NextResponse.json({
+      return Response.json({
         result: enrich(input),
         fetched: false,
         warning: `The public HPS page returned HTTP ${response.status}; the supplied identifier/text was parsed instead.`,
@@ -102,12 +100,12 @@ export async function POST(request: NextRequest) {
 
     const text = stripHtml(await response.text());
 
-    return NextResponse.json({
+    return Response.json({
       result: enrich(text, url.toString()),
       fetched: true,
     });
   } catch {
-    return NextResponse.json({
+    return Response.json({
       result: enrich(input),
       fetched: false,
       warning:
