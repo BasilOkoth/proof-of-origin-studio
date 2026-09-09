@@ -4,19 +4,26 @@ import { useMemo, useState } from "react";
 import {
   BadgeCheck,
   BarChart3,
+  BookOpen,
+  CheckCircle2,
+  Database,
   Clapperboard,
   Download,
   Eye,
+  ExternalLink,
   FileSearch,
   FileText,
   Film,
   Globe2,
   ImagePlus,
+  Lightbulb,
+  LoaderCircle,
   MapPinned,
   Pencil,
   Play,
   Plus,
   Save,
+  Search,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -25,6 +32,7 @@ import {
 import { Player } from "@remotion/player";
 
 import { analyzeCsv } from "@/lib/data-story";
+import { scoutSourceToEvidence, type EvidenceScoutResponse, type EvidenceScoutSource, type StoryQuestionCandidate } from "@/lib/evidence-scout";
 import { downloadText, projectAsMarkdown } from "@/lib/export";
 import { downloadLocalRenderPackage } from "@/lib/local-render-package";
 import { syncSceneDurationsToNarration } from "@/lib/narration";
@@ -50,6 +58,7 @@ const initial = makeSample();
 type Tab =
   | "build"
   | "sources"
+  | "discover"
   | "story"
   | "visual"
   | "narration"
@@ -125,6 +134,12 @@ export default function StudioPage() {
   const [hpsUrl, setHpsUrl] = useState("");
   const [hpsBusy, setHpsBusy] = useState(false);
   const [hpsError, setHpsError] = useState("");
+
+  const [scout, setScout] = useState<EvidenceScoutResponse | null>(null);
+  const [scoutBusy, setScoutBusy] = useState(false);
+  const [scoutError, setScoutError] = useState("");
+  const [scoutQuery, setScoutQuery] = useState("");
+  const [lockerAdded, setLockerAdded] = useState<string[]>([]);
 
   const [voiceId, setVoiceId] = useState("");
   const [modelId, setModelId] = useState("eleven_multilingual_v2");
@@ -227,6 +242,65 @@ export default function StudioPage() {
     }));
   }
 
+  async function runEvidenceScout(options?: {
+    nextEvidence?: EvidenceItem[];
+    nextDatasets?: DatasetAnalysis[];
+    nextTopic?: string;
+    nextQuestion?: string;
+    nextSearchQuery?: string;
+    autoOpen?: boolean;
+  }) {
+    setScoutBusy(true);
+    setScoutError("");
+    try {
+      const explicitSearchQuery = options?.nextSearchQuery !== undefined
+        ? options.nextSearchQuery
+        : scoutQuery.trim();
+      const payload = {
+        topic: options?.nextTopic ?? topic,
+        question: options?.nextQuestion ?? question,
+        searchQuery: explicitSearchQuery || undefined,
+        evidence: options?.nextEvidence ?? evidence,
+        datasets: options?.nextDatasets ?? datasets,
+        maxSources: 18,
+      };
+      const response = await fetch("/api/evidence-scout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Evidence Scout failed.");
+      const result = data as EvidenceScoutResponse;
+      setScout(result);
+      if (options?.nextSearchQuery !== undefined || !scoutQuery.trim()) setScoutQuery(result.query);
+      if (options?.autoOpen) setActiveTab("discover");
+      return result;
+    } catch (error: any) {
+      setScoutError(error?.message || "Evidence Scout failed.");
+      if (options?.autoOpen) setActiveTab("discover");
+      return null;
+    } finally {
+      setScoutBusy(false);
+    }
+  }
+
+  function useDiscoveredQuestion(candidate: StoryQuestionCandidate, rebuild = false) {
+    setQuestion(candidate.question);
+    if (rebuild) {
+      buildFrom(evidence, datasets, { question: candidate.question });
+    } else {
+      setActiveTab("build");
+    }
+  }
+
+  function addScoutSource(source: EvidenceScoutSource) {
+    if (lockerAdded.includes(source.id)) return;
+    const item = scoutSourceToEvidence(source);
+    setEvidence((items) => [...items, item]);
+    setLockerAdded((items) => [...items, source.id]);
+  }
+
   async function ingestDocument(file: File | undefined) {
     if (!file) return;
     setDocumentBusy(true);
@@ -264,7 +338,15 @@ export default function StudioPage() {
       base.assets = project.assets;
       base.documentIngestion = parsed;
       setProject(applyVisualIntelligence(base, datasets));
-      setActiveTab("story");
+      setScoutQuery("");
+      await runEvidenceScout({
+        nextEvidence: merged,
+        nextDatasets: datasets,
+        nextTopic: parsed.suggestedTopic,
+        nextQuestion: parsed.suggestedQuestion,
+        nextSearchQuery: "",
+        autoOpen: true,
+      });
     } catch (error: any) {
       setDocumentError(error?.message || "Document ingestion failed.");
     } finally {
@@ -290,6 +372,13 @@ export default function StudioPage() {
     setDatasets(nextDatasets);
     setEvidence(nextEvidence);
     buildFrom(nextEvidence, nextDatasets);
+    setScoutQuery("");
+    await runEvidenceScout({
+      nextEvidence,
+      nextDatasets,
+      nextSearchQuery: "",
+      autoOpen: true,
+    });
   }
 
   async function ingestHps() {
@@ -408,11 +497,12 @@ export default function StudioPage() {
   const tabs: [Tab, string, string][] = [
     ["build", "01", "Story"],
     ["sources", "02", "Evidence"],
-    ["story", "03", "Story & Video"],
-    ["visual", "04", "Visual Intelligence"],
-    ["narration", "05", "Narration"],
-    ["retention", "06", "Retention"],
-    ["publish", "07", "Publish"],
+    ["discover", "03", "Discover"],
+    ["story", "04", "Story & Video"],
+    ["visual", "05", "Visual Intelligence"],
+    ["narration", "06", "Narration"],
+    ["retention", "07", "Retention"],
+    ["publish", "08", "Publish"],
   ];
 
   return (
@@ -505,6 +595,9 @@ export default function StudioPage() {
             </div>
             <button className="button primary large" onClick={() => buildFrom()}>
               <WandSparkles size={18} /> Build evidence-led episode
+            </button>
+            <button className="button large" onClick={() => setActiveTab("discover")} style={{ marginTop: 10 }}>
+              <Search size={18} /> Discover stronger questions & sources
             </button>
           </div>
 
@@ -610,6 +703,176 @@ export default function StudioPage() {
             <button className="button primary large" onClick={() => buildFrom()} style={{ marginTop: 18 }}>
               <WandSparkles size={18} /> Rebuild from this evidence
             </button>
+            <button className="button large" onClick={() => runEvidenceScout({ autoOpen: true })} disabled={scoutBusy} style={{ marginTop: 10 }}>
+              <Search size={18} /> {scoutBusy ? "Scouting evidence…" : "Discover questions & find more evidence"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {activeTab === "discover" && (
+        <section className="workspace twoCol">
+          <div className="panel">
+            <div className="panelHead">
+              <div>
+                <p className="micro">QUESTION DISCOVERY</p>
+                <h2>Find the strongest story hiding inside the evidence.</h2>
+              </div>
+              <Lightbulb />
+            </div>
+
+            <p className="muted">
+              Evidence Studio scores candidate questions for evidence coverage, curiosity,
+              consequence, visual potential and uncertainty. The ranking is editorial guidance,
+              not a claim that the highest-scoring question is already proven.
+            </p>
+
+            <label>
+              Evidence Scout search
+              <input
+                value={scoutQuery}
+                onChange={(e: any) => setScoutQuery(e.target.value)}
+                placeholder="Leave blank to derive search terms from the topic, question and evidence"
+              />
+            </label>
+
+            {scoutError && <div className="studioError">{scoutError}</div>}
+
+            <button
+              className="button primary large"
+              onClick={() => runEvidenceScout()}
+              disabled={scoutBusy}
+            >
+              {scoutBusy ? <LoaderCircle size={18} /> : <Search size={18} />}
+              {scoutBusy ? "Searching evidence sources…" : "Discover questions & scout evidence"}
+            </button>
+
+            {scout && (
+              <>
+                <div className="retentionMetrics" style={{ marginTop: 24 }}>
+                  {[
+                    ["Scholarly coverage", scout.coverage.scholarly],
+                    ["Data coverage", scout.coverage.data],
+                    ["Source diversity", scout.coverage.sourceDiversity],
+                    ["Open downloads", scout.coverage.openAccess],
+                  ].map(([label, value]) => (
+                    <div className="metricBar" key={String(label)}>
+                      <div><span>{label}</span><strong>{value}/100</strong></div>
+                      <div className="metricTrack"><div className="metricFill" style={{ width: `${value}%` }} /></div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: 28 }}>
+                  <p className="micro">RANKED STORY QUESTIONS</p>
+                  {scout.questions.map((candidate, index) => (
+                    <article className="sceneCard" key={candidate.id}>
+                      <div className="sceneIndex">{String(index + 1).padStart(2, "0")}</div>
+                      <div style={{ width: "100%" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
+                          <div>
+                            <p className="micro">{index === 0 ? "RECOMMENDED" : candidate.angle.replace("_", " ")}</p>
+                            <h3>{candidate.question}</h3>
+                          </div>
+                          <strong>{candidate.overall}/100</strong>
+                        </div>
+                        <p>{candidate.rationale}</p>
+                        <div className="sceneMeta">
+                          <span>evidence {candidate.evidenceCoverage}</span>
+                          <span>curiosity {candidate.curiosity}</span>
+                          <span>visual {candidate.visualPotential}</span>
+                          <span>uncertainty {candidate.uncertainty}</span>
+                        </div>
+                        <div className="exportRow" style={{ marginTop: 12 }}>
+                          <button className="button" onClick={() => useDiscoveredQuestion(candidate, false)}>
+                            <Pencil size={14} /> Use question
+                          </button>
+                          <button className="button primary" onClick={() => useDiscoveredQuestion(candidate, true)}>
+                            <WandSparkles size={14} /> Use & build story
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="panel">
+            <div className="panelHead">
+              <div>
+                <p className="micro">EVIDENCE LOCKER</p>
+                <h2>Sources the scout found — with access kept explicit.</h2>
+              </div>
+              <BookOpen />
+            </div>
+
+            {!scout && (
+              <Notice>
+                Run Evidence Scout to search scholarly metadata and World Bank Data360.
+                Open files are linked for download; restricted or metadata-only sources stay links
+                rather than being bypassed.
+              </Notice>
+            )}
+
+            {scout?.providerErrors.map((error) => (
+              <div className="studioError" key={error}>{error}</div>
+            ))}
+
+            {scout && scout.sources.length === 0 && (
+              <Notice>No external sources were returned for this search. Refine the search terms or add more evidence.</Notice>
+            )}
+
+            {scout?.sources.map((source, index) => {
+              const added = lockerAdded.includes(source.id);
+              return (
+                <article className="sceneCard" key={source.id}>
+                  <div className="sceneIndex">{String(index + 1).padStart(2, "0")}</div>
+                  <div style={{ width: "100%" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
+                      <div>
+                        <p className="micro">
+                          {source.provider === "world_bank" ? "WORLD BANK" : source.provider === "crossref" ? "CROSSREF" : "EXISTING"}
+                          {" · "}{source.sourceType}
+                        </p>
+                        <h3>{source.title}</h3>
+                      </div>
+                      {source.access === "open_download" ? <CheckCircle2 size={20} /> : source.sourceType === "dataset" ? <Database size={20} /> : <BookOpen size={20} />}
+                    </div>
+
+                    <p className="muted">
+                      {[source.authors?.slice(0, 3).join(", "), source.publisher, source.year].filter(Boolean).join(" · ")}
+                    </p>
+                    {source.summary && <p>{source.summary}</p>}
+                    <div className="retentionPurpose"><strong>Why it surfaced:</strong> {source.reason}</div>
+                    <div className="sceneMeta">
+                      <span>relevance {source.relevance}</span>
+                      <span>strength {source.evidenceStrength}</span>
+                      <span>visual {source.visualPotential}</span>
+                      <span>{source.access.replace("_", " ")}</span>
+                    </div>
+
+                    <div className="exportRow" style={{ marginTop: 12, flexWrap: "wrap" }}>
+                      <button className="button" onClick={() => addScoutSource(source)} disabled={added}>
+                        {added ? <CheckCircle2 size={14} /> : <Plus size={14} />}
+                        {added ? "Added to ledger" : "Add source record"}
+                      </button>
+                      <a className="button" href={source.url} target="_blank" rel="noreferrer">
+                        <ExternalLink size={14} /> Open source
+                      </a>
+                      {source.downloadUrl && (
+                        <a className="button primary" href={source.downloadUrl} target="_blank" rel="noreferrer" download>
+                          <Download size={14} /> Download open evidence
+                        </a>
+                      )}
+                    </div>
+                    {source.license && <p className="muted" style={{ marginTop: 10 }}>Access/license signal: {source.license}</p>}
+                    {source.doi && <p className="muted" style={{ marginTop: 6 }}>DOI: {source.doi}</p>}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       )}
