@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {"@/*": ["src/*"]},
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true
+  },
+  "include": ["stubs-route.d.ts", "src/lib/types.ts", "src/lib/document-evidence.ts", "src/app/api/document-ingest/route.ts"]
+}

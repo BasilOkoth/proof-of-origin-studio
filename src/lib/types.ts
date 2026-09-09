@@ -7,13 +7,33 @@ export type StoryMode =
   | "report"
   | "investigation"
   | "explainer"
-  | "case_study";
+  | "case_study"
+  | "world_explained";
+
+export type EvidenceSourceType =
+  | "paper"
+  | "report"
+  | "dataset"
+  | "field"
+  | "web"
+  | "interview"
+  | "hps"
+  | "other";
 
 export type EvidenceItem = {
   id: string;
   kind: EvidenceKind;
   statement: string;
   source?: string;
+  sourceType?: EvidenceSourceType;
+  sourceLabel?: string;
+  sourcePage?: number;
+  year?: number;
+  value?: number;
+  unit?: string;
+  category?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type EvidenceAsset = {
@@ -81,6 +101,61 @@ export type HpsIngestion = {
   limitations: string[];
 };
 
+export type ChartType = "bar" | "line" | "scatter" | "ranking";
+
+export type ChartDatum = {
+  label: string;
+  value: number;
+  x?: number;
+  group?: string;
+};
+
+export type ChartSpec = {
+  type: ChartType;
+  title: string;
+  subtitle?: string;
+  xLabel?: string;
+  yLabel?: string;
+  unit?: string;
+  data: ChartDatum[];
+  sourceLabel?: string;
+};
+
+export type MapPoint = {
+  label: string;
+  latitude: number;
+  longitude: number;
+  value?: number;
+  note?: string;
+};
+
+export type MapSpec = {
+  title: string;
+  subtitle?: string;
+  points: MapPoint[];
+  sourceLabel?: string;
+  focus?: "world" | "africa" | "custom";
+};
+
+export type VisualKind =
+  | "evidence_card"
+  | "source_highlight"
+  | "data_chart"
+  | "map_story"
+  | "timeline"
+  | "comparison"
+  | "systems_diagram"
+  | "field_evidence"
+  | "quote"
+  | "minimal";
+
+export type VisualPlan = {
+  kind: VisualKind;
+  reason: string;
+  evidenceIds: string[];
+  confidence: number;
+};
+
 export type SceneKind =
   | "hook"
   | "document"
@@ -90,7 +165,10 @@ export type SceneKind =
   | "timeline"
   | "diagram"
   | "quote"
-  | "cta";
+  | "cta"
+  | "data_chart"
+  | "map_story"
+  | "source_highlight";
 
 export type RetentionBeat = {
   atSec: number;
@@ -130,12 +208,53 @@ export type Scene = {
   after?: string;
   metric?: number;
   retentionPurpose?: string;
+  visualPlan?: VisualPlan;
+  chart?: ChartSpec;
+  map?: MapSpec;
+  sourceLabel?: string;
+  sourceExcerpt?: string;
+  visualLabels?: string[];
+  autoVisual?: boolean;
 };
 
 export type ThumbnailConcept = {
   title: string;
   kicker: string;
   visual: string;
+};
+
+export type VisualIntelligenceScore = {
+  overall: number;
+  evidenceDensity: number;
+  visualVariation: number;
+  geographicContext: number;
+  dataStorytelling: number;
+  sourceVisibility: number;
+  warnings: string[];
+};
+
+export type DatasetAnalysis = {
+  name: string;
+  rowCount: number;
+  columns: string[];
+  numericColumns: string[];
+  dateColumns: string[];
+  latitudeColumn?: string;
+  longitudeColumn?: string;
+  recommendedChart?: ChartSpec;
+  recommendedMap?: MapSpec;
+  insight?: string;
+};
+
+export type DocumentIngestion = {
+  fileName: string;
+  kind: "research" | "report" | "text";
+  title: string;
+  extractedCharacters: number;
+  suggestedTopic: string;
+  suggestedQuestion: string;
+  suggestedBrief: string;
+  evidence: EvidenceItem[];
 };
 
 export type EpisodeProject = {
@@ -173,4 +292,7 @@ export type EpisodeProject = {
     linkedinPost: string;
   };
   retention?: RetentionScore;
+  visualIntelligence?: VisualIntelligenceScore;
+  datasets?: DatasetAnalysis[];
+  documentIngestion?: DocumentIngestion;
 };

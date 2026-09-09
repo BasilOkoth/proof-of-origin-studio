@@ -95,6 +95,18 @@ export const STORY_PACKS: StoryPack[] = [
       "Describe the starting problem, intervention, observed result and context.",
     accentLabel: "CASE STUDY",
   },
+  {
+    id: "world_explained",
+    label: "World Explained",
+    description:
+      "Build a premium evidence-led explainer around geography, data, systems, field realities and source-visible visual reasoning.",
+    briefLabel: "World / systems brief",
+    questionPlaceholder:
+      "What is really happening here, why is it happening, and what does the evidence reveal?",
+    briefPlaceholder:
+      "Describe the place, system or phenomenon, the evidence available, the key tension and the surprising or consequential question.",
+    accentLabel: "THE WORLD EXPLAINED THROUGH EVIDENCE",
+  },
 ];
 
 export function getStoryPack(mode: StoryMode) {

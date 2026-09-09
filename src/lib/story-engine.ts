@@ -1,6 +1,7 @@
 import { buildEpisode } from "./generator";
 import { analyzeRetention } from "./retention";
 import { getStoryPack } from "./story-packs";
+import { refreshVisualIntelligence } from "./visual-reasoning";
 import type {
   EpisodeProject,
   EvidenceItem,
@@ -137,7 +138,13 @@ function buildGenericEpisode(intake: StoryIntake): EpisodeProject {
       inference
         ? `Now move from observation to interpretation. ${inferenceText} This is an inference, not a new fact. Keeping that label visible matters because reasonable people can sometimes interpret the same evidence differently.`
         : `There is not yet a written inference in the evidence ledger. That is useful information: the video should pause before converting observations into a conclusion that has not been explicitly justified.`,
-      inference ? [inference.id] : []
+      inference ? [inference.id] : [],
+      {
+        visualLabels:
+          intake.mode === "world_explained"
+            ? ["Place", "Pattern", "Drivers", "Consequences"]
+            : ["Observation", "Interpretation", "Context", "Implication"],
+      }
     ),
     scene(
       "proof_card",
@@ -155,7 +162,13 @@ function buildGenericEpisode(intake: StoryIntake): EpisodeProject {
       "Put the result back into the process.",
       tertiaryText,
       `The result also needs context. ${tertiaryText} Ask what happened before this observation, what changed, what stayed constant and what conditions could have influenced the outcome. That is how a result becomes a useful explanation rather than a disconnected statistic.`,
-      tertiary ? [tertiary.id] : []
+      tertiary ? [tertiary.id] : [],
+      {
+        visualLabels:
+          intake.mode === "world_explained"
+            ? ["Baseline", "Pressure", "Change", "Evidence", "What follows"]
+            : ["Baseline", "Method", "Observation", "Context", "Meaning"],
+      }
     ),
     scene(
       "quote",
@@ -193,7 +206,9 @@ function buildGenericEpisode(intake: StoryIntake): EpisodeProject {
 
   const titles = [
     questionTitle(question),
-    `${topic}: What the Evidence Actually Shows`,
+    intake.mode === "world_explained"
+      ? `${topic}: The Pattern Hidden in the Evidence`
+      : `${topic}: What the Evidence Actually Shows`,
     `I Looked at the Evidence Behind ${topic}`,
     `${topic}: The Result, the Limitation, and What It Means`,
     `Before You Believe the Claim About ${topic}, Look at This Evidence`,
@@ -260,14 +275,14 @@ function buildGenericEpisode(intake: StoryIntake): EpisodeProject {
     shorts,
     thumbnails,
     publishing: {
-      description: `${question}\n\nThis episode is built from an evidence-led workflow that keeps observations, interpretation and limitations separate.\n\nMode: ${pack.label}.`,
+      description: `${question}\n\nThis episode is built from an evidence-led workflow that keeps observations, interpretation and limitations separate while making sources, data and geography visible where the evidence supports them.\n\nMode: ${pack.label}.`,
       pinnedComment: `What evidence, source or counter-example should be added before the next version of this story?`,
       linkedinPost: `I am testing a different way to turn evidence into video: start with what can actually be shown, label the interpretation, and keep the limitation visible.\n\nQuestion: ${question}\n\nStrongest observation: ${primaryText}`,
     },
   };
 
   draft.retention = analyzeRetention(draft);
-  return draft;
+  return refreshVisualIntelligence(draft);
 }
 
 export function buildStoryEpisode(intake: StoryIntake): EpisodeProject {
@@ -283,7 +298,7 @@ export function buildStoryEpisode(intake: StoryIntake): EpisodeProject {
       evidence: intake.evidence,
     });
     project.episode.storyMode = "hps";
-    return project;
+    return refreshVisualIntelligence(project);
   }
 
   return buildGenericEpisode(intake);

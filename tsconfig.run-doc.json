@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "dist-doc",
+    "strict": true,
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["src/lib/types.ts", "src/lib/document-evidence.ts", "test-document.ts"]
+}
