@@ -679,48 +679,449 @@ export default function StudioPage() {
 
       {activeTab === "sources" && (
         <section className="workspace twoCol">
-          <div className="panel">
-            <div className="panelHead">
-              <div><p className="micro">SOURCE INGESTION</p><h2>Bring the real evidence in.</h2></div>
-              <FileSearch />
+          <div
+            className="panel"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(85,216,255,.035), transparent 28%), linear-gradient(180deg, rgba(255,255,255,.018), transparent 80%), var(--panel)",
+              borderColor: "rgba(85,216,255,.12)",
+            }}
+          >
+            <div className="panelHead" style={{ marginBottom: 14 }}>
+              <div>
+                <p className="micro">SOURCE INGESTION</p>
+                <h2 style={{ fontSize: 30, letterSpacing: "-.04em" }}>Bring the real evidence in.</h2>
+              </div>
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 14,
+                  display: "grid",
+                  placeItems: "center",
+                  color: "var(--cyan)",
+                  border: "1px solid rgba(85,216,255,.16)",
+                  background: "rgba(85,216,255,.055)",
+                }}
+              >
+                <FileSearch size={20} />
+              </div>
             </div>
 
-            <label>
-              Document type
-              <select value={sourceKind} onChange={(e: any) => setSourceKind(e.target.value as typeof sourceKind)}>
-                <option value="research">Research paper</option>
-                <option value="report">Report / impact document</option>
-                <option value="text">Text / notes</option>
-              </select>
+            <p
+              style={{
+                color: "var(--muted)",
+                fontSize: 13,
+                lineHeight: 1.7,
+                maxWidth: 680,
+                margin: "0 0 26px",
+              }}
+            >
+              Upload the material your story must answer to. Evidence Studio will extract
+              claims, numbers, locations, contradictions and sourceable evidence before
+              anything becomes narration.
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "end",
+                gap: 18,
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "rgba(246,248,255,.72)",
+                    fontSize: 10,
+                    fontWeight: 900,
+                    letterSpacing: ".17em",
+                  }}
+                >
+                  WHAT KIND OF SOURCE IS THIS?
+                </p>
+                <p
+                  style={{
+                    margin: "6px 0 0",
+                    color: "rgba(153,167,198,.68)",
+                    fontSize: 11,
+                  }}
+                >
+                  Choose how the Studio should read and interpret the file.
+                </p>
+              </div>
+              <span
+                style={{
+                  color: "rgba(153,167,198,.52)",
+                  fontSize: 9,
+                  letterSpacing: ".14em",
+                  fontWeight: 800,
+                }}
+              >
+                SOURCE MODE
+              </span>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0,1fr))",
+                gap: 10,
+                marginBottom: 20,
+              }}
+            >
+              {[
+                {
+                  id: "research" as const,
+                  label: "Research paper",
+                  description: "Journal articles, working papers and academic research.",
+                  icon: <BookOpen size={20} />,
+                },
+                {
+                  id: "report" as const,
+                  label: "Report",
+                  description: "Government, NGO, UN, institutional and impact reports.",
+                  icon: <FileSearch size={20} />,
+                },
+                {
+                  id: "text" as const,
+                  label: "Text / notes",
+                  description: "Transcripts, briefs, notes and other written source material.",
+                  icon: <FileText size={20} />,
+                },
+              ].map((item) => {
+                const active = sourceKind === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSourceKind(item.id)}
+                    style={{
+                      position: "relative",
+                      minHeight: 158,
+                      padding: 17,
+                      borderRadius: 18,
+                      border: active
+                        ? "1px solid rgba(85,216,255,.62)"
+                        : "1px solid rgba(255,255,255,.085)",
+                      background: active
+                        ? "linear-gradient(145deg, rgba(85,216,255,.11), rgba(95,124,255,.055)), rgba(5,10,22,.52)"
+                        : "linear-gradient(145deg, rgba(255,255,255,.035), rgba(255,255,255,.012)), rgba(5,10,22,.35)",
+                      color: "var(--text)",
+                      textAlign: "left",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: 13,
+                      boxShadow: active
+                        ? "inset 0 0 0 1px rgba(85,216,255,.06), 0 15px 44px rgba(0,0,0,.18), 0 0 30px rgba(85,216,255,.04)"
+                        : "none",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 38,
+                        height: 38,
+                        display: "grid",
+                        placeItems: "center",
+                        borderRadius: 12,
+                        color: "var(--cyan)",
+                        background: "rgba(85,216,255,.075)",
+                        border: "1px solid rgba(85,216,255,.15)",
+                      }}
+                    >
+                      {item.icon}
+                    </span>
+
+                    <span style={{ display: "block" }}>
+                      <strong
+                        style={{
+                          display: "block",
+                          fontSize: 14,
+                          letterSpacing: "-.01em",
+                        }}
+                      >
+                        {item.label}
+                      </strong>
+                      <span
+                        style={{
+                          display: "block",
+                          marginTop: 7,
+                          color: "var(--muted)",
+                          fontSize: 11,
+                          lineHeight: 1.48,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {item.description}
+                      </span>
+                    </span>
+
+                    <span
+                      style={{
+                        marginTop: "auto",
+                        color: active ? "var(--cyan)" : "rgba(153,167,198,.56)",
+                        fontSize: 9,
+                        fontWeight: 900,
+                        letterSpacing: ".16em",
+                      }}
+                    >
+                      {active ? "SELECTED" : "SELECT"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <label
+              style={{
+                position: "relative",
+                minHeight: 190,
+                marginTop: 0,
+                display: "grid",
+                gridTemplateColumns: "58px 1fr auto",
+                alignItems: "center",
+                gap: 18,
+                padding: 28,
+                border: documentBusy
+                  ? "1px solid rgba(85,216,255,.5)"
+                  : "1px dashed rgba(85,216,255,.34)",
+                borderRadius: 22,
+                color: "var(--text)",
+                background:
+                  "radial-gradient(circle at 12% 50%, rgba(85,216,255,.08), transparent 27%), linear-gradient(145deg, rgba(95,124,255,.04), rgba(255,255,255,.018))",
+                cursor: documentBusy ? "progress" : "pointer",
+              }}
+            >
+              <span
+                style={{
+                  width: 56,
+                  height: 56,
+                  display: "grid",
+                  placeItems: "center",
+                  borderRadius: 17,
+                  color: "var(--cyan)",
+                  background:
+                    "linear-gradient(145deg, rgba(85,216,255,.13), rgba(95,124,255,.08))",
+                  border: "1px solid rgba(85,216,255,.2)",
+                }}
+              >
+                {documentBusy ? <LoaderCircle size={28} /> : <FileText size={28} />}
+              </span>
+
+              <span style={{ display: "block" }}>
+                <strong
+                  style={{
+                    display: "block",
+                    fontSize: 17,
+                    letterSpacing: "-.015em",
+                    color: "var(--text)",
+                  }}
+                >
+                  {documentBusy ? "Reading and structuring evidence…" : "Drop your source here"}
+                </strong>
+                <span
+                  style={{
+                    display: "block",
+                    marginTop: 7,
+                    color: "var(--muted)",
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                    fontWeight: 500,
+                  }}
+                >
+                  {documentBusy
+                    ? "Extracting claims, numbers, locations and limitations."
+                    : "PDF, TXT or Markdown · click to browse"}
+                </span>
+              </span>
+
+              <span
+                style={{
+                  padding: "9px 11px",
+                  borderRadius: 999,
+                  color: "var(--cyan)",
+                  background: "rgba(85,216,255,.055)",
+                  border: "1px solid rgba(85,216,255,.18)",
+                  fontSize: 9,
+                  fontWeight: 900,
+                  letterSpacing: ".14em",
+                }}
+              >
+                {documentBusy ? "INGESTING" : "CHOOSE FILE"}
+              </span>
+
+              <input
+                type="file"
+                accept=".pdf,.txt,.md,text/plain,application/pdf"
+                hidden
+                onChange={(e: any) => ingestDocument(e.target.files?.[0])}
+              />
             </label>
 
-            <label className="uploadBox">
-              <FileText />
-              <strong>{documentBusy ? "Reading source…" : "Upload PDF, TXT or Markdown"}</strong>
-              <span>The source becomes evidence; missing claims stay missing.</span>
-              <input type="file" accept=".pdf,.txt,.md,text/plain,application/pdf" hidden onChange={(e: any) => ingestDocument(e.target.files?.[0])} />
-            </label>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                margin: "11px 4px 0",
+                color: "rgba(153,167,198,.75)",
+                fontSize: 10,
+                lineHeight: 1.4,
+              }}
+            >
+              <ShieldCheck size={14} style={{ color: "var(--green)", flexShrink: 0 }} />
+              <span>The source becomes evidence. Unsupported claims are not invented.</span>
+            </div>
+
             {documentError && <div className="studioError">{documentError}</div>}
 
-            <label className="uploadBox" style={{ marginTop: 16 }}>
-              <BarChart3 />
-              <strong>Upload CSV dataset</strong>
-              <span>Detect trends, comparisons and latitude/longitude map stories.</span>
-              <input type="file" accept=".csv,text/csv" hidden onChange={(e: any) => ingestCsv(e.target.files?.[0])} />
-            </label>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 12,
+                marginTop: 22,
+              }}
+            >
+              <label
+                style={{
+                  marginTop: 0,
+                  minHeight: 138,
+                  padding: 18,
+                  border: "1px solid rgba(255,255,255,.085)",
+                  borderRadius: 18,
+                  background:
+                    "linear-gradient(145deg, rgba(255,255,255,.03), rgba(255,255,255,.012))",
+                  cursor: "pointer",
+                }}
+              >
+                <span
+                  style={{
+                    width: 38,
+                    height: 38,
+                    display: "grid",
+                    placeItems: "center",
+                    borderRadius: 12,
+                    color: "var(--cyan)",
+                    background: "rgba(85,216,255,.065)",
+                    border: "1px solid rgba(85,216,255,.12)",
+                  }}
+                >
+                  <BarChart3 size={19} />
+                </span>
+                <strong
+                  style={{
+                    display: "block",
+                    marginTop: 14,
+                    color: "var(--text)",
+                    fontSize: 14,
+                  }}
+                >
+                  Structured dataset
+                </strong>
+                <span
+                  style={{
+                    display: "block",
+                    marginTop: 6,
+                    color: "var(--muted)",
+                    fontSize: 11,
+                    lineHeight: 1.45,
+                    fontWeight: 500,
+                  }}
+                >
+                  CSV · detect trends, comparisons and coordinates.
+                </span>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  hidden
+                  onChange={(e: any) => ingestCsv(e.target.files?.[0])}
+                />
+              </label>
 
-            <label className="uploadBox" style={{ marginTop: 16 }}>
-              <ImagePlus />
-              <strong>Upload field / evidence images</strong>
-              <span>Real screenshots, maps, photos and figures can be assigned to scenes.</span>
-              <input type="file" accept="image/*" multiple hidden onChange={(e: any) => uploadImages(e.target.files)} />
-            </label>
+              <label
+                style={{
+                  marginTop: 0,
+                  minHeight: 138,
+                  padding: 18,
+                  border: "1px solid rgba(255,255,255,.085)",
+                  borderRadius: 18,
+                  background:
+                    "linear-gradient(145deg, rgba(255,255,255,.03), rgba(255,255,255,.012))",
+                  cursor: "pointer",
+                }}
+              >
+                <span
+                  style={{
+                    width: 38,
+                    height: 38,
+                    display: "grid",
+                    placeItems: "center",
+                    borderRadius: 12,
+                    color: "var(--cyan)",
+                    background: "rgba(85,216,255,.065)",
+                    border: "1px solid rgba(85,216,255,.12)",
+                  }}
+                >
+                  <ImagePlus size={19} />
+                </span>
+                <strong
+                  style={{
+                    display: "block",
+                    marginTop: 14,
+                    color: "var(--text)",
+                    fontSize: 14,
+                  }}
+                >
+                  Field & visual evidence
+                </strong>
+                <span
+                  style={{
+                    display: "block",
+                    marginTop: 6,
+                    color: "var(--muted)",
+                    fontSize: 11,
+                    lineHeight: 1.45,
+                    fontWeight: 500,
+                  }}
+                >
+                  Screenshots, maps, photographs and figures.
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  onChange={(e: any) => uploadImages(e.target.files)}
+                />
+              </label>
+            </div>
 
             {mode === "hps" && (
-              <div style={{ marginTop: 24 }}>
+              <div
+                style={{
+                  marginTop: 24,
+                  padding: 20,
+                  borderRadius: 18,
+                  border: "1px solid rgba(99,230,167,.13)",
+                  background: "rgba(99,230,167,.025)",
+                }}
+              >
                 <p className="micro">HPS INGEST</p>
-                <textarea rows={8} value={hpsInput} onChange={(e: any) => setHpsInput(e.target.value)} placeholder="Paste HPS verification result…" />
-                <label>Public HPS URL<input value={hpsUrl} onChange={(e: any) => setHpsUrl(e.target.value)} /></label>
+                <textarea
+                  rows={8}
+                  value={hpsInput}
+                  onChange={(e: any) => setHpsInput(e.target.value)}
+                  placeholder="Paste HPS verification result…"
+                />
+                <label>
+                  Public HPS URL
+                  <input value={hpsUrl} onChange={(e: any) => setHpsUrl(e.target.value)} />
+                </label>
                 {hpsError && <div className="studioError">{hpsError}</div>}
                 <button className="button" onClick={ingestHps} disabled={hpsBusy}>
                   <ShieldCheck size={16} /> {hpsBusy ? "Reading HPS evidence…" : "Ingest HPS result"}
@@ -729,40 +1130,255 @@ export default function StudioPage() {
             )}
           </div>
 
-          <div className="panel">
-            <div className="panelHead">
-              <div><p className="micro">EVIDENCE LEDGER</p><h2>What do we actually know?</h2></div>
-              <FileText />
+          <div
+            className="panel"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(95,124,255,.025), transparent 32%), linear-gradient(180deg, rgba(255,255,255,.018), transparent 80%), var(--panel)",
+            }}
+          >
+            <div className="panelHead" style={{ marginBottom: 16 }}>
+              <div>
+                <p className="micro">EVIDENCE LEDGER</p>
+                <h2 style={{ fontSize: 30, letterSpacing: "-.04em" }}>What do we actually know?</h2>
+              </div>
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 14,
+                  display: "grid",
+                  placeItems: "center",
+                  color: "var(--cyan)",
+                  border: "1px solid rgba(85,216,255,.16)",
+                  background: "rgba(85,216,255,.055)",
+                }}
+              >
+                <FileText size={20} />
+              </div>
             </div>
-            <div className="evidenceActions">
-              <button onClick={() => addEvidence("observed")}><Plus size={14} /> Observed</button>
-              <button onClick={() => addEvidence("inference")}><Plus size={14} /> Inference</button>
-              <button onClick={() => addEvidence("limitation")}><Plus size={14} /> Limitation</button>
+
+            <p
+              style={{
+                color: "var(--muted)",
+                fontSize: 13,
+                lineHeight: 1.65,
+                margin: "0 0 20px",
+              }}
+            >
+              Keep observation, interpretation and uncertainty visibly separate. This ledger
+              is the factual backbone the story engine is allowed to use.
+            </p>
+
+            <div
+              className="evidenceActions"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0,1fr))",
+                gap: 9,
+                marginBottom: 16,
+              }}
+            >
+              <button
+                onClick={() => addEvidence("observed")}
+                style={{
+                  border: "1px solid rgba(99,230,167,.18)",
+                  background: "rgba(99,230,167,.055)",
+                }}
+              >
+                <Plus size={14} /> Observed
+              </button>
+              <button
+                onClick={() => addEvidence("inference")}
+                style={{
+                  border: "1px solid rgba(95,124,255,.18)",
+                  background: "rgba(95,124,255,.055)",
+                }}
+              >
+                <Plus size={14} /> Inference
+              </button>
+              <button
+                onClick={() => addEvidence("limitation")}
+                style={{
+                  border: "1px solid rgba(255,200,87,.18)",
+                  background: "rgba(255,200,87,.05)",
+                }}
+              >
+                <Plus size={14} /> Limitation
+              </button>
             </div>
+
             <div className="evidenceList">
-              {evidence.length === 0 && <Notice>Add observed evidence, then explicitly label interpretation and limitations.</Notice>}
-              {evidence.map((item) => (
-                <div className="evidenceRow" key={item.id} style={{ alignItems: "start" }}>
-                  <Chip kind={item.kind} />
+              {evidence.length === 0 && (
+                <div
+                  style={{
+                    padding: 22,
+                    borderRadius: 18,
+                    border: "1px dashed rgba(255,255,255,.1)",
+                    background: "rgba(255,255,255,.018)",
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "var(--text)",
+                      fontSize: 13,
+                      fontWeight: 800,
+                    }}
+                  >
+                    No evidence recorded yet.
+                  </p>
+                  <p
+                    style={{
+                      margin: "7px 0 0",
+                      color: "var(--muted)",
+                      fontSize: 11,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Upload a source or add an observed fact, then explicitly separate
+                    interpretation and limitations.
+                  </p>
+                </div>
+              )}
+
+              {evidence.map((item, index) => (
+                <div
+                  className="evidenceRow"
+                  key={item.id}
+                  style={{
+                    alignItems: "start",
+                    padding: 16,
+                    borderRadius: 18,
+                    border: "1px solid rgba(255,255,255,.075)",
+                    background: "rgba(255,255,255,.018)",
+                    marginBottom: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      flexShrink: 0,
+                      borderRadius: 9,
+                      display: "grid",
+                      placeItems: "center",
+                      background: "rgba(255,255,255,.035)",
+                      color: "rgba(153,167,198,.7)",
+                      fontSize: 9,
+                      fontWeight: 900,
+                    }}
+                  >
+                    {String(index + 1).padStart(2, "0")}
+                  </div>
+
                   <div style={{ flex: 1 }}>
-                    <textarea rows={3} value={item.statement} onChange={(e: any) => updateEvidence(item.id, { statement: e.target.value })} />
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        marginBottom: 9,
+                      }}
+                    >
+                      <Chip kind={item.kind} />
+                      <span
+                        style={{
+                          color: "rgba(153,167,198,.45)",
+                          fontSize: 9,
+                          fontWeight: 800,
+                          letterSpacing: ".12em",
+                        }}
+                      >
+                        EVIDENCE RECORD
+                      </span>
+                    </div>
+
+                    <textarea
+                      rows={3}
+                      value={item.statement}
+                      placeholder="State exactly what the evidence supports…"
+                      onChange={(e: any) =>
+                        updateEvidence(item.id, { statement: e.target.value })
+                      }
+                    />
+
                     <div className="fieldGrid">
-                      <input placeholder="Source / DOI / URL / report page" value={item.source || ""} onChange={(e: any) => updateEvidence(item.id, { source: e.target.value, sourceLabel: e.target.value })} />
-                      <select value={item.sourceType || "other"} onChange={(e: any) => updateEvidence(item.id, { sourceType: e.target.value as EvidenceSourceType })}>
-                        <option value="paper">paper</option><option value="report">report</option><option value="dataset">dataset</option><option value="field">field</option><option value="web">web</option><option value="interview">interview</option><option value="hps">hps</option><option value="other">other</option>
+                      <input
+                        placeholder="Source / DOI / URL / report page"
+                        value={item.source || ""}
+                        onChange={(e: any) =>
+                          updateEvidence(item.id, {
+                            source: e.target.value,
+                            sourceLabel: e.target.value,
+                          })
+                        }
+                      />
+
+                      <select
+                        value={item.sourceType || "other"}
+                        onChange={(e: any) =>
+                          updateEvidence(item.id, {
+                            sourceType: e.target.value as EvidenceSourceType,
+                          })
+                        }
+                        style={{
+                          width: "100%",
+                          marginTop: 8,
+                          padding: "13px 14px",
+                          color: "var(--text)",
+                          colorScheme: "dark",
+                          background: "rgba(255,255,255,.035)",
+                          border: "1px solid rgba(255,255,255,.09)",
+                          borderRadius: 13,
+                          outline: "none",
+                        }}
+                      >
+                        <option value="paper">paper</option>
+                        <option value="report">report</option>
+                        <option value="dataset">dataset</option>
+                        <option value="field">field</option>
+                        <option value="web">web</option>
+                        <option value="interview">interview</option>
+                        <option value="hps">hps</option>
+                        <option value="other">other</option>
                       </select>
                     </div>
                   </div>
-                  <button className="button ghost" onClick={() => removeEvidence(item.id)}><Trash2 size={14} /></button>
+
+                  <button
+                    className="button ghost"
+                    onClick={() => removeEvidence(item.id)}
+                    aria-label="Remove evidence"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               ))}
             </div>
-            <button className="button primary large" onClick={() => buildFrom()} style={{ marginTop: 18 }}>
-              <WandSparkles size={18} /> Rebuild from this evidence
-            </button>
-            <button className="button large" onClick={() => runEvidenceScout({ autoOpen: true })} disabled={scoutBusy} style={{ marginTop: 10 }}>
-              <Search size={18} /> {scoutBusy ? "Scouting evidence…" : "Discover questions & find more evidence"}
-            </button>
+
+            <div
+              style={{
+                marginTop: 22,
+                paddingTop: 18,
+                borderTop: "1px solid rgba(255,255,255,.07)",
+              }}
+            >
+              <button className="button primary large" onClick={() => buildFrom()}>
+                <WandSparkles size={18} /> Rebuild from this evidence
+              </button>
+
+              <button
+                className="button large"
+                onClick={() => runEvidenceScout({ autoOpen: true })}
+                disabled={scoutBusy}
+                style={{ marginTop: 10 }}
+              >
+                <Search size={18} />
+                {scoutBusy ? "Scouting evidence…" : "Discover questions & find more evidence"}
+              </button>
+            </div>
           </div>
         </section>
       )}
