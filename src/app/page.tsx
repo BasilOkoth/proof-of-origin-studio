@@ -52,6 +52,8 @@ import type {
   StoryMode,
 } from "@/lib/types";
 import { OriginEpisode } from "@/remotion/OriginEpisode";
+import { EvidenceIntelligenceLab } from "@/components/EvidenceIntelligenceLab";
+import type { StoryHunterAngle } from "@/lib/evidence-intelligence";
 
 const initial = makeSample();
 
@@ -59,6 +61,7 @@ type Tab =
   | "build"
   | "sources"
   | "discover"
+  | "intelligence"
   | "story"
   | "visual"
   | "narration"
@@ -301,6 +304,59 @@ export default function StudioPage() {
     setLockerAdded((items) => [...items, source.id]);
   }
 
+  function integrateIntelligence(newEvidence: EvidenceItem[], newDatasets: DatasetAnalysis[]) {
+    setEvidence((current) => {
+      const seen = new Set<string>();
+      return [...current, ...newEvidence].filter((item) => {
+        const key = `${item.kind}|${item.statement}`.toLowerCase().replace(/\s+/g, " ").trim();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    });
+    setDatasets((current) => {
+      const byName = new Map<string, DatasetAnalysis>();
+      [...current, ...newDatasets].forEach((item) => byName.set(item.name, item));
+      return [...byName.values()];
+    });
+  }
+
+  function useIntelligenceAngle(angle: StoryHunterAngle, rebuild: boolean) {
+    setQuestion(angle.question);
+    if (!rebuild) {
+      setActiveTab("build");
+      return;
+    }
+
+    const base = buildStoryEpisode({
+      mode,
+      channelName: mode === "hps" ? "Proof of Origin" : "Evidence Studio",
+      byline: mode === "hps" ? "by Human Provenance Standard" : "The world explained through evidence",
+      topic,
+      question: angle.question,
+      experiment: brief,
+      audience,
+      targetMinutes: minutes,
+      evidence,
+    });
+    base.assets = project.assets;
+    if (mode === "hps") base.hpsIngestion = project.hpsIngestion;
+    base.episode.workingTitle = angle.title;
+    base.titles = [angle.title, ...base.titles.filter((title) => title !== angle.title)].slice(0, 5);
+    if (base.scenes[0]) {
+      base.scenes[0] = {
+        ...base.scenes[0],
+        headline: angle.question,
+        narration: `${angle.hook} ${base.scenes[0].narration}`,
+        retentionPurpose: `Story Hunter opening · ${angle.angle} · score ${angle.overall}/100`,
+      };
+    }
+    setProject(applyVisualIntelligence(base, datasets));
+    setManualScriptEdits(false);
+    setEditingSceneId(null);
+    setActiveTab("story");
+  }
+
   async function ingestDocument(file: File | undefined) {
     if (!file) return;
     setDocumentBusy(true);
@@ -498,11 +554,12 @@ export default function StudioPage() {
     ["build", "01", "Story"],
     ["sources", "02", "Evidence"],
     ["discover", "03", "Discover"],
-    ["story", "04", "Story & Video"],
-    ["visual", "05", "Visual Intelligence"],
-    ["narration", "06", "Narration"],
-    ["retention", "07", "Retention"],
-    ["publish", "08", "Publish"],
+    ["intelligence", "04", "Intelligence"],
+    ["story", "05", "Story & Video"],
+    ["visual", "06", "Visual Intelligence"],
+    ["narration", "07", "Narration"],
+    ["retention", "08", "Retention"],
+    ["publish", "09", "Publish"],
   ];
 
   return (
@@ -748,6 +805,12 @@ export default function StudioPage() {
             </button>
 
             {scout && (
+              <button className="button large" onClick={() => setActiveTab("intelligence")} style={{ marginTop: 10 }}>
+                <Database size={18} /> Open Evidence Intelligence Lab
+              </button>
+            )}
+
+            {scout && (
               <>
                 <div className="retentionMetrics" style={{ marginTop: 24 }}>
                   {[
@@ -875,6 +938,18 @@ export default function StudioPage() {
             })}
           </div>
         </section>
+      )}
+
+      {activeTab === "intelligence" && (
+        <EvidenceIntelligenceLab
+          topic={topic}
+          question={question}
+          evidence={evidence}
+          datasets={datasets}
+          scout={scout}
+          onIntegrate={integrateIntelligence}
+          onUseAngle={useIntelligenceAngle}
+        />
       )}
 
       {activeTab === "story" && (
