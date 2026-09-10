@@ -96,6 +96,115 @@ const SECTION_HEADING_FRAGMENT =
 const COMPARATOR_GEOGRAPHY =
   /\b(delhi|india|bangladesh|germany|mississippi|budalangi|river nzoia|nyando|bangalore|bengaluru|mumbai|jakarta|london|new york|china|pakistan)\b/i;
 
+
+const VISUAL_CAPTION =
+  /^(?:\d{1,3}\s+)?(?:plate|figure|fig\.?|map|chart|table|photo(?:graph)?)\s*\d*(?:[-.:]\d+)*\s*[:.\-]?/i;
+
+const TRUE_LIMITATION =
+  /\b(case study|single (?:case|site|neighbou?rhood)|scope|sample|sampling|generaliz(?:e|ed|ability)|generalis(?:e|ed|ability)|cannot establish|cannot determine|could not determine|not measured|not assessed|not evaluated|data gap|limited data|limited evidence|validation data|uncertain(?:ty)?|further study|further research|future research)\b/i;
+
+const RAINFALL_SPECIFIC =
+  /\b(multi-day|daily rainfall|monthly rainfall|rainfall totals?|rainfall event|rainfall episode|precipitation|wettest|rain intensity|rainfall intensity|heavy rainfall|heavy rain|long rains|short rains|millimet(?:er|re)s?|mm\b)\b/i;
+
+function isVisualCaption(value: string) {
+  return VISUAL_CAPTION.test(cleanEvidenceStatement(value));
+}
+
+function isNarrationSafeEvidence(value: string) {
+  const statement = cleanEvidenceStatement(value);
+  if (!statement) return false;
+  if (looksLikeExtractionNoise(statement)) return false;
+  if (isVisualCaption(statement)) return false;
+  return statement.length >= 45;
+}
+
+function provenanceTail(item?: EvidenceItem) {
+  const label = sourceLabel(item);
+  return label ? ` Source: ${label}.` : "";
+}
+
+function narrationSafeClaim(
+  item: EvidenceItem | undefined,
+  role: "hook" | "trigger" | "drainage" | "land" | "governance"
+) {
+  if (!item) return "";
+  const s = cleanEvidenceStatement(item.statement || "");
+
+  if (role === "trigger") {
+    if (!RAINFALL_SPECIFIC.test(s)) return "";
+    if (/\bmulti-day\b/i.test(s)) {
+      return "The rainfall evidence points to multi-day heavy-rain episodes, not simply a single dramatic downpour.";
+    }
+    if (/\bwettest|monthly rainfall|rainfall totals?\b/i.test(s)) {
+      return "The rainfall evidence shows unusually high rainfall totals during the flood-producing period.";
+    }
+    return "The rainfall evidence identifies heavy or intense rainfall as the immediate trigger.";
+  }
+
+  if (role === "drainage") {
+    const parts: string[] = [];
+    if (/\b(blocked|clogged|waste|garbage|debris)\b/i.test(s)) {
+      parts.push("blocked or debris-filled drainage can reduce the space available for stormwater to move");
+    }
+    if (/\b(capacity|overflow|exceed)\b/i.test(s)) {
+      parts.push("drainage capacity can be exceeded when incoming flow is greater than the system can carry");
+    }
+    if (/\b(culvert|channel|waterway|drainage course|drainage route)\b/i.test(s)) {
+      parts.push("altered channels, culverts or drainage routes can constrain the path water takes through the city");
+    }
+    if (parts.length) {
+      return `Local evidence indicates that ${parts.join("; and ")}.`;
+    }
+    return "Local evidence identifies drainage and stormwater pathways as part of the flood mechanism.";
+  }
+
+  if (role === "land") {
+    const parts: string[] = [];
+    if (/\b(paved|pavement|impervious|roof|built[- ]?up|buildings?)\b/i.test(s)) {
+      parts.push("more built and paved surfaces leave less open ground for water to enter the soil");
+    }
+    if (/\b(infiltrat|absorption)\b/i.test(s)) {
+      parts.push("reduced infiltration means a larger share of rainfall remains at the surface");
+    }
+    if (/\b(runoff|flood peaks?)\b/i.test(s)) {
+      parts.push("that can increase surface runoff and the volume the drainage network must handle");
+    }
+    if (/\b(natural drainage|channel|waterway|land[- ]use|development)\b/i.test(s)) {
+      parts.push("development can also alter natural drainage routes");
+    }
+    if (parts.length) {
+      return `The local evidence describes a land-and-water mechanism: ${parts.join("; ")}.`;
+    }
+    return "The local evidence shows that urban form can change how rainfall becomes runoff and where that runoff can go.";
+  }
+
+  if (role === "governance") {
+    const parts: string[] = [];
+    if (/\b(clear|clearing|unclog|clean|garbage|maintenance)\b/i.test(s)) {
+      parts.push("drains require clearing and maintenance to preserve usable capacity");
+    }
+    if (/\b(development control|enforcement|by-?law|planning)\b/i.test(s)) {
+      parts.push("development control and planning affect whether new construction adds pressure to vulnerable flow paths");
+    }
+    if (/\b(coordination|county|institution|response|budget|politic)\b/i.test(s)) {
+      parts.push("institutional coordination shapes whether known risks are addressed before or only after flooding");
+    }
+    if (parts.length) {
+      return `The governance evidence adds another layer: ${parts.join("; and ")}.`;
+    }
+    return "The evidence indicates that maintenance and institutional response are part of the urban flood system.";
+  }
+
+  // hook
+  if (/\b(infiltrat|absorption|runoff|paved|urbanization|urbanisation|built[- ]?up)\b/i.test(s)) {
+    return "Local Nairobi evidence shows that the city itself changes the journey of rainwater: built surfaces reduce infiltration and increase runoff.";
+  }
+  if (/\b(drainage|channel|waterway|culvert)\b/i.test(s)) {
+    return "Local Nairobi evidence points to a second part of the story beyond rainfall: the routes that carry water through the city.";
+  }
+  return "Local evidence shows that Nairobi flooding is shaped by more than rainfall alone.";
+}
+
 function cleanEvidenceStatement(value: string) {
   let result = clean(value)
     .replace(/^\s*\d{1,3}\s+(?=[A-Z])/g, "")
@@ -414,7 +523,9 @@ function bestEvidenceBy(
         pattern.test(
           `${item.statement} ${item.sourceLabel || ""}`
         ) &&
-        !looksLikeExtractionNoise(item.statement)
+        !looksLikeExtractionNoise(item.statement) &&
+        !isVisualCaption(item.statement) &&
+        isNarrationSafeEvidence(item.statement)
     )
     .map((item, index) => {
       const statement = cleanEvidenceStatement(item.statement);
@@ -485,18 +596,31 @@ function buildWorldExplainedEpisode(
 
   const anchor = `${intake.topic} ${intake.question}`;
 
-  const trigger = bestEvidenceBy(
+  const triggerCandidate = bestEvidenceBy(
     evidence,
-    /\b(rainfall|heavy rain|multi-day rain|precipitation|storm|wettest|rainy season)\b/i,
+    /\b(rainfall|heavy rain|multi-day rain|precipitation|storm|wettest|rainy season|rain intensity|rainfall intensity)\b/i,
     ["observed", "inference"],
     {
       anchor,
-      prefer:
-        /\b(multi-day|heavy rainfall|rainfall event|wettest|monthly rainfall|intense rainfall|rainy season|precipitation)\b/i,
+      prefer: RAINFALL_SPECIFIC,
       avoid:
-        /\b(urbanization|urbanisation|impervious|pavement|drainage|waste|garbage)\b/i,
+        /\b(urbanization|urbanisation|impervious|pavement|drainage|waste|garbage|development|capacity)\b/i,
     }
   );
+
+  /*
+   * Scene 03 is a strict evidence role. A generic sentence that merely
+   * mentions "storm" or "climate change" is not enough. If a separately
+   * useful rainfall statement is absent, the story must show the gap.
+   */
+  const trigger =
+    triggerCandidate &&
+    RAINFALL_SPECIFIC.test(triggerCandidate.statement) &&
+    !/\b(drainage capacity|urbanization|urbanisation|impervious|pavement|waste|garbage)\b/i.test(
+      triggerCandidate.statement
+    )
+      ? triggerCandidate
+      : undefined;
 
   const drainage = bestEvidenceBy(
     evidence,
@@ -569,10 +693,7 @@ function buildWorldExplainedEpisode(
     evidence[0];
 
   const triggerItem =
-    trigger ||
-    picked[1] ||
-    observed[1] ||
-    primary;
+    trigger;
 
   const drainageItem =
     drainage ||
@@ -595,13 +716,23 @@ function buildWorldExplainedEpisode(
 
   const limitation =
     limitations
-      .filter(
-        (item) =>
-          !looksLikeExtractionNoise(item.statement) &&
-          /\b(limit|limitation|scope|sample|case study|cannot|could not|not assess|not measure|not establish|uncertain|validation|data gap|further study|generaliz|generalis)\b/i.test(
-            item.statement
-          )
-      )
+      .filter((item) => {
+        const statement = cleanEvidenceStatement(item.statement || "");
+        if (!isNarrationSafeEvidence(statement)) return false;
+        if (!TRUE_LIMITATION.test(statement)) return false;
+
+        // A causal mechanism is not a trust boundary merely because the
+        // extractor labelled it "limitation".
+        const causalMechanism =
+          /\b(runoff|infiltrat|drainage|waterway|channel|pavement|impervious|development|capacity|flood hazard|stormwater)\b/i.test(
+            statement
+          ) &&
+          !/\b(scope|case study|sample|generaliz|generalis|not measured|not assessed|cannot establish|limited evidence|data gap|uncertain)/i.test(
+            statement
+          );
+
+        return !causalMechanism;
+      })
       .sort(
         (a, b) =>
           evidenceQualityScore(b, anchor) -
@@ -629,7 +760,7 @@ function buildWorldExplainedEpisode(
     evidenceText(primary);
 
   const triggerText =
-    evidenceText(triggerItem);
+    trigger ? evidenceText(trigger) : "";
 
   const drainageText =
     evidenceText(drainageItem);
@@ -640,15 +771,33 @@ function buildWorldExplainedEpisode(
   const governanceText =
     evidenceText(governanceItem);
 
-  const limitationText = limitation
-    ? evidenceText(limitation)
-    : /\bnairobi\b/i.test(anchor) &&
-        /\bsouth\s+c\b/i.test(
-          evidence
-            .map((item) => `${item.sourceLabel || ""} ${item.statement}`)
-            .join(" ")
-        )
-      ? "The strongest local mechanism evidence in this draft comes from a South C case study. It can show how flooding works in that neighbourhood, but it cannot by itself establish that the same mechanisms explain every flood location across Nairobi."
+  const hookNarrationClaim =
+    narrationSafeClaim(primary, "hook");
+
+  const triggerNarrationClaim =
+    narrationSafeClaim(trigger, "trigger");
+
+  const drainageNarrationClaim =
+    narrationSafeClaim(drainageItem, "drainage");
+
+  const landNarrationClaim =
+    narrationSafeClaim(landItem, "land");
+
+  const governanceNarrationClaim =
+    narrationSafeClaim(governanceItem, "governance");
+
+  const hasSouthCEvidence =
+    /\bnairobi\b/i.test(anchor) &&
+    /\bsouth\s+c\b/i.test(
+      evidence
+        .map((item) => `${item.sourceLabel || ""} ${item.statement}`)
+        .join(" ")
+    );
+
+  const limitationText = hasSouthCEvidence
+    ? "The strongest detailed mechanism evidence in this draft comes from a South C case study. That makes it valuable local evidence, but it does not establish that exactly the same combination of drivers explains flooding across every part of Nairobi."
+    : limitation
+      ? evidenceText(limitation)
       : "The current evidence does not yet establish every link in the causal chain. Missing mechanism evidence should remain visible rather than being filled with assumptions.";
 
   const evidenceCount =
@@ -676,7 +825,7 @@ function buildWorldExplainedEpisode(
       pack.accentLabel,
       question,
       primaryText,
-      `When heavy rain hits Nairobi, water does not become a disaster everywhere in the same way. ${primaryText} So the useful question is not simply whether it rained. It is what the city has done to the paths that water is supposed to take.`,
+      `When heavy rain hits Nairobi, water does not become a disaster everywhere in the same way. ${hookNarrationClaim} So the useful question is not simply whether it rained. It is what happens to that water after it lands on the city.`,
       primary ? [primary.id] : []
     ),
 
@@ -705,10 +854,12 @@ function buildWorldExplainedEpisode(
       d[2],
       "TRIGGER",
       "Start with the rain — but do not stop there.",
-      triggerText,
       trigger
-        ? `First, the trigger. ${triggerText} That tells us what the evidence says about the rainfall conditions. But rainfall alone does not explain why damage concentrates in particular streets and neighbourhoods.`
-        : `Heavy rainfall is the trigger we need to establish more precisely. The current local evidence discusses rain and flooding, but this draft still lacks a strong, separately ingested rainfall source. That gap stays visible until a rainfall-specific source is added.`,
+        ? triggerText
+        : "Rainfall-specific evidence gap: no sufficiently strong, separately grounded rainfall measurement or event description is currently ingested for this story.",
+      trigger
+        ? `First, the trigger. ${triggerNarrationClaim} But rainfall alone does not explain why damage concentrates in particular streets and neighbourhoods.`
+        : `Heavy rainfall is the trigger we still need to establish with stronger evidence. The current local sources explain important urban mechanisms, but they do not provide a sufficiently clean, rainfall-specific measurement for this scene. That gap stays visible rather than being filled with a weaker proxy claim.`,
       trigger ? [trigger.id] : []
     ),
 
@@ -718,7 +869,7 @@ function buildWorldExplainedEpisode(
       "FLOW PATH",
       "What happens after water hits the city?",
       drainageText,
-      `Now follow the water. The local evidence points to drainage capacity and altered or obstructed flow paths as part of the mechanism. ${drainageText} In the visual story, every arrow from runoff to drain to river should be marked as established only when a source supports it; unsupported links stay visibly uncertain.`,
+      `Now follow the water. ${drainageNarrationClaim} That turns the story from a weather question into a flow-path question: how much water arrives, where it can move, and where capacity or obstruction causes it to back up. The evidence card remains visible so the viewer can inspect the source behind the claim.`,
       drainageItem ? [drainageItem.id] : [],
       {
         visualLabels: [
@@ -738,7 +889,7 @@ function buildWorldExplainedEpisode(
       "URBAN FORM",
       "The city changes where water can go.",
       landText,
-      `The city also changes the surface the rain lands on. ${landText} More roofs, roads and paved ground can reduce infiltration and increase runoff; development can also alter natural drainage routes. The point is not that every built surface causes a flood, but that urban form changes the hydrology the drainage system has to handle.`,
+      `The city also changes the surface the rain lands on. ${landNarrationClaim} The point is not that every building or paved surface causes flooding. It is that urban form changes both how much water stays on the surface and the routes available for moving it away.`,
       landItem ? [landItem.id] : []
     ),
 
@@ -748,7 +899,7 @@ function buildWorldExplainedEpisode(
       "MAINTENANCE & RESPONSE",
       "Infrastructure is a system only if it is maintained.",
       governanceText,
-      `Drainage capacity is not fixed once concrete is poured. ${governanceText} Cleaning, maintenance, development control and coordination can determine whether the system keeps the capacity it was designed to have—or loses it before the next storm.`,
+      `Drainage capacity is not fixed once concrete is poured. ${governanceNarrationClaim} This is why flooding is also an institutional story: the physical network and the way it is maintained, protected and managed operate as one system.`,
       governanceItem ? [governanceItem.id] : [],
       {
         visualLabels: [
