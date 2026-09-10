@@ -80,24 +80,31 @@ function asYear(value: string): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
-function asTimeIndex(value: string, fallbackIndex: number): number {
+function parseTimeValue(value: string): number | undefined {
   const trimmed = clean(value);
-  const year = asYear(trimmed);
+  if (!trimmed) return undefined;
 
   const parsed = Date.parse(trimmed);
   if (Number.isFinite(parsed)) return parsed;
 
-  if (year !== undefined) return Date.UTC(year, 0, 1);
+  const year = asYear(trimmed);
+  if (year !== undefined && /^\s*(19\d{2}|20\d{2}|21\d{2})\s*$/.test(trimmed)) {
+    return Date.UTC(year, 0, 1);
+  }
 
-  const monthNames = [
-    "jan", "feb", "mar", "apr", "may", "jun",
-    "jul", "aug", "sep", "oct", "nov", "dec",
-  ];
-  const normalized = trimmed.toLowerCase().slice(0, 3);
-  const monthIndex = monthNames.indexOf(normalized);
-  if (monthIndex >= 0) return Date.UTC(2000, monthIndex, 1);
+  const monthMatch = trimmed.match(
+    /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(19\d{2}|20\d{2}|21\d{2})$/i
+  );
+  if (monthMatch) {
+    const monthNames = [
+      "jan", "feb", "mar", "apr", "may", "jun",
+      "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    const month = monthNames.indexOf(monthMatch[1].slice(0, 3).toLowerCase());
+    return Date.UTC(Number(monthMatch[2]), month, 1);
+  }
 
-  return fallbackIndex;
+  return undefined;
 }
 
 function headerMatch(columns: string[], patterns: RegExp[]) {
@@ -115,11 +122,9 @@ function toObjects(rows: string[][]): { columns: string[]; rows: CsvRow[] } {
 
   const objects = rows.slice(1).map((values) => {
     const result: CsvRow = {};
-
     columns.forEach((column, index) => {
       result[column] = clean(values[index] ?? "");
     });
-
     return result;
   });
 
@@ -142,6 +147,16 @@ function yearRatio(rows: CsvRow[], column: string) {
 
   return (
     populated.filter((value) => asYear(value) !== undefined).length /
+    populated.length
+  );
+}
+
+function timeRatio(rows: CsvRow[], column: string) {
+  const populated = rows.map((row) => row[column]).filter(Boolean);
+  if (!populated.length) return 0;
+
+  return (
+    populated.filter((value) => parseTimeValue(value) !== undefined).length /
     populated.length
   );
 }
@@ -173,10 +188,20 @@ function measureHeaderScore(column: string) {
   }
 
   if (/\b(mm|millimet(?:er|re)s?)\b/i.test(value)) score += 50;
-  if (/\b(total|amount|value|count|rate|ratio|percent|percentage|share|index)\b/i.test(value)) {
+
+  if (
+    /\b(total|amount|value|count|rate|ratio|percent|percentage|share|index)\b/i.test(
+      value
+    )
+  ) {
     score += 35;
   }
-  if (/\b(temperature|flow|discharge|depth|height|level|volume|area|population|loss|damage)\b/i.test(value)) {
+
+  if (
+    /\b(temperature|flow|discharge|depth|height|level|volume|area|population|loss|damage)\b/i.test(
+      value
+    )
+  ) {
     score += 30;
   }
 
@@ -191,9 +216,14 @@ function categoryHeaderScore(column: string) {
   const value = clean(column).toLowerCase();
   let score = 0;
 
-  if (/\b(station|site|location|place|ward|neighbou?rhood|subcounty|county|city|basin|river|catchment|name)\b/i.test(value)) {
+  if (
+    /\b(station|site|location|place|ward|neighbou?rhood|subcounty|county|city|basin|river|catchment|name)\b/i.test(
+      value
+    )
+  ) {
     score += 90;
   }
+
   if (/\b(category|type|class|group|zone)\b/i.test(value)) score += 45;
 
   if (isCoordinateHeader(value)) score -= 1000;
@@ -226,7 +256,8 @@ function classifyColumns(
   const dateColumns = columns.filter(
     (column) =>
       isTimeHeader(column) ||
-      (!isCoordinateHeader(column) && yearRatio(rows, column) >= 0.7)
+      (!isCoordinateHeader(column) &&
+        (timeRatio(rows, column) >= 0.7 || yearRatio(rows, column) >= 0.7))
   );
 
   const measureColumns = numericColumns
@@ -285,29 +316,28 @@ function chartFromRows(
   const measure = roles.measureColumns[0];
 
   /*
-   * Important semantic rule:
-   * latitude and longitude are geographic coordinates, never default chart
-   * measures. This prevents nonsense such as "latitude increased over time".
+   * A line chart is only a time series when the time axis actually varies.
+   * Three stations observed on one date are a cross-section, not a trend.
    */
   if (dateColumn && measure) {
-    const data: ChartDatum[] = rows
-      .flatMap((row, index) => {
-        const value = asNumber(row[measure]);
-        const label = clean(row[dateColumn]);
+    const candidates = rows.flatMap((row) => {
+      const value = asNumber(row[measure]);
+      const label = clean(row[dateColumn]);
+      const x = parseTimeValue(label);
 
-        if (value === undefined || !label) return [];
+      if (value === undefined || !label || x === undefined) return [];
+      return [{ label, value, x }];
+    });
 
-        return [
-          {
-            label,
-            value,
-            x: asTimeIndex(label, index),
-          },
-        ];
-      })
-      .sort((a, b) => Number(a.x) - Number(b.x));
+    const distinctTimes = new Set(
+      candidates.map((item) => String(item.x))
+    );
 
-    if (data.length >= 2) {
+    if (candidates.length >= 2 && distinctTimes.size >= 2) {
+      const data = [...candidates].sort(
+        (a, b) => Number(a.x) - Number(b.x)
+      );
+
       return {
         type: "line",
         title: `${measure} over time`,
@@ -347,11 +377,12 @@ function chartFromRows(
   }
 
   /*
-   * Scatter plots are only created from genuine measure columns. Coordinates,
-   * dates and identifiers are excluded from this fallback too.
+   * Scatter fallback is restricted to genuine measures. Geographic
+   * coordinates, dates and identifiers can never become default axes.
    */
   if (roles.measureColumns.length >= 2) {
     const [xColumn, yColumn] = roles.measureColumns;
+
     const data: ChartDatum[] = rows.flatMap((row, index) => {
       const x = asNumber(row[xColumn]);
       const value = asNumber(row[yColumn]);
@@ -511,18 +542,8 @@ export function analyzeCsv(
   const { columns, rows } = toObjects(parsed);
   const roles = classifyColumns(columns, rows);
 
-  const recommendedChart = chartFromRows(
-    name,
-    rows,
-    roles
-  );
-
-  const recommendedMap = mapFromRows(
-    name,
-    columns,
-    rows,
-    roles
-  );
+  const recommendedChart = chartFromRows(name, rows, roles);
+  const recommendedMap = mapFromRows(name, columns, rows, roles);
 
   return {
     name,
@@ -534,9 +555,6 @@ export function analyzeCsv(
     longitudeColumn: roles.longitudeColumn,
     recommendedChart,
     recommendedMap,
-    insight: describeInsight(
-      recommendedChart,
-      recommendedMap
-    ),
+    insight: describeInsight(recommendedChart, recommendedMap),
   };
 }

@@ -32,6 +32,7 @@ import {
 import { Player } from "@remotion/player";
 
 import { analyzeCsv } from "@/lib/data-story";
+import { analyzeXlsx } from "@/lib/xlsx-story";
 import { scoutSourceToEvidence, type EvidenceScoutResponse, type EvidenceScoutSource, type StoryQuestionCandidate } from "@/lib/evidence-scout";
 import { downloadText, projectAsMarkdown } from "@/lib/export";
 import { downloadLocalRenderPackage } from "@/lib/local-render-package";
@@ -638,23 +639,75 @@ export default function StudioPage() {
 
   async function ingestCsv(file: File | undefined) {
     if (!file) return;
-    const analysis = analyzeCsv(await file.text(), file.name);
-    const nextDatasets = [...datasets.filter((item) => item.name !== analysis.name), analysis];
-    const datasetEvidence: EvidenceItem | null = analysis.insight
-      ? {
-          id: crypto.randomUUID(),
-          kind: "observed",
-          statement: analysis.insight,
-          source: file.name,
-          sourceLabel: file.name,
-          sourceType: "dataset",
-        }
-      : null;
-    const nextEvidence = datasetEvidence ? [...evidence, datasetEvidence] : evidence;
+
+    const lowerName = file.name.toLowerCase();
+    const isExcel =
+      lowerName.endsWith(".xlsx") ||
+      lowerName.endsWith(".xlsm") ||
+      file.type ===
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.type === "application/vnd.ms-excel.sheet.macroEnabled.12";
+
+    let importedDatasets: DatasetAnalysis[] = [];
+    let datasetEvidence: EvidenceItem[] = [];
+
+    if (isExcel) {
+      const workbook = await analyzeXlsx(file, file.name);
+      importedDatasets = workbook.datasets;
+
+      datasetEvidence = workbook.datasets.flatMap((item) =>
+        item.insight
+          ? [
+              {
+                id: crypto.randomUUID(),
+                kind: "observed" as const,
+                statement: item.insight,
+                source: file.name,
+                sourceLabel: `${file.name} · ${item.name}`,
+                sourceType: "dataset" as const,
+              },
+            ]
+          : []
+      );
+    } else {
+      const analysis = analyzeCsv(await file.text(), file.name);
+      importedDatasets = [analysis];
+
+      if (analysis.insight) {
+        datasetEvidence = [
+          {
+            id: crypto.randomUUID(),
+            kind: "observed",
+            statement: analysis.insight,
+            source: file.name,
+            sourceLabel: file.name,
+            sourceType: "dataset",
+          },
+        ];
+      }
+    }
+
+    const incomingNames = new Set(
+      importedDatasets.map((item) => item.name)
+    );
+
+    const nextDatasets = [
+      ...datasets.filter(
+        (item) => !incomingNames.has(item.name)
+      ),
+      ...importedDatasets,
+    ];
+
+    const nextEvidence = [
+      ...evidence,
+      ...datasetEvidence,
+    ];
+
     setDatasets(nextDatasets);
     setEvidence(nextEvidence);
     buildFrom(nextEvidence, nextDatasets);
     setScoutQuery("");
+
     await runEvidenceScout({
       nextEvidence,
       nextDatasets,
@@ -1264,11 +1317,11 @@ export default function StudioPage() {
                     fontWeight: 500,
                   }}
                 >
-                  CSV · detect trends, comparisons and coordinates.
+                  CSV or Excel · detect trends, comparisons, time series and coordinates.
                 </span>
                 <input
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
                   hidden
                   onChange={(e: any) => ingestCsv(e.target.files?.[0])}
                 />

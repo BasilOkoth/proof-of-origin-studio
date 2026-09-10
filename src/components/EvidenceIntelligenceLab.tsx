@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { analyzeCsv } from "@/lib/data-story";
+import { analyzeXlsx } from "@/lib/xlsx-story";
 import {
   buildEvidenceIntelligence,
   type EvidenceIntelligenceReport,
@@ -131,6 +132,36 @@ function roleLabel(role: string) {
   return role.replaceAll("_", " ").toUpperCase();
 }
 
+
+function looksLikeExcel(file: Pick<File, "name" | "type">) {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith(".xlsx") ||
+    name.endsWith(".xlsm") ||
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    file.type === "application/vnd.ms-excel.sheet.macroEnabled.12"
+  );
+}
+
+function looksCorruptedSpreadsheetRecord(record: EvidenceLibraryRecord) {
+  if (!record.fileName || !/\.(xlsx|xlsm)$/i.test(record.fileName)) {
+    return false;
+  }
+
+  const title = record.title || "";
+  const hasReplacementCharacters = /�/.test(title);
+  const hasControlCharacters = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(
+    title
+  );
+
+  return (
+    !record.dataset ||
+    hasReplacementCharacters ||
+    hasControlCharacters
+  );
+}
+
 export function EvidenceIntelligenceLab({
   topic,
   question,
@@ -164,6 +195,96 @@ export function EvidenceIntelligenceLab({
     return next;
   }
 
+
+  async function repairStoredSpreadsheets(
+    records: EvidenceLibraryRecord[]
+  ) {
+    const repaired: EvidenceLibraryRecord[] = [];
+    const repairedEvidence: EvidenceItem[] = [];
+    const repairedDatasets: DatasetAnalysis[] = [];
+
+    for (const record of records) {
+      if (
+        !looksCorruptedSpreadsheetRecord(record) ||
+        !record.fileBlob ||
+        !record.fileName
+      ) {
+        repaired.push(record);
+        continue;
+      }
+
+      try {
+        const workbook = await analyzeXlsx(
+          record.fileBlob,
+          record.fileName
+        );
+
+        const spreadsheetEvidence = workbook.datasets.flatMap(
+          (item) =>
+            item.insight
+              ? [
+                  {
+                    id: crypto.randomUUID(),
+                    kind: "observed" as const,
+                    statement: item.insight,
+                    source: `library:${record.id}`,
+                    sourceLabel: `${record.fileName} · ${item.name}`,
+                    sourceType: "dataset" as const,
+                  },
+                ]
+              : []
+        );
+
+        const updated = mergeLibraryRecord(record, {
+          id: record.id,
+          title: workbook.title,
+          sourceType: "dataset",
+          status: "ingested",
+          summary: `${workbook.datasets.length} tabular sheet${
+            workbook.datasets.length === 1 ? "" : "s"
+          } parsed from the Excel workbook.`,
+          extractedText: workbook.extractedText,
+          evidence: spreadsheetEvidence,
+          dataset: workbook.primaryDataset,
+          mimeType:
+            record.mimeType ||
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          tags: Array.from(
+            new Set([
+              ...(record.tags || []),
+              "dataset",
+              "spreadsheet",
+              "xlsx",
+              "repaired",
+            ])
+          ),
+        });
+
+        await saveEvidenceLibraryRecord(updated);
+        repaired.push(updated);
+        repairedEvidence.push(...spreadsheetEvidence);
+        repairedDatasets.push(...workbook.datasets);
+      } catch (spreadsheetError) {
+        console.warn(
+          `Unable to repair stored spreadsheet ${record.fileName}:`,
+          spreadsheetError
+        );
+        repaired.push(record);
+      }
+    }
+
+    if (repairedEvidence.length || repairedDatasets.length) {
+      onIntegrate(
+        dedupeEvidence(repairedEvidence),
+        dedupeDatasets(repairedDatasets)
+      );
+    }
+
+    return repaired.sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt)
+    );
+  }
+
   function reanalyze(nextLibrary = library) {
     const next = buildEvidenceIntelligence({
       topic,
@@ -185,7 +306,8 @@ export function EvidenceIntelligenceLab({
     setRebuildStatus("Refreshing evidence library…");
 
     try {
-      const records = await listEvidenceLibrary();
+      const listed = await listEvidenceLibrary();
+      const records = await repairStoredSpreadsheets(listed);
       setLibrary(records);
 
       setRebuildStatus(
@@ -230,7 +352,8 @@ export function EvidenceIntelligenceLab({
 
     void (async () => {
       try {
-        const records = await listEvidenceLibrary();
+        const listed = await listEvidenceLibrary();
+        const records = await repairStoredSpreadsheets(listed);
         if (!live) return;
 
         setLibrary(records);
@@ -268,54 +391,13 @@ export function EvidenceIntelligenceLab({
 
     void (async () => {
       try {
-        const currentScoutIds = new Set(
-          scout.sources.map((source) => source.id)
-        );
-
-        /*
-         * Scout candidates are refreshable discovery records.
-         * Remove stale, unreviewed scout candidates from older searches,
-         * but preserve ingested/reviewed/local/manual evidence.
-         */
-        const previous = await listEvidenceLibrary();
-
-        for (const record of previous) {
-          const staleScoutCandidate =
-            record.origin === "scout" &&
-            record.status === "candidate" &&
-            !currentScoutIds.has(record.id);
-
-          if (staleScoutCandidate) {
-            await deleteEvidenceLibraryRecord(record.id);
-          }
-        }
-
         for (const source of scout.sources) {
           const existing = await getEvidenceLibraryRecord(
             source.id
           );
-
-          if (
-            existing?.status === "ingested" ||
-            existing?.status === "reviewed"
-          ) {
-            continue;
-          }
-
+          if (existing) continue;
           await saveEvidenceLibraryRecord(
-            existing
-              ? mergeLibraryRecord(
-                  existing,
-                  {
-                    ...scoutSourceToLibraryRecord(source),
-                    id: source.id,
-                    title: source.title,
-                    sourceType: source.sourceType,
-                    status: "candidate",
-                    origin: "scout",
-                  }
-                )
-              : scoutSourceToLibraryRecord(source)
+            scoutSourceToLibraryRecord(source)
           );
         }
 
@@ -337,7 +419,7 @@ export function EvidenceIntelligenceLab({
         if (live) {
           setError(
             err?.message ||
-              "Unable to synchronize Evidence Scout results with the library."
+              "Unable to save Evidence Scout results to the library."
           );
         }
       }
@@ -390,8 +472,6 @@ export function EvidenceIntelligenceLab({
         provider: source.provider,
         license: source.license,
         sourceUrl: source.url,
-        doi: source.doi,
-        libraryId: source.id,
       }),
     });
 
@@ -409,13 +489,6 @@ export function EvidenceIntelligenceLab({
       data.mimeType
     );
 
-    const linkedEvidence = data.evidence.map((item) => ({
-      ...item,
-      source: `library:${source.id}`,
-      sourceLabel: source.title,
-      sourceType: source.sourceType,
-    }));
-
     const record = mergeLibraryRecord(
       existing || scoutSourceToLibraryRecord(source),
       {
@@ -427,11 +500,11 @@ export function EvidenceIntelligenceLab({
         mimeType: data.mimeType,
         byteLength: data.byteLength,
         extractedText: data.extractedText,
-        evidence: linkedEvidence,
+        evidence: data.evidence,
         dataset: data.dataset,
         fileBlob: blob,
         url: source.url,
-        downloadUrl: data.finalUrl || source.downloadUrl,
+        downloadUrl: source.downloadUrl,
         provider: source.provider,
         license: source.license,
         access: source.access,
@@ -475,7 +548,6 @@ export function EvidenceIntelligenceLab({
 
     const addedEvidence: EvidenceItem[] = [];
     const addedDatasets: DatasetAnalysis[] = [];
-    const failures: string[] = [];
     let completed = 0;
     let failed = 0;
 
@@ -499,11 +571,8 @@ export function EvidenceIntelligenceLab({
           }
 
           completed += 1;
-        } catch (err: any) {
+        } catch {
           failed += 1;
-          failures.push(
-            `${source.title}: ${err?.message || "ingestion failed"}`
-          );
         }
       }
 
@@ -520,7 +589,7 @@ export function EvidenceIntelligenceLab({
       setAutoStatus(
         `Finished · ${completed} ingested${
           failed
-            ? ` · ${failed} failed · ${failures.slice(0, 2).join(" | ")}`
+            ? ` · ${failed} could not be ingested`
             : ""
         }`
       );
@@ -544,17 +613,21 @@ export function EvidenceIntelligenceLab({
       const id = `local-${crypto.randomUUID()}`;
       let newEvidence: EvidenceItem[] = [];
       let dataset: DatasetAnalysis | undefined;
+      let importedDatasets: DatasetAnalysis[] = [];
       let extractedText = "";
+      let summary: string | undefined;
       let title = file.name
         .replace(/\.[^.]+$/, "")
         .replace(/[_-]+/g, " ");
 
-      if (
+      const isCsv =
         file.name.toLowerCase().endsWith(".csv") ||
-        file.type === "text/csv"
-      ) {
+        file.type === "text/csv";
+
+      if (isCsv) {
         extractedText = await file.text();
         dataset = analyzeCsv(extractedText, file.name);
+        importedDatasets = [dataset];
 
         if (dataset.insight) {
           newEvidence = [
@@ -568,6 +641,33 @@ export function EvidenceIntelligenceLab({
             },
           ];
         }
+      } else if (looksLikeExcel(file)) {
+        const workbook = await analyzeXlsx(file, file.name);
+
+        title = workbook.title;
+        extractedText = workbook.extractedText;
+        dataset = workbook.primaryDataset;
+        importedDatasets = workbook.datasets;
+        summary = `${workbook.datasets.length} tabular sheet${
+          workbook.datasets.length === 1 ? "" : "s"
+        } parsed from ${workbook.sheetNames.length} readable workbook sheet${
+          workbook.sheetNames.length === 1 ? "" : "s"
+        }.`;
+
+        newEvidence = workbook.datasets.flatMap((item) =>
+          item.insight
+            ? [
+                {
+                  id: crypto.randomUUID(),
+                  kind: "observed" as const,
+                  statement: item.insight,
+                  source: `library:${id}`,
+                  sourceLabel: `${file.name} · ${item.name}`,
+                  sourceType: "dataset" as const,
+                },
+              ]
+            : []
+        );
       } else {
         const form = new FormData();
         form.append("file", file);
@@ -602,8 +702,6 @@ export function EvidenceIntelligenceLab({
         newEvidence = parsed.evidence.map((item) => ({
           ...item,
           source: `library:${id}`,
-          // Keep the parsed document title as context, not only
-          // the opaque uploaded filename.
           sourceLabel: parsed.title || file.name,
           sourceType: localType,
         }));
@@ -621,21 +719,32 @@ export function EvidenceIntelligenceLab({
         createdAt: now,
         updatedAt: now,
         title,
-        sourceType: dataset ? "dataset" : localType,
+        sourceType:
+          dataset || importedDatasets.length
+            ? "dataset"
+            : localType,
         status: "ingested",
         origin: "upload",
         tags: [
           "local",
-          dataset ? "dataset" : localType,
+          dataset || importedDatasets.length
+            ? "dataset"
+            : localType,
+          ...(looksLikeExcel(file)
+            ? ["spreadsheet", "xlsx"]
+            : []),
         ],
         fileName: file.name,
         mimeType:
           file.type ||
-          (dataset
-            ? "text/csv"
-            : "application/octet-stream"),
+          (looksLikeExcel(file)
+            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            : dataset
+              ? "text/csv"
+              : "application/octet-stream"),
         byteLength: file.size,
         extractedText: extractedText.slice(0, 120_000),
+        summary,
         evidence: newEvidence,
         dataset,
         fileBlob: file,
@@ -645,7 +754,11 @@ export function EvidenceIntelligenceLab({
 
       onIntegrate(
         newEvidence,
-        dataset ? [dataset] : []
+        importedDatasets.length
+          ? importedDatasets
+          : dataset
+            ? [dataset]
+            : []
       );
 
       const records = await refreshLibrary();
@@ -827,14 +940,14 @@ export function EvidenceIntelligenceLab({
             <strong>
               {localBusy
                 ? "Adding to library…"
-                : "Add local PDF, TXT, Markdown or CSV to the persistent library"}
+                : "Add local PDF, TXT, Markdown, CSV or Excel to the persistent library"}
             </strong>
             <span>
               The original file is retained as a browser Blob.
             </span>
             <input
               type="file"
-              accept=".pdf,.txt,.md,.csv,text/plain,text/csv,application/pdf"
+              accept=".pdf,.txt,.md,.csv,.xlsx,.xlsm,text/plain,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
               hidden
               onChange={(event) =>
                 importLocalFile(
