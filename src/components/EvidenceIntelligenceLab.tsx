@@ -349,6 +349,7 @@ export function EvidenceIntelligenceLab({
         provider: source.provider,
         license: source.license,
         sourceUrl: source.url,
+        libraryId: source.id,
       }),
     });
 
@@ -366,6 +367,13 @@ export function EvidenceIntelligenceLab({
       data.mimeType
     );
 
+    const linkedEvidence = data.evidence.map((item) => ({
+      ...item,
+      source: `library:${source.id}`,
+      sourceLabel: source.title,
+      sourceType: source.sourceType,
+    }));
+
     const record = mergeLibraryRecord(
       existing || scoutSourceToLibraryRecord(source),
       {
@@ -377,7 +385,7 @@ export function EvidenceIntelligenceLab({
         mimeType: data.mimeType,
         byteLength: data.byteLength,
         extractedText: data.extractedText,
-        evidence: data.evidence,
+        evidence: linkedEvidence,
         dataset: data.dataset,
         fileBlob: blob,
         url: source.url,
@@ -425,6 +433,7 @@ export function EvidenceIntelligenceLab({
 
     const addedEvidence: EvidenceItem[] = [];
     const addedDatasets: DatasetAnalysis[] = [];
+    const failures: string[] = [];
     let completed = 0;
     let failed = 0;
 
@@ -448,8 +457,11 @@ export function EvidenceIntelligenceLab({
           }
 
           completed += 1;
-        } catch {
+        } catch (err: any) {
           failed += 1;
+          failures.push(
+            `${source.title}: ${err?.message || "ingestion failed"}`
+          );
         }
       }
 
@@ -466,7 +478,7 @@ export function EvidenceIntelligenceLab({
       setAutoStatus(
         `Finished · ${completed} ingested${
           failed
-            ? ` · ${failed} could not be ingested`
+            ? ` · ${failed} failed · ${failures.slice(0, 2).join(" | ")}`
             : ""
         }`
       );

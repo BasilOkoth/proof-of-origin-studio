@@ -135,19 +135,36 @@ function directionalConflict(a: string, b: string) {
 function sourceIdentity(item: EvidenceItem, library: EvidenceLibraryRecord[]) {
   const direct = clean(item.source || "").toLowerCase();
   const label = clean(item.sourceLabel || "").toLowerCase();
+
+  // Strongest provenance path: ingestion writes source as library:<record-id>.
+  if (direct.startsWith("library:")) {
+    const id = direct.slice("library:".length);
+    if (library.some((source) => source.id.toLowerCase() === id)) {
+      return library.find((source) => source.id.toLowerCase() === id)?.id;
+    }
+  }
+
   const matched = library.find((source) => {
-    const candidates = [source.url, source.downloadUrl, source.title, source.fileName]
+    const candidates = [
+      source.id,
+      source.url,
+      source.downloadUrl,
+      source.title,
+      source.fileName,
+    ]
       .filter(Boolean)
       .map((value) => clean(String(value)).toLowerCase());
+
     return candidates.some((candidate) =>
       Boolean(candidate) &&
       (candidate === direct ||
         candidate === label ||
-        direct.includes(candidate) ||
-        label.includes(candidate) ||
-        candidate.includes(label))
+        (direct.length > 12 && direct.includes(candidate)) ||
+        (label.length > 12 && label.includes(candidate)) ||
+        (label.length > 12 && candidate.includes(label)))
     );
   });
+
   return matched?.id;
 }
 
@@ -181,21 +198,32 @@ function claimConfidence(item: EvidenceItem, sourceCount: number) {
 
 function sourcesForClaim(item: EvidenceItem, library: EvidenceLibraryRecord[]) {
   const direct = sourceIdentity(item, library);
-  const text = `${item.statement} ${item.sourceLabel || ""} ${item.source || ""}`;
-  const lexical = library
-    .filter((source) => {
-      const haystack = `${source.title} ${source.summary || ""} ${source.extractedText?.slice(0, 1800) || ""}`;
-      return similarity(text, haystack) >= 0.18;
-    })
-    .sort(
-      (a, b) =>
-        similarity(text, `${b.title} ${b.summary || ""}`) -
-        similarity(text, `${a.title} ${a.summary || ""}`)
-    )
-    .slice(0, 4)
-    .map((source) => source.id);
 
-  return [...new Set([...(direct ? [direct] : []), ...lexical])];
+  // Explicit provenance is authoritative. Do not dilute it with guessed links.
+  if (direct) return [direct];
+
+  const text = `${item.statement} ${item.sourceLabel || ""} ${item.source || ""}`;
+
+  const lexical = library
+    .filter(
+      (source) =>
+        source.status === "ingested" || source.status === "reviewed"
+    )
+    .map((source) => {
+      const haystack = `${source.title} ${source.summary || ""} ${
+        source.extractedText?.slice(0, 5000) || ""
+      }`;
+      return {
+        id: source.id,
+        score: similarity(text, haystack),
+      };
+    })
+    .filter((candidate) => candidate.score >= 0.28)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2)
+    .map((candidate) => candidate.id);
+
+  return lexical;
 }
 
 function relationFor(item: EvidenceItem, claim: ClaimNode, source: EvidenceLibraryRecord): ClaimRelation {
