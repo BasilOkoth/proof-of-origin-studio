@@ -9,6 +9,7 @@ function clean(value?: string) {
 
 function spokenUnits(text: string) {
   return clean(text)
+    .replace(/\((?:mm|millimetres)\)/gi, "")
     .replace(/\b7-day\b/gi, "seven-day")
     .replace(/\b24h\b/gi, "twenty-four-hour")
     .replace(/\b24-hour\b/gi, "twenty-four-hour")
@@ -359,10 +360,13 @@ function buildTemporalTriggerNarration(project: EpisodeProject, datasetsOverride
 function sceneLooksLikeTemporalTrigger(scene: Scene) {
   const text = `${scene.eyebrow} ${scene.headline}`.toLowerCase();
 
+  /*
+   * Do not confuse the systems-intro headline "Rain is the trigger"
+   * with the actual temporal rainfall chart.
+   */
   return (
     scene.chart?.type === "line" ||
-    /\btrigger\b/.test(text) ||
-    /start with the rain|rainfall.*over time|monthly rainfall/.test(text)
+    /rainfall.*over time|monthly rainfall|rainfall pattern|rainfall trend/.test(text)
   );
 }
 
@@ -384,7 +388,11 @@ function ensureTemporalTriggerNarration(
   scenes: Scene[],
   datasetsOverride?: DatasetAnalysis[]
 ) {
-  const temporalNarration = buildTemporalTriggerNarration(project, datasetsOverride);
+  const temporalNarration = buildTemporalTriggerNarration(
+    project,
+    datasetsOverride
+  );
+
   if (!temporalNarration) return scenes;
   if (narrationAlreadyContainsTemporalEvidence(scenes)) return scenes;
 
@@ -392,29 +400,25 @@ function ensureTemporalTriggerNarration(
 
   let targetIndex = next.findIndex(sceneLooksLikeTemporalTrigger);
 
-  /*
-   * If an earlier build lost the dedicated trigger scene but the dataset is
-   * still in the project, place the rainfall evidence immediately before the
-   * flow-path scene so the narration sequence remains:
-   * system -> rainfall trigger -> flow path.
-   */
-  if (targetIndex < 0) {
-    targetIndex = next.findIndex((scene) => isFlowPath(scene));
+  if (targetIndex >= 0) {
+    next[targetIndex] = {
+      ...next[targetIndex],
+      narration: temporalNarration,
+    };
+    return next;
   }
 
-  if (targetIndex < 0) return next;
+  /*
+   * Stale project fallback:
+   * if the temporal scene itself is missing, place the rainfall paragraph
+   * immediately before the first flow-path narration.
+   */
+  targetIndex = next.findIndex((scene) => isFlowPath(scene));
 
-  const target = next[targetIndex];
-
-  if (isFlowPath(target)) {
+  if (targetIndex >= 0) {
     next[targetIndex] = {
-      ...target,
-      narration: `${temporalNarration} ${clean(target.narration)}`.trim(),
-    };
-  } else {
-    next[targetIndex] = {
-      ...target,
-      narration: temporalNarration,
+      ...next[targetIndex],
+      narration: `${temporalNarration} ${clean(next[targetIndex].narration)}`.trim(),
     };
   }
 
@@ -427,14 +431,23 @@ export function applyNarrationDirector(
 ): EpisodeProject {
   let previous = "";
 
+  const polishedScenes = project.scenes.map((scene, index) => ({
+    ...scene,
+    narration: approvedSceneNarration(scene, index),
+  }));
+
+  /*
+   * Repair the rainfall trigger AFTER normal scene polishing so it cannot
+   * be overwritten by polishSystemsIntro().
+   */
   const repairedScenes = ensureTemporalTriggerNarration(
     project,
-    project.scenes,
+    polishedScenes,
     datasetsOverride
   );
 
-  const scenes = repairedScenes.map((scene, index) => {
-    let narration = approvedSceneNarration(scene, index);
+  const scenes = repairedScenes.map((scene) => {
+    let narration = clean(scene.narration);
 
     /*
      * Avoid adjacent scenes repeating the same observation.
