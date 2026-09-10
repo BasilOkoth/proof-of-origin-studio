@@ -155,12 +155,38 @@ function chartNarration(scene: Scene, current: string) {
   const body = spokenUnits(scene.body);
 
   if (chart.type === "line") {
+    const ranked = [...chart.data]
+      .filter((item) => Number.isFinite(item.value))
+      .sort((a, b) => b.value - a.value);
+    const peak = ranked[0];
+    const second = ranked[1];
+
+    if (peak && second) {
+      const unit = chart.unit ? spokenUnits(chart.unit) : "millimetres";
+      return clean(
+        `Start with the rain. Across the plotted period, rainfall is highly uneven. ${peak.label} records the highest monthly total at ${peak.value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}, followed by ${second.label} at ${second.value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}. That establishes the weather signal, but rainfall alone does not explain the flooding.`
+      );
+    }
+
     return clean(
-      `Start with the rain. ${body} That gives us the weather signal. It still does not explain why the same rain becomes damaging in some places and not others.`
+      `Start with the rain. ${body} That establishes the weather signal, but rainfall alone does not explain the flooding.`
     );
   }
 
   if (chart.type === "bar" || chart.type === "ranking") {
+    const ranked = [...chart.data]
+      .filter((item) => Number.isFinite(item.value))
+      .sort((a, b) => b.value - a.value);
+    const top = ranked[0];
+    const second = ranked[1];
+    const unit = chart.unit ? spokenUnits(chart.unit) : "millimetres";
+
+    if (top && second) {
+      return clean(
+        `Now compare the event across the measured locations. ${top.label} records the highest ${spokenUnits(chart.yLabel || "measured total")}, at ${top.value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}, followed by ${second.label} at ${second.value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}. These numbers show the scale of the event. They do not, by themselves, explain the flooding.`
+      );
+    }
+
     return clean(
       `Now compare the event across the measured locations. ${body} These numbers show the scale of the event. They do not, by themselves, explain the flooding.`
     );
@@ -172,10 +198,32 @@ function chartNarration(scene: Scene, current: string) {
 function mapNarration(scene: Scene, current: string) {
   if (!scene.map) return current;
 
-  const body = spokenUnits(scene.body);
+  const countWords: Record<number, string> = {
+    1: "one",
+    2: "two",
+    3: "three",
+    4: "four",
+    5: "five",
+    6: "six",
+  };
+
+  const points = scene.map.points || [];
+  const labels = points
+    .slice(0, 4)
+    .map((point) => point.label)
+    .filter(Boolean);
+
+  const count = points.length;
+  const countText = countWords[count] || String(count);
+
+  if (count > 0 && labels.length) {
+    return clean(
+      `Now put those measurements on the city. The dataset maps ${countText} observations: ${labels.join(", ")}. That gives useful geographic context, but it is not a complete flood-risk map of Nairobi.`
+    );
+  }
 
   return clean(
-    `Now put those measurements on the city. ${body}`
+    `Now put those measurements on the city. ${spokenUnits(scene.body)}`
   );
 }
 
