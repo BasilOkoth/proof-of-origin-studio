@@ -285,16 +285,22 @@ function buildAngles(input: {
   );
 
   const weightedClaimEvidence = storyClaims.reduce(
-    (sum, claim) => sum + roleWeight(claim.role),
+    (sum, claim) => {
+      const sourceConnectionWeight = claim.sourceIds.length > 0 ? 1 : 0.35;
+      return sum + roleWeight(claim.role) * sourceConnectionWeight;
+    },
     0
   );
 
+  const connectedCoreClaims = coreClaims.filter((claim) => claim.sourceIds.length > 0).length;
+  const connectedMechanismClaims = mechanismClaims.filter((claim) => claim.sourceIds.length > 0).length;
+
   const evidence = clamp(
-    38 +
-      coreClaims.length * 8 +
-      mechanismClaims.length * 5 +
-      Math.min(16, weightedClaimEvidence * 2) +
-      Math.min(18, ingested.length * 5)
+    28 +
+      connectedCoreClaims * 10 +
+      connectedMechanismClaims * 7 +
+      Math.min(18, weightedClaimEvidence * 3) +
+      Math.min(16, ingested.length * 5)
   );
 
   const contradiction = input.contradictions.length
@@ -586,9 +592,15 @@ export function buildEvidenceIntelligence(input: {
     );
   }
 
+  const connectedRelevantClaims = storyClaims.filter((claim) => claim.sourceIds.length > 0).length;
+
   if (!coreCount) {
     warnings.push(
       "No core-local claim currently survives the relevance gate. Treat Story Hunter scores as provisional until local evidence is added."
+    );
+  } else if (connectedRelevantClaims === 0) {
+    warnings.push(
+      "Relevant claims exist, but none is connected to a persistent source record. Story Hunter evidence scores are intentionally capped until provenance links are established."
     );
   } else if (mechanismCount === 0) {
     warnings.push(
