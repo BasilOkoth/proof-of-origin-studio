@@ -54,6 +54,7 @@ import type {
 } from "@/lib/types";
 import { OriginEpisode } from "@/remotion/OriginEpisode";
 import { EvidenceIntelligenceLab } from "@/components/EvidenceIntelligenceLab";
+import { listEvidenceLibrary, saveEvidenceLibraryRecord } from "@/lib/evidence-library";
 import type { StoryHunterAngle } from "@/lib/evidence-intelligence";
 
 const initial = makeSample();
@@ -747,6 +748,8 @@ export default function StudioPage() {
   const [visualRerunMessage, setVisualRerunMessage] = useState("");
   const workspaceHydrated = useRef(false);
   const [workspaceSavedAt, setWorkspaceSavedAt] = useState("");
+  const [visualAssetStatus, setVisualAssetStatus] = useState("");
+  const [visualAssetsRestored, setVisualAssetsRestored] = useState(false);
 
   const [sourceKind, setSourceKind] = useState<"research" | "report" | "text">("research");
   const [documentBusy, setDocumentBusy] = useState(false);
@@ -845,6 +848,60 @@ export default function StudioPage() {
     } finally {
       workspaceHydrated.current = true;
     }
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+
+    void (async () => {
+      try {
+        const records = await listEvidenceLibrary();
+        const restored = records
+          .map((record) => record.visualAsset)
+          .filter((asset): asset is EvidenceAsset => Boolean(asset?.dataUrl));
+
+        if (!live) return;
+
+        if (restored.length) {
+          setProject((current) => {
+            const byId = new Map<string, EvidenceAsset>();
+
+            (current.assets || []).forEach((asset) =>
+              byId.set(asset.id, asset)
+            );
+            restored.forEach((asset) =>
+              byId.set(asset.id, asset)
+            );
+
+            return {
+              ...current,
+              assets: [...byId.values()],
+            };
+          });
+
+          setVisualAssetStatus(
+            `Restored ${restored.length} persistent visual evidence asset${restored.length === 1 ? "" : "s"} after reload.`
+          );
+        }
+
+        setVisualAssetsRestored(true);
+      } catch (error) {
+        console.warn(
+          "Unable to restore persistent visual evidence:",
+          error
+        );
+        if (live) {
+          setVisualAssetStatus(
+            "Visual evidence could not be restored from browser storage."
+          );
+          setVisualAssetsRestored(true);
+        }
+      }
+    })();
+
+    return () => {
+      live = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -992,14 +1049,59 @@ export default function StudioPage() {
 
   async function uploadImages(files: FileList | null) {
     if (!files?.length) return;
-    const uploaded = await Promise.all(Array.from(files).map(readImage));
-    setProject((current) => ({
-      ...current,
-      assets: [...current.assets, ...uploaded],
-      scenes: current.scenes.map((scene, index) =>
-        index < uploaded.length ? { ...scene, assetId: uploaded[index]?.id } : scene
-      ),
-    }));
+
+    const selected = Array.from(files);
+    const uploaded = await Promise.all(
+      selected.map(async (file) => {
+        const asset = await readImage(file);
+        const now = new Date().toISOString();
+
+        await saveEvidenceLibraryRecord({
+          id: asset.id,
+          createdAt: now,
+          updatedAt: now,
+          title: file.name
+            .replace(/\.[^.]+$/, "")
+            .replace(/[_-]+/g, " "),
+          sourceType: "field",
+          status: "ingested",
+          origin: "upload",
+          tags: ["local", "visual-evidence", "image", "story-upload"],
+          fileName: file.name,
+          mimeType: file.type || "image/jpeg",
+          byteLength: file.size,
+          extractedText: "",
+          summary:
+            "Visual evidence uploaded in Story & Video and stored persistently in this browser.",
+          evidence: [],
+          visualAsset: asset,
+          fileBlob: file,
+        });
+
+        return asset;
+      })
+    );
+
+    setProject((current) => {
+      const byId = new Map<string, EvidenceAsset>();
+      (current.assets || []).forEach((asset) =>
+        byId.set(asset.id, asset)
+      );
+      uploaded.forEach((asset) =>
+        byId.set(asset.id, asset)
+      );
+
+      const merged = {
+        ...current,
+        assets: [...byId.values()],
+      };
+
+      return applyEditorialDirectors(merged, datasets);
+    });
+
+    setVisualAssetStatus(
+      `✓ ${uploaded.length} visual evidence asset${uploaded.length === 1 ? "" : "s"} uploaded and stored persistently.`
+    );
   }
 
   async function runEvidenceScout(options?: {
@@ -1081,6 +1183,10 @@ export default function StudioPage() {
 
   function integrateVisualAssets(newAssets: EvidenceAsset[]) {
     if (!newAssets.length) return;
+
+    setVisualAssetStatus(
+      `✓ ${newAssets.length} visual evidence asset${newAssets.length === 1 ? "" : "s"} added to the project and available to Story & Video.`
+    );
 
     setProject((current) => {
       const byId = new Map<string, EvidenceAsset>();
@@ -2487,17 +2593,135 @@ export default function StudioPage() {
       )}
 
       {activeTab === "intelligence" && (
-        <EvidenceIntelligenceLab
-          topic={topic}
-          question={question}
-          evidence={evidence}
-          datasets={datasets}
-          scout={scout}
-          onIntegrate={integrateIntelligence}
-          onIntegrateVisualAssets={integrateVisualAssets}
-          onPurgeEvidenceSources={purgeEvidenceSources}
-          onUseAngle={useIntelligenceAngle}
-        />
+        <>
+          <section className="workspace" style={{ paddingBottom: 0 }}>
+            <div className="panel">
+              <div className="panelHead">
+                <div>
+                  <p className="micro">VISUAL EVIDENCE</p>
+                  <h2>Uploaded images stay visible, persistent and traceable.</h2>
+                </div>
+                <ImagePlus />
+              </div>
+
+              <p className="muted">
+                Images are stored in the browser Evidence Library and restored automatically after refresh.
+                Scene assignments keep their asset IDs, so a reload should not silently remove an embedded image.
+              </p>
+
+              {visualAssetStatus && (
+                <Notice>
+                  <strong>{visualAssetStatus}</strong>
+                </Notice>
+              )}
+
+              {!visualAssetsRestored && (
+                <p className="muted" style={{ marginTop: 14 }}>
+                  Restoring persistent visual evidence…
+                </p>
+              )}
+
+              {project.assets.filter((asset) =>
+                asset.mimeType?.startsWith("image/")
+              ).length > 0 ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: 14,
+                    marginTop: 18,
+                  }}
+                >
+                  {project.assets
+                    .filter((asset) =>
+                      asset.mimeType?.startsWith("image/")
+                    )
+                    .slice(0, 8)
+                    .map((asset) => {
+                      const usedScenes = project.scenes.filter(
+                        (scene) => scene.assetId === asset.id
+                      );
+
+                      return (
+                        <article
+                          key={asset.id}
+                          style={{
+                            border: "1px solid rgba(255,255,255,.1)",
+                            borderRadius: 16,
+                            overflow: "hidden",
+                            background: "rgba(255,255,255,.025)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              aspectRatio: "16 / 10",
+                              background: "#080d18",
+                              overflow: "hidden",
+                            }}
+                          >
+                            <img
+                              src={asset.dataUrl}
+                              alt={asset.name}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                                display: "block",
+                              }}
+                            />
+                          </div>
+
+                          <div style={{ padding: 12 }}>
+                            <p className="micro" style={{ margin: 0 }}>
+                              VISUAL EVIDENCE · PERSISTENT
+                            </p>
+                            <strong
+                              style={{
+                                display: "block",
+                                marginTop: 7,
+                                fontSize: 12,
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              {asset.name}
+                            </strong>
+                            <p
+                              className="muted"
+                              style={{
+                                marginTop: 7,
+                                marginBottom: 0,
+                                fontSize: 11,
+                              }}
+                            >
+                              {usedScenes.length
+                                ? `Used in ${usedScenes.length} scene${usedScenes.length === 1 ? "" : "s"}`
+                                : "Available for scene assignment"}
+                            </p>
+                          </div>
+                        </article>
+                      );
+                    })}
+                </div>
+              ) : (
+                <Notice>
+                  No image evidence is currently hydrated into this project. Add an image below; a thumbnail will appear here immediately.
+                </Notice>
+              )}
+            </div>
+          </section>
+
+          <EvidenceIntelligenceLab
+            topic={topic}
+            question={question}
+            evidence={evidence}
+            datasets={datasets}
+            scout={scout}
+            onIntegrate={integrateIntelligence}
+            onIntegrateVisualAssets={integrateVisualAssets}
+            onPurgeEvidenceSources={purgeEvidenceSources}
+            onUseAngle={useIntelligenceAngle}
+          />
+        </>
       )}
 
       {activeTab === "story" && (

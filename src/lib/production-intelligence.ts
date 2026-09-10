@@ -71,7 +71,26 @@ function sceneStart(project: EpisodeProject, index: number) {
     .reduce((sum, scene) => sum + scene.durationSec, 0);
 }
 
+function visualPlanRole(scene: Scene): ShotRole | undefined {
+  const kind = String(scene.visualPlan?.kind || "");
+
+  if (kind === "map_story") return "map";
+  if (kind === "data_chart") return "chart";
+  if (kind === "systems_diagram") return "diagram";
+  if (kind === "source_highlight") return "document";
+  if (kind === "field_evidence") return "broll";
+
+  return undefined;
+}
+
 function chooseRole(scene: Scene): ShotRole {
+  /*
+   * Visual Intelligence is the approved visual job. It must take precedence
+   * over stale scene kinds left behind by earlier story generation.
+   */
+  const approved = visualPlanRole(scene);
+  if (approved) return approved;
+
   if (scene.kind === "map_story" || scene.map) return "map";
   if (scene.kind === "data_chart" || scene.chart) return "chart";
 
@@ -144,7 +163,10 @@ export function buildProductionIntelligence(
       role,
       query: scout?.primary,
       alternateQuery: scout?.alternate,
-      reason: scout?.reason || `The scene is best expressed as ${role}.`,
+      reason:
+        scene.visualPlan?.reason ||
+        scout?.reason ||
+        `The scene is best expressed as ${role}.`,
       motion: motionFor(role, scene),
       treatment: treatmentFor(role),
       evidenceIds: scene.factIds,
@@ -154,8 +176,8 @@ export function buildProductionIntelligence(
         scene.kind === "value_swap"
           ? "hero"
           : role === "headline"
-          ? "texture"
-          : "support",
+            ? "texture"
+            : "support",
     };
   });
 

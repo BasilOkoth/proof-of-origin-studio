@@ -62,11 +62,17 @@ export function AnimatedCaptions({
   );
 
   if (activeIndex < 0) {
-    activeIndex = words.findLastIndex((word) => time > word.endSec);
+    activeIndex = words.findLastIndex(
+      (word) => time > word.endSec
+    );
     activeIndex = Math.max(0, activeIndex);
   }
 
-  const groupSize = 6;
+  /*
+   * Keep subtitle groups short enough to remain inside a true lower-third
+   * safe area. Five words works better than the previous six on long names.
+   */
+  const groupSize = 5;
   const groupStart =
     Math.floor(activeIndex / groupSize) * groupSize;
   const visibleWords = words.slice(
@@ -88,9 +94,9 @@ export function AnimatedCaptions({
     <div
       style={{
         position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 72,
+        left: 86,
+        right: 86,
+        bottom: 118,
         zIndex: 100,
         display: "flex",
         justifyContent: "center",
@@ -99,25 +105,29 @@ export function AnimatedCaptions({
         transform: `translateY(${interpolate(
           sentenceEnter,
           [0, 1],
-          [20, 0]
+          [18, 0]
         )}px)`,
       }}
     >
       <div
         style={{
-          maxWidth: 1510,
-          padding: "17px 26px 19px",
-          borderRadius: 20,
-          background: "rgba(4,7,15,.79)",
-          border: "1px solid rgba(255,255,255,.11)",
-          boxShadow: "0 18px 60px rgba(0,0,0,.39)",
+          width: "fit-content",
+          maxWidth: 1260,
+          minHeight: 62,
+          padding: "14px 22px 16px",
+          borderRadius: 18,
+          background: "rgba(4,7,15,.82)",
+          border: "1px solid rgba(255,255,255,.105)",
+          boxShadow: "0 16px 50px rgba(0,0,0,.34)",
           backdropFilter: "blur(12px)",
           fontFamily:
             "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
           display: "flex",
           justifyContent: "center",
+          alignItems: "center",
           flexWrap: "wrap",
-          gap: "8px 13px",
+          gap: "6px 11px",
+          textAlign: "center",
         }}
       >
         {visibleWords.map((word, localIndex) => {
@@ -154,17 +164,21 @@ export function AnimatedCaptions({
                   : completed
                     ? "#f7f9ff"
                     : "#9faac3",
-                fontSize: 42,
-                lineHeight: 1.05,
-                fontWeight: active ? 1000 : 850,
-                letterSpacing: -1,
+                fontSize: 35,
+                lineHeight: 1.08,
+                fontWeight: active ? 950 : 820,
+                letterSpacing: -0.8,
                 transform: `scale(${
                   active
-                    ? interpolate(pop, [0, 1], [0.88, 1.08])
+                    ? interpolate(
+                        pop,
+                        [0, 1],
+                        [0.92, 1.045]
+                      )
                     : 1
                 })`,
                 textShadow: active
-                  ? "0 0 28px rgba(85,216,255,.28)"
+                  ? "0 0 24px rgba(85,216,255,.24)"
                   : "none",
               }}
             >

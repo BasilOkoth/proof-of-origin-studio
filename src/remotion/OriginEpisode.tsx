@@ -9,7 +9,7 @@ import {
 
 import { buildEditorialDirection } from "@/lib/editorial-director";
 import { buildIllustrationDirection } from "@/lib/illustration-director";
-import type { EpisodeProject } from "@/lib/types";
+import type { EpisodeProject, Scene } from "@/lib/types";
 import { AnimatedCaptions } from "./Captions";
 import { EditorialBeatScene } from "./EditorialBeatScene";
 import { IllustrationConceptScene } from "./IllustrationConceptScene";
@@ -57,22 +57,31 @@ function beatPhase(beatId: string) {
 
 function shouldExecuteIllustration(
   shotRole: string,
-  sceneKind: string,
+  scene: Scene,
   hasExecution: boolean
 ) {
   if (!hasExecution) return false;
 
+  const approvedVisualKind = String(
+    scene.visualPlan?.kind || ""
+  );
+
   /*
    * Evidence-first precedence:
-   * maps, charts, source highlights, documents and proof cards keep their
-   * evidence-native renderers. Illustration executes only when the editorial
-   * director has selected a diagram-like role, or the scene itself is an
-   * explicitly explanatory diagram/timeline.
+   * maps, charts and explicit source highlights retain their evidence-native
+   * renderers. But an approved systems_diagram visual plan must override a
+   * stale source/document scene kind from an earlier story build.
    */
+  if (scene.map || scene.chart) return false;
+
+  if (approvedVisualKind === "systems_diagram") {
+    return true;
+  }
+
   return (
     shotRole === "diagram" ||
-    sceneKind === "diagram" ||
-    sceneKind === "timeline"
+    scene.kind === "diagram" ||
+    scene.kind === "timeline"
   );
 }
 
@@ -115,7 +124,7 @@ export const OriginEpisode: React.FC<EpisodeProject> = (
           Boolean(illustrationPlan?.shouldIllustrate) &&
           shouldExecuteIllustration(
             beat.shotRole,
-            scene.kind,
+            scene,
             Boolean(illustrationPlan?.execution)
           );
 
