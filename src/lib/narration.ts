@@ -19,6 +19,105 @@ type SentenceSource = {
   endChar: number;
 };
 
+type SentenceRange = {
+  text: string;
+  start: number;
+  end: number;
+};
+
+const ABBREVIATIONS = new Set([
+  "mr",
+  "mrs",
+  "ms",
+  "dr",
+  "prof",
+  "fig",
+  "eq",
+  "no",
+  "st",
+  "vs",
+  "etc",
+]);
+
+function previousToken(input: string, index: number) {
+  const before = input.slice(0, index);
+  const match = before.match(/([A-Za-z]+)$/);
+  return match?.[1]?.toLowerCase() || "";
+}
+
+function isDecimalPoint(input: string, index: number) {
+  return (
+    input[index] === "." &&
+    /\d/.test(input[index - 1] || "") &&
+    /\d/.test(input[index + 1] || "")
+  );
+}
+
+function isAbbreviationPoint(input: string, index: number) {
+  if (input[index] !== ".") return false;
+  const token = previousToken(input, index);
+  return ABBREVIATIONS.has(token);
+}
+
+function sentenceRanges(input: string): SentenceRange[] {
+  const ranges: SentenceRange[] = [];
+  let start = 0;
+
+  const push = (endExclusive: number) => {
+    const raw = input.slice(start, endExclusive);
+    const leading = raw.search(/\S/);
+    if (leading < 0) {
+      start = endExclusive;
+      return;
+    }
+
+    const trailingMatch = raw.match(/\s*$/);
+    const trailing = trailingMatch?.[0]?.length || 0;
+    const trimmedStart = start + leading;
+    const trimmedEnd = endExclusive - trailing;
+    const text = input.slice(trimmedStart, trimmedEnd);
+
+    if (text) {
+      ranges.push({
+        text,
+        start: trimmedStart,
+        end: trimmedEnd,
+      });
+    }
+
+    start = endExclusive;
+  };
+
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (!".!?".includes(ch)) continue;
+
+    if (ch === "." && isDecimalPoint(input, i)) continue;
+    if (ch === "." && isAbbreviationPoint(input, i)) continue;
+
+    let end = i + 1;
+
+    while (
+      end < input.length &&
+      /[.!?"'”’)]/.test(input[end])
+    ) {
+      end += 1;
+    }
+
+    const next = input[end];
+    if (next && !/\s/.test(next)) continue;
+
+    push(end);
+    i = end - 1;
+  }
+
+  if (start < input.length) {
+    push(input.length);
+  }
+
+  return ranges;
+}
+
 export function buildNarrationText(project: EpisodeProject) {
   let text = "";
   const sentences: SentenceSource[] = [];
@@ -32,23 +131,15 @@ export function buildNarrationText(project: EpisodeProject) {
     const sceneStart = text.length;
     text += narration;
 
-    const rx = /[^.!?]+(?:[.!?]+["'”’)]*|$)/g;
-    let match: RegExpExecArray | null;
-
-    while ((match = rx.exec(narration))) {
-      const raw = match[0];
-      const trimmed = raw.trim();
-      if (!trimmed) continue;
-
-      const leading = raw.indexOf(trimmed);
-      const startChar = sceneStart + match.index + Math.max(0, leading);
+    for (const range of sentenceRanges(narration)) {
+      const startChar = sceneStart + range.start;
 
       sentences.push({
         id: `${scene.id}-sentence-${sentences.length + 1}`,
         sceneId: scene.id,
-        text: trimmed,
+        text: range.text,
         startChar,
-        endChar: startChar + trimmed.length,
+        endChar: sceneStart + range.end,
       });
     }
   });

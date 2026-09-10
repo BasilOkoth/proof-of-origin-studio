@@ -36,6 +36,7 @@ import { scoutSourceToEvidence, type EvidenceScoutResponse, type EvidenceScoutSo
 import { downloadText, projectAsMarkdown } from "@/lib/export";
 import { downloadLocalRenderPackage } from "@/lib/local-render-package";
 import { syncSceneDurationsToNarration } from "@/lib/narration";
+import { applyNarrationDirector } from "@/lib/narration-director";
 import { postForDownload } from "@/lib/render-client";
 import { makeSample } from "@/lib/sample";
 import { buildStoryEpisode } from "@/lib/story-engine";
@@ -231,21 +232,103 @@ function chooseDirectedDatasets(datasets: DatasetAnalysis[]): DirectedDatasets {
     .sort((a, b) => temporalDatasetScore(b) - temporalDatasetScore(a))
     .find((item) => temporalDatasetScore(item) >= 0);
 
-  let comparison = [...datasets]
-    .sort((a, b) => comparisonDatasetScore(b) - comparisonDatasetScore(a))
-    .find((item) => comparisonDatasetScore(item) >= 0);
-
-  if (comparison && temporal && comparison.name === temporal.name) {
-    comparison = [...datasets]
-      .sort((a, b) => comparisonDatasetScore(b) - comparisonDatasetScore(a))
-      .find((item) => item.name !== temporal.name && comparisonDatasetScore(item) >= 0) || comparison;
-  }
-
   const spatial = [...datasets]
     .sort((a, b) => spatialDatasetScore(b) - spatialDatasetScore(a))
     .find((item) => spatialDatasetScore(item) >= 0);
 
+  const comparisonCandidates = [...datasets]
+    .filter((item) => comparisonDatasetScore(item) >= 0)
+    .sort((a, b) => {
+      const aSpatialPenalty =
+        spatial && itemSharesDatasetRole(a, spatial) ? 120 : 0;
+      const bSpatialPenalty =
+        spatial && itemSharesDatasetRole(b, spatial) ? 120 : 0;
+
+      return (
+        comparisonDatasetScore(b) - bSpatialPenalty -
+        (comparisonDatasetScore(a) - aSpatialPenalty)
+      );
+    });
+
+  let comparison = comparisonCandidates.find(
+    (item) =>
+      (!temporal || !itemSharesDatasetRole(item, temporal)) &&
+      (!spatial || !itemSharesDatasetRole(item, spatial))
+  );
+
+  if (!comparison) {
+    comparison = comparisonCandidates.find(
+      (item) =>
+        !temporal || !itemSharesDatasetRole(item, temporal)
+    );
+  }
+
+  if (!comparison) {
+    comparison = comparisonCandidates[0];
+  }
+
   return { temporal, comparison, spatial };
+}
+
+function itemSharesDatasetRole(a: DatasetAnalysis, b: DatasetAnalysis) {
+  return a.name === b.name;
+}
+
+function chartValue(value: number) {
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: 1,
+  });
+}
+
+function lineNarrationInsight(dataset: DatasetAnalysis) {
+  const chart = dataset.recommendedChart;
+  if (!chart || chart.type !== "line" || !chart.data.length) {
+    return cleanText(dataset.insight);
+  }
+
+  const ranked = [...chart.data].sort(
+    (a, b) => b.value - a.value
+  );
+  const peak = ranked[0];
+  const second = ranked[1];
+
+  if (!peak) return cleanText(dataset.insight);
+
+  const unit = chart.unit ? ` ${chart.unit}` : "";
+
+  if (second) {
+    return `Across the plotted period, the pattern is uneven rather than a simple rise or fall. The highest value is ${chartValue(peak.value)}${unit} in ${peak.label}, with another high point of ${chartValue(second.value)}${unit} in ${second.label}.`;
+  }
+
+  return `The highest plotted value is ${chartValue(peak.value)}${unit} in ${peak.label}.`;
+}
+
+function comparisonNarrationInsight(dataset: DatasetAnalysis) {
+  const chart = dataset.recommendedChart;
+  if (
+    !chart ||
+    !(chart.type === "bar" || chart.type === "ranking") ||
+    !chart.data.length
+  ) {
+    return cleanText(dataset.insight);
+  }
+
+  const ranked = [...chart.data].sort(
+    (a, b) => b.value - a.value
+  );
+  const top = ranked[0];
+  const second = ranked[1];
+  const unit = chart.unit ? ` ${chart.unit}` : "";
+
+  if (top && second) {
+    return `${top.label} records the highest plotted ${chart.yLabel || "value"} at ${chartValue(top.value)}${unit}, followed by ${second.label} at ${chartValue(second.value)}${unit}.`;
+  }
+
+  if (top) {
+    return `${top.label} records the highest plotted ${chart.yLabel || "value"} at ${chartValue(top.value)}${unit}.`;
+  }
+
+  return cleanText(dataset.insight);
 }
 
 function makeDirectedChartScene(
@@ -256,8 +339,10 @@ function makeDirectedChartScene(
   const chart = dataset.recommendedChart;
   if (!chart) return scene;
 
-  const insight = cleanText(dataset.insight) ||
-    `${chart.yLabel || "The measured value"} is visible in the underlying data.`;
+  const insight =
+    role === "trigger"
+      ? lineNarrationInsight(dataset)
+      : comparisonNarrationInsight(dataset);
 
   return {
     ...scene,
@@ -267,8 +352,8 @@ function makeDirectedChartScene(
     body: insight,
     narration:
       role === "trigger"
-        ? `Start with the measured rainfall pattern. ${insight} This establishes the trigger with data before the story moves into drainage, urban form and exposure.`
-        : `Now compare the event across stations or locations. ${insight} This comparison helps show the magnitude of the event without confusing a single measurement with the whole explanation for flooding.`,
+        ? `Start with the rain. ${insight} That gives us the weather signal. It still does not explain why the same rain becomes damaging in some places and not others.`
+        : `Now compare the event across the measured locations. ${insight} The comparison shows magnitude. It does not, by itself, explain the flooding.`,
     chart,
     map: undefined,
     sourceLabel: datasetSourceLabel(dataset),
@@ -290,8 +375,17 @@ function makeDirectedMapScene(scene: StudioScene, dataset: DatasetAnalysis): Stu
   const map = dataset.recommendedMap;
   if (!map) return scene;
 
-  const insight = cleanText(dataset.insight) ||
-    `The dataset contains ${map.points.length} mapped observations.`;
+  const labels = map.points
+    .slice(0, 4)
+    .map((point) => point.label)
+    .filter(Boolean);
+
+  const placeSentence =
+    labels.length > 0
+      ? `The dataset maps ${map.points.length} observations, including ${labels.join(", ")}.`
+      : `The dataset maps ${map.points.length} observations.`;
+
+  const insight = `${placeSentence} This shows where the measurements exist; it should not be read as a complete map of flood risk across Nairobi.`;
 
   return {
     ...scene,
@@ -299,7 +393,7 @@ function makeDirectedMapScene(scene: StudioScene, dataset: DatasetAnalysis): Stu
     eyebrow: "GEOGRAPHIC CONTEXT",
     headline: map.title,
     body: insight,
-    narration: `Now put the observations in place. ${insight} The map shows where the measured evidence exists and keeps the viewer from treating every part of Nairobi as interchangeable.`,
+    narration: `Now place the measurements on the city. ${insight}`,
     chart: undefined,
     map,
     sourceLabel: datasetSourceLabel(dataset),
@@ -1292,14 +1386,15 @@ export default function StudioPage() {
     setNarrationBusy(true);
     setNarrationError("");
     try {
+      const approvedProject = applyNarrationDirector(project);
       const response = await fetch("/api/narration", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ project, provider: "estimate", wordsPerMinute: 155 }),
+        body: JSON.stringify({ project: approvedProject, provider: "estimate", wordsPerMinute: 155 }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Unable to build timing.");
-      setProject(syncSceneDurationsToNarration(project, data.track));
+      setProject(syncSceneDurationsToNarration(approvedProject, data.track));
       setManualScriptEdits(false);
     } catch (error: any) {
       setNarrationError(error?.message || "Unable to build narration timing.");
@@ -1312,11 +1407,12 @@ export default function StudioPage() {
     setNarrationBusy(true);
     setNarrationError("");
     try {
+      const approvedProject = applyNarrationDirector(project);
       const response = await fetch("/api/narration", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          project,
+          project: approvedProject,
           provider: "elevenlabs",
           voiceId: voiceId.trim() || undefined,
           modelId: modelId.trim() || undefined,
@@ -1324,7 +1420,7 @@ export default function StudioPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Narration generation failed.");
-      setProject(syncSceneDurationsToNarration(project, data.track));
+      setProject(syncSceneDurationsToNarration(approvedProject, data.track));
       setManualScriptEdits(false);
     } catch (error: any) {
       setNarrationError(error?.message || "Unable to generate narration.");
