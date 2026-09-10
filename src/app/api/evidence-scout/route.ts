@@ -216,19 +216,31 @@ async function searchOpenAlex(
 
   if (mailto) params.set("mailto", mailto);
 
-  const response = await fetch(
-    `https://api.openalex.org/works?${params.toString()}`,
-    {
-      headers: {
-        "user-agent": `Evidence-Studio/1.0${mailto ? ` (mailto:${mailto})` : ""}`,
-        accept: "application/json",
-      },
-      signal: AbortSignal.timeout(12_000),
-    }
-  );
+  let response: Response | null = null;
 
-  if (!response.ok) {
-    throw new Error(`OpenAlex returned HTTP ${response.status}.`);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    response = await fetch(
+      `https://api.openalex.org/works?${params.toString()}`,
+      {
+        headers: {
+          "user-agent": `Evidence-Studio/1.1${mailto ? ` (mailto:${mailto})` : ""}`,
+          accept: "application/json",
+        },
+        signal: AbortSignal.timeout(12_000),
+      }
+    );
+
+    if (response.status !== 429) break;
+
+    if (attempt < 3) {
+      await sleep(retryDelayMs(response, attempt));
+    }
+  }
+
+  if (!response || !response.ok) {
+    throw new Error(
+      `OpenAlex returned HTTP ${response?.status || "unknown"} after retry.`
+    );
   }
 
   const data = (await response.json()) as OpenAlexResponse;
@@ -284,7 +296,7 @@ async function searchOpenAlex(
     return [{
       id: `openalex-${(work.id || doi || index).toString().replace(/^https?:\/\/openalex\.org\//i, "")}`,
       // Keep the existing UI type contract stable; JSON still carries "openalex".
-      provider: "openalex" as EvidenceScoutSource["provider"],
+      provider: "openalex" as unknown as EvidenceScoutSource["provider"],
       sourceType:
         work.type === "report"
           ? ("report" as const)
@@ -666,8 +678,27 @@ function dedupeSources(sources: EvidenceScoutSource[]) {
     }
 
     // Keep the strongest metadata when the same source is found by multiple queries.
+    const providerRank = (provider: string) =>
+      provider === "openalex"
+        ? 4
+        : provider === "crossref"
+          ? 3
+          : provider === "world_bank"
+            ? 2
+            : provider === "existing"
+              ? 1
+              : 0;
+
+    const sourceWinsProvider =
+      providerRank(String(source.provider)) >
+      providerRank(String(existing.provider));
+
+    const sourceWinsAccess =
+      source.access === "open_download" &&
+      existing.access !== "open_download";
+
     const preferred =
-      source.access === "open_download" && existing.access !== "open_download"
+      sourceWinsProvider || sourceWinsAccess
         ? source
         : existing;
 
@@ -676,6 +707,7 @@ function dedupeSources(sources: EvidenceScoutSource[]) {
     byKey.set(key, {
       ...secondary,
       ...preferred,
+      provider: preferred.provider,
       relevance: Math.max(existing.relevance, source.relevance),
       evidenceStrength: Math.max(existing.evidenceStrength, source.evidenceStrength),
       visualPotential: Math.max(existing.visualPotential, source.visualPotential),
@@ -814,7 +846,7 @@ export async function POST(request: Request) {
 
     for (let index = 0; index < queries.length; index += 1) {
       if (index > 0) {
-        await sleep(300);
+        await sleep(900);
       }
 
       try {
