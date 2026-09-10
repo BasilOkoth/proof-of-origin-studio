@@ -63,6 +63,32 @@ type CrossrefWork = {
   "is-referenced-by-count"?: number;
 };
 
+type WorldBankSearchResponse = {
+  source?: Array<{
+    id?: string;
+    concept?: Array<{
+      id?: string;
+      variable?: Array<{
+        id?: string;
+        name?: string | null;
+        metatype?: Array<{ id?: string; value?: string }>;
+      }>;
+    }>;
+  }>;
+};
+
+type WorldBankIndicatorResponse = [
+  Record<string, unknown>?,
+  Array<{
+    id?: string;
+    name?: string;
+    source?: { id?: string; value?: string };
+    sourceNote?: string;
+    sourceOrganization?: string;
+    topics?: Array<{ id?: string; value?: string }>;
+  }>?
+];
+
 function safeYear(work: CrossrefWork) {
   return (
     work.published?.["date-parts"]?.[0]?.[0] ||
@@ -104,10 +130,10 @@ function lexicalRelevance(query: string, text: string) {
     if (textTokens.has(token)) matches += 1;
   });
 
-  const ratio = matches / queryTokens.size;
-
-  // No artificial floor: weak matches must be allowed to score weakly.
-  return Math.max(0, Math.min(100, Math.round(ratio * 100)));
+  return Math.max(
+    0,
+    Math.min(100, Math.round((matches / queryTokens.size) * 100))
+  );
 }
 
 async function searchCrossref(
@@ -126,7 +152,7 @@ async function searchCrossref(
     `https://api.crossref.org/works?${params.toString()}`,
     {
       headers: {
-        "user-agent": `Evidence-Studio/0.6${mailto ? ` (mailto:${mailto})` : ""}`,
+        "user-agent": `Evidence-Studio/0.7${mailto ? ` (mailto:${mailto})` : ""}`,
         accept: "application/json",
       },
       signal: AbortSignal.timeout(12_000),
@@ -216,110 +242,159 @@ async function searchCrossref(
   });
 }
 
-function data360Rows(data: any): any[] {
-  if (Array.isArray(data?.value)) return data.value;
-  if (Array.isArray(data?.results)) return data.results;
-  if (Array.isArray(data?.data?.value)) return data.data.value;
-  if (Array.isArray(data?.data)) return data.data;
-  return [];
-}
-
-function field(row: any, name: string) {
-  return (
-    row?.series_description?.[name] ??
-    row?.[`series_description/${name}`] ??
-    row?.[name] ??
-    row?.document?.series_description?.[name]
+function meaningfulWorldBankTerms(query: string) {
+  const preferred = tokenise(query).filter((token) =>
+    /^(flood|flooding|urban|drainage|rainfall|stormwater|climate|population|growth|land|infrastructure|risk|hazard|resilience|waste)$/.test(
+      token
+    )
   );
+
+  const fallback = tokenise(query).filter(
+    (token) => !/^(nairobi|kenya)$/.test(token)
+  );
+
+  return [...new Set(preferred.length ? preferred : fallback)].slice(0, 4);
 }
 
-function wdiCode(id?: string) {
-  if (!id?.startsWith("WB_WDI_")) return undefined;
-  return id.slice("WB_WDI_".length).replace(/_/g, ".");
+function extractWorldBankCodes(data: WorldBankSearchResponse) {
+  const codes: string[] = [];
+
+  for (const source of data.source || []) {
+    for (const concept of source.concept || []) {
+      if (concept.id?.toLowerCase() !== "series") continue;
+
+      for (const variable of concept.variable || []) {
+        const code = cleanText(variable.id || "");
+        if (!code) continue;
+        if (!codes.includes(code)) codes.push(code);
+      }
+    }
+  }
+
+  return codes;
+}
+
+async function indicatorMetadata(code: string) {
+  const response = await fetch(
+    `https://api.worldbank.org/v2/indicator/${encodeURIComponent(
+      code
+    )}?format=json`,
+    {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+    }
+  );
+
+  if (!response.ok) return null;
+
+  const data = (await response.json()) as WorldBankIndicatorResponse;
+  const record = Array.isArray(data?.[1]) ? data[1]?.[0] : undefined;
+  if (!record?.id || !record?.name) return null;
+
+  return record;
 }
 
 async function searchWorldBank(
   query: string,
   limit: number
 ): Promise<EvidenceScoutSource[]> {
-  const response = await fetch(
-    "https://data360api.worldbank.org/data360/searchv2",
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-      },
-      body: JSON.stringify({
-        count: true,
-        select:
-          "series_description/idno, series_description/name, series_description/database_id, series_description/description",
-        search: query,
-        top: Math.min(12, limit),
-        skip: 0,
-      }),
-      signal: AbortSignal.timeout(12_000),
-    }
+  const terms = meaningfulWorldBankTerms(query);
+  if (!terms.length) return [];
+
+  const searches = await Promise.allSettled(
+    terms.map(async (term) => {
+      const response = await fetch(
+        `https://api.worldbank.org/v2/sources/2/search/${encodeURIComponent(
+          term
+        )}?format=json`,
+        {
+          headers: { accept: "application/json" },
+          signal: AbortSignal.timeout(10_000),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`World Bank metadata search returned HTTP ${response.status}.`);
+      }
+
+      return (await response.json()) as WorldBankSearchResponse;
+    })
   );
 
-  if (!response.ok) {
-    throw new Error(
-      `World Bank Data360 returned HTTP ${response.status}.`
-    );
+  const codes: string[] = [];
+
+  for (const result of searches) {
+    if (result.status !== "fulfilled") continue;
+
+    for (const code of extractWorldBankCodes(result.value)) {
+      if (!codes.includes(code)) codes.push(code);
+      if (codes.length >= Math.min(20, Math.max(8, limit * 2))) break;
+    }
   }
 
-  const data = await response.json();
-  const rows = data360Rows(data);
+  const metadataResults = await Promise.allSettled(
+    codes.map((code) => indicatorMetadata(code))
+  );
 
-  return rows.flatMap((row, index) => {
-    const id = cleanText(String(field(row, "idno") || ""));
-    const title = cleanText(String(field(row, "name") || ""));
-    if (!id || !title) return [];
+  const candidates: EvidenceScoutSource[] = [];
 
-    const databaseId = cleanText(
-      String(field(row, "database_id") || "")
+  metadataResults.forEach((result, index) => {
+    if (result.status !== "fulfilled" || !result.value) return;
+
+    const record = result.value;
+    const code = record.id || codes[index];
+    const title = cleanText(record.name || "");
+    if (!code || !title) return;
+
+    const summary = stripMarkup(
+      [
+        record.sourceNote,
+        record.sourceOrganization,
+        ...(record.topics || []).map((item) => item.value || ""),
+      ]
+        .filter(Boolean)
+        .join(" ")
     );
-    const description = stripMarkup(
-      String(field(row, "description") || "")
+
+    const relevance = lexicalRelevance(
+      query,
+      `${title} ${summary || ""}`
     );
 
-    const code = wdiCode(id);
-    const metadataUrl = code
-      ? `https://api.worldbank.org/v2/indicator/${encodeURIComponent(code)}?format=json`
-      : "https://data360.worldbank.org/";
-
-    const downloadUrl = code
-      ? `https://api.worldbank.org/v2/country/all/indicator/${encodeURIComponent(
-          code
-        )}?source=2&downloadformat=csv&dataformat=list`
-      : undefined;
-
-    return [
-      {
-        id: `world-bank-${id || index}`,
-        provider: "world_bank" as const,
-        sourceType: "dataset" as const,
-        title,
-        publisher: "World Bank",
-        url: metadataUrl,
-        downloadUrl,
-        license: "CC BY 4.0 (Data360 platform metadata/API)",
-        summary: description,
-        access: downloadUrl
-          ? ("open_download" as const)
-          : ("landing_page" as const),
-        relevance: lexicalRelevance(
-          query,
-          `${title} ${description || ""} ${databaseId}`
-        ),
-        evidenceStrength: databaseId === "WB_WDI" ? 94 : 90,
-        visualPotential: 97,
-        reason: downloadUrl
-          ? "Official World Bank indicator with a direct machine-readable CSV download path."
-          : "World Bank Data360 indicator metadata relevant to the search; inspect the dataset before using it in the story.",
-      },
-    ];
+    candidates.push({
+      id: `world-bank-${code}`,
+      provider: "world_bank",
+      sourceType: "dataset",
+      title,
+      publisher: "World Bank",
+      url: `https://api.worldbank.org/v2/indicator/${encodeURIComponent(
+        code
+      )}?format=json`,
+      downloadUrl: `https://api.worldbank.org/v2/country/all/indicator/${encodeURIComponent(
+        code
+      )}?source=2&downloadformat=csv&dataformat=list`,
+      license: "World Bank data terms / CC BY 4.0 where indicated by source metadata",
+      summary,
+      access: "open_download",
+      relevance,
+      evidenceStrength: 94,
+      visualPotential: 97,
+      reason:
+        "Official World Bank indicator discovered through the World Bank V2 metadata search API. Review indicator definition and geographic coverage before use.",
+    });
   });
+
+  return candidates
+    .sort(
+      (a, b) =>
+        b.relevance * 0.7 +
+          b.visualPotential * 0.15 +
+          b.evidenceStrength * 0.15 -
+        (a.relevance * 0.7 +
+          a.visualPotential * 0.15 +
+          a.evidenceStrength * 0.15)
+    )
+    .slice(0, limit);
 }
 
 function existingSources(
@@ -495,7 +570,7 @@ export async function POST(request: Request) {
       discovered.push(...worldBankResult.value);
     } else {
       providerErrors.push(
-        `World Bank Data360: ${
+        `World Bank: ${
           worldBankResult.reason?.message || "search failed"
         }`
       );
