@@ -168,6 +168,7 @@ function item(
   kind: EvidenceItem["kind"],
   statement: string,
   fileName: string,
+  sourceLabel: string,
   sourceType: EvidenceItem["sourceType"]
 ): EvidenceItem {
   return {
@@ -175,7 +176,7 @@ function item(
     kind,
     statement,
     source: fileName,
-    sourceLabel: fileName,
+    sourceLabel,
     sourceType,
   };
 }
@@ -261,15 +262,23 @@ export function ingestDocumentText(args: {
         )
         .slice(0, 5);
 
+  /*
+   * Important: sourceLabel is the parsed document title, not the opaque
+   * uploaded filename. This lets the relevance guard inherit document-level
+   * geography/topic context. For example, a sentence about "drainage" from
+   * a paper titled "Managing Flooding in Residential Areas of Nairobi" is
+   * correctly understood as Nairobi evidence even if that sentence does not
+   * repeat the word "Nairobi".
+   */
   const evidence: EvidenceItem[] = [
     ...fallback.map((statement) =>
-      item("observed", statement, args.fileName, sourceType)
+      item("observed", statement, args.fileName, title, sourceType)
     ),
     ...inferences.map((statement) =>
-      item("inference", statement, args.fileName, sourceType)
+      item("inference", statement, args.fileName, title, sourceType)
     ),
     ...limitations.map((statement) =>
-      item("limitation", statement, args.fileName, sourceType)
+      item("limitation", statement, args.fileName, title, sourceType)
     ),
   ];
 
