@@ -129,6 +129,8 @@ export default function StudioPage() {
   const [activeTab, setActiveTab] = useState<Tab>("build");
   const [editingSceneId, setEditingSceneId] = useState<string | null>(null);
   const [manualScriptEdits, setManualScriptEdits] = useState(false);
+  const [visualRerunBusy, setVisualRerunBusy] = useState(false);
+  const [visualRerunMessage, setVisualRerunMessage] = useState("");
 
   const [sourceKind, setSourceKind] = useState<"research" | "report" | "text">("research");
   const [documentBusy, setDocumentBusy] = useState(false);
@@ -355,6 +357,29 @@ export default function StudioPage() {
     setManualScriptEdits(false);
     setEditingSceneId(null);
     setActiveTab("story");
+  }
+
+  function rerunVisualReasoning() {
+    if (visualRerunBusy) return;
+
+    setVisualRerunBusy(true);
+    setVisualRerunMessage("");
+
+    requestAnimationFrame(() => {
+      try {
+        setProject((current) => applyVisualIntelligence(current, datasets));
+        setVisualRerunMessage(
+          `Visual reasoning refreshed at ${new Date().toLocaleTimeString()}.`
+        );
+      } catch (error) {
+        console.error("Visual reasoning rerun failed:", error);
+        setVisualRerunMessage(
+          "Visual reasoning could not be refreshed. Check the browser console for details."
+        );
+      } finally {
+        setVisualRerunBusy(false);
+      }
+    });
   }
 
   async function ingestDocument(file: File | undefined) {
@@ -1702,7 +1727,22 @@ export default function StudioPage() {
               ))}
             </div>
             {!!project.visualIntelligence?.warnings.length && <div className="retentionWarnings"><p className="micro">VISUAL GAPS</p>{project.visualIntelligence.warnings.map((warning, index) => <div key={warning}><span>{String(index + 1).padStart(2, "0")}</span><p>{warning}</p></div>)}</div>}
-            <button className="button primary" onClick={() => setProject(applyVisualIntelligence(project, datasets))}><Sparkles size={16} /> Re-run visual reasoning</button>
+            <button
+              type="button"
+              className="button primary"
+              onClick={rerunVisualReasoning}
+              disabled={visualRerunBusy}
+              aria-busy={visualRerunBusy}
+              title="Recompute visual plans and the Visual Intelligence score from the current story, evidence and datasets."
+            >
+              {visualRerunBusy ? <LoaderCircle size={16} /> : <Sparkles size={16} />}
+              {visualRerunBusy ? "Re-running visual reasoning…" : "Re-run visual reasoning"}
+            </button>
+            {visualRerunMessage && (
+              <p className="micro" role="status" aria-live="polite" style={{ marginTop: 10 }}>
+                {visualRerunMessage}
+              </p>
+            )}
           </div>
 
           <div className="panel">
