@@ -93,6 +93,42 @@ type WorldBankIndicatorResponse = [
   }>?
 ];
 
+
+type OpenAlexLocation = {
+  landing_page_url?: string | null;
+  pdf_url?: string | null;
+  license?: string | null;
+  source?: {
+    display_name?: string | null;
+    host_organization_name?: string | null;
+    type?: string | null;
+  } | null;
+};
+
+type OpenAlexWork = {
+  id?: string;
+  doi?: string | null;
+  display_name?: string | null;
+  publication_year?: number | null;
+  type?: string | null;
+  cited_by_count?: number | null;
+  abstract_inverted_index?: Record<string, number[]> | null;
+  authorships?: Array<{
+    author?: { display_name?: string | null } | null;
+  }>;
+  primary_location?: OpenAlexLocation | null;
+  best_oa_location?: OpenAlexLocation | null;
+  open_access?: {
+    is_oa?: boolean;
+    oa_status?: string | null;
+    oa_url?: string | null;
+  } | null;
+};
+
+type OpenAlexResponse = {
+  results?: OpenAlexWork[];
+};
+
 function safeYear(work: CrossrefWork) {
   return (
     work.published?.["date-parts"]?.[0]?.[0] ||
@@ -114,6 +150,165 @@ function stripMarkup(value?: string) {
   );
   if (!cleaned) return undefined;
   return cleaned.length > 520 ? `${cleaned.slice(0, 517)}…` : cleaned;
+}
+
+
+function openAlexAbstract(index?: Record<string, number[]> | null) {
+  if (!index) return undefined;
+
+  const pairs: Array<[number, string]> = [];
+  for (const [word, positions] of Object.entries(index)) {
+    for (const position of positions || []) {
+      pairs.push([position, word]);
+    }
+  }
+
+  if (!pairs.length) return undefined;
+
+  pairs.sort((a, b) => a[0] - b[0]);
+  const text = cleanText(pairs.map(([, word]) => word).join(" "));
+  return text.length > 520 ? `${text.slice(0, 517)}…` : text;
+}
+
+function normalizedDoi(value?: string | null) {
+  if (!value) return undefined;
+  return value.replace(/^https?:\/\/doi\.org\//i, "").trim() || undefined;
+}
+
+function openAlexLicense(location?: OpenAlexLocation | null) {
+  const raw = cleanText(location?.license || "");
+  if (!raw) return undefined;
+
+  const labels: Record<string, string> = {
+    cc0: "CC0",
+    "cc-by": "CC BY",
+    "cc-by-sa": "CC BY-SA",
+    "cc-by-nc": "CC BY-NC",
+    "cc-by-nd": "CC BY-ND",
+    "cc-by-nc-sa": "CC BY-NC-SA",
+    "cc-by-nc-nd": "CC BY-NC-ND",
+  };
+
+  return labels[raw.toLowerCase()] || raw;
+}
+
+function openAlexSourceLabel(work: OpenAlexWork) {
+  const location = work.best_oa_location || work.primary_location;
+  return cleanText(
+    location?.source?.host_organization_name ||
+      location?.source?.display_name ||
+      ""
+  ) || undefined;
+}
+
+async function searchOpenAlex(
+  query: string,
+  limit: number
+): Promise<EvidenceScoutSource[]> {
+  const params = new URLSearchParams({
+    search: query,
+    "per-page": String(Math.min(25, Math.max(4, limit))),
+  });
+
+  const mailto =
+    process.env.OPENALEX_MAILTO?.trim() ||
+    process.env.CROSSREF_MAILTO?.trim();
+
+  if (mailto) params.set("mailto", mailto);
+
+  const response = await fetch(
+    `https://api.openalex.org/works?${params.toString()}`,
+    {
+      headers: {
+        "user-agent": `Evidence-Studio/1.0${mailto ? ` (mailto:${mailto})` : ""}`,
+        accept: "application/json",
+      },
+      signal: AbortSignal.timeout(12_000),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`OpenAlex returned HTTP ${response.status}.`);
+  }
+
+  const data = (await response.json()) as OpenAlexResponse;
+  const works = Array.isArray(data.results) ? data.results : [];
+
+  return works.flatMap((work, index) => {
+    const title = cleanText(work.display_name || "");
+    if (!title) return [];
+
+    const doi = normalizedDoi(work.doi);
+    const location = work.best_oa_location || work.primary_location;
+    const landing =
+      location?.landing_page_url ||
+      work.open_access?.oa_url ||
+      work.doi ||
+      work.id ||
+      "";
+
+    if (!landing) return [];
+
+    const abstract = openAlexAbstract(work.abstract_inverted_index);
+    const pdfUrl = location?.pdf_url || undefined;
+    const isOpen = Boolean(work.open_access?.is_oa);
+    const license = openAlexLicense(location);
+
+    // OpenAlex occasionally knows that a work is OA but has no direct PDF.
+    // Only mark it auto-downloadable when a concrete PDF URL exists.
+    const access = pdfUrl
+      ? ("open_download" as const)
+      : ("landing_page" as const);
+
+    const relevance = lexicalRelevance(
+      query,
+      `${title} ${abstract || ""} ${openAlexSourceLabel(work) || ""}`
+    );
+
+    const authors = (work.authorships || [])
+      .map((item) => cleanText(item.author?.display_name || ""))
+      .filter(Boolean)
+      .slice(0, 8);
+
+    const citations = work.cited_by_count || 0;
+    const strength = Math.min(
+      98,
+      74 +
+        (doi ? 6 : 0) +
+        (abstract ? 5 : 0) +
+        (isOpen ? 4 : 0) +
+        (citations > 10 ? 4 : 0) +
+        (citations > 100 ? 3 : 0)
+    );
+
+    return [{
+      id: `openalex-${(work.id || doi || index).toString().replace(/^https?:\/\/openalex\.org\//i, "")}`,
+      // Keep the existing UI type contract stable; JSON still carries "openalex".
+      provider: "openalex" as EvidenceScoutSource["provider"],
+      sourceType:
+        work.type === "report"
+          ? ("report" as const)
+          : ("paper" as const),
+      title,
+      authors,
+      year: work.publication_year || undefined,
+      publisher: openAlexSourceLabel(work),
+      doi,
+      url: landing,
+      downloadUrl: pdfUrl,
+      license:
+        license ||
+        (isOpen ? `Open access (${work.open_access?.oa_status || "OA"})` : undefined),
+      summary: abstract,
+      access,
+      relevance,
+      evidenceStrength: strength,
+      visualPotential: abstract ? 70 : 60,
+      reason: pdfUrl
+        ? "Scholarly work discovered through OpenAlex with an open-access full-text location, often including repository-hosted copies."
+        : "Scholarly work discovered through OpenAlex. An open or repository landing page may be available even when a direct PDF URL is not exposed.",
+    }];
+  });
 }
 
 function openLicense(url?: string) {
@@ -471,16 +666,23 @@ function dedupeSources(sources: EvidenceScoutSource[]) {
     }
 
     // Keep the strongest metadata when the same source is found by multiple queries.
+    const preferred =
+      source.access === "open_download" && existing.access !== "open_download"
+        ? source
+        : existing;
+
+    const secondary = preferred === existing ? source : existing;
+
     byKey.set(key, {
-      ...existing,
-      ...source,
+      ...secondary,
+      ...preferred,
       relevance: Math.max(existing.relevance, source.relevance),
       evidenceStrength: Math.max(existing.evidenceStrength, source.evidenceStrength),
       visualPotential: Math.max(existing.visualPotential, source.visualPotential),
       downloadUrl: existing.downloadUrl || source.downloadUrl,
       license: existing.license || source.license,
       summary: existing.summary || source.summary,
-      reason: `${existing.reason} Found across multiple story-focused searches.`,
+      reason: `${preferred.reason} Found across multiple story-focused searches/providers.`,
     });
   }
 
@@ -606,8 +808,28 @@ export async function POST(request: Request) {
       }
     }
 
-    // World Bank can remain concurrent because only two low-volume metadata
-    // searches are issued and its endpoint has not been the limiting provider.
+    // OpenAlex complements Crossref with broader scholarly graph coverage and
+    // repository/open-access locations. Keep it paced to avoid unnecessary bursts.
+    const openAlexResults: PromiseSettledResult<EvidenceScoutSource[]>[] = [];
+
+    for (let index = 0; index < queries.length; index += 1) {
+      if (index > 0) {
+        await sleep(300);
+      }
+
+      try {
+        const value = await searchOpenAlex(
+          queries[index],
+          Math.max(5, perQueryLimit + 2)
+        );
+        openAlexResults.push({ status: "fulfilled", value });
+      } catch (reason) {
+        openAlexResults.push({ status: "rejected", reason });
+      }
+    }
+
+    // World Bank remains intentionally narrow because it is contextual/data
+    // coverage, not the primary source of local causal mechanism evidence.
     const worldBankResults = await Promise.allSettled(
       queries.slice(0, 2).map((candidateQuery) =>
         searchWorldBank(candidateQuery, perQueryLimit)
@@ -624,6 +846,18 @@ export async function POST(request: Request) {
       } else {
         providerErrors.push(
           `Crossref [${queries[index]}]: ${
+            result.reason?.message || "search failed"
+          }`
+        );
+      }
+    });
+
+    openAlexResults.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        discovered.push(...result.value);
+      } else {
+        providerErrors.push(
+          `OpenAlex [${queries[index]}]: ${
             result.reason?.message || "search failed"
           }`
         );
