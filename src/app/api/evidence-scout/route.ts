@@ -51,6 +51,13 @@ const BodySchema = z.object({
   maxSources: z.number().int().min(4).max(30).default(18),
 });
 
+type AcquisitionSource = EvidenceScoutSource & {
+  downloadCandidates?: string[];
+  verifiedDownload?: boolean;
+  mechanismScore?: number;
+  acquisitionScore?: number;
+};
+
 type CrossrefWork = {
   DOI?: string;
   title?: string[];
@@ -63,41 +70,19 @@ type CrossrefWork = {
   type?: string;
   abstract?: string;
   license?: { URL?: string }[];
-  link?: { URL?: string; "content-type"?: string; "intended-application"?: string }[];
+  link?: {
+    URL?: string;
+    "content-type"?: string;
+    "intended-application"?: string;
+  }[];
   "is-referenced-by-count"?: number;
 };
-
-type WorldBankSearchResponse = {
-  source?: Array<{
-    id?: string;
-    concept?: Array<{
-      id?: string;
-      variable?: Array<{
-        id?: string;
-        name?: string | null;
-        metatype?: Array<{ id?: string; value?: string }>;
-      }>;
-    }>;
-  }>;
-};
-
-type WorldBankIndicatorResponse = [
-  Record<string, unknown>?,
-  Array<{
-    id?: string;
-    name?: string;
-    source?: { id?: string; value?: string };
-    sourceNote?: string;
-    sourceOrganization?: string;
-    topics?: Array<{ id?: string; value?: string }>;
-  }>?
-];
-
 
 type OpenAlexLocation = {
   landing_page_url?: string | null;
   pdf_url?: string | null;
   license?: string | null;
+  is_oa?: boolean | null;
   source?: {
     display_name?: string | null;
     host_organization_name?: string | null;
@@ -118,6 +103,7 @@ type OpenAlexWork = {
   }>;
   primary_location?: OpenAlexLocation | null;
   best_oa_location?: OpenAlexLocation | null;
+  locations?: OpenAlexLocation[] | null;
   open_access?: {
     is_oa?: boolean;
     oa_status?: string | null;
@@ -129,6 +115,25 @@ type OpenAlexResponse = {
   results?: OpenAlexWork[];
 };
 
+function clamp(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(response: Response, attempt: number) {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(8_000, Math.max(750, seconds * 1000));
+    }
+  }
+  return Math.min(6_000, 900 * Math.pow(2, attempt));
+}
+
 function safeYear(work: CrossrefWork) {
   return (
     work.published?.["date-parts"]?.[0]?.[0] ||
@@ -139,6 +144,7 @@ function safeYear(work: CrossrefWork) {
 
 function stripMarkup(value?: string) {
   if (!value) return undefined;
+
   const cleaned = cleanText(
     value
       .replace(/<[^>]+>/g, " ")
@@ -148,15 +154,30 @@ function stripMarkup(value?: string) {
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
   );
+
   if (!cleaned) return undefined;
   return cleaned.length > 520 ? `${cleaned.slice(0, 517)}…` : cleaned;
 }
 
+function lexicalRelevance(query: string, text: string) {
+  const queryTokens = new Set(tokenise(query));
+  if (!queryTokens.size) return 0;
+
+  const textTokens = new Set(tokenise(text));
+  let matches = 0;
+
+  queryTokens.forEach((token) => {
+    if (textTokens.has(token)) matches += 1;
+  });
+
+  return clamp((matches / queryTokens.size) * 100);
+}
 
 function openAlexAbstract(index?: Record<string, number[]> | null) {
   if (!index) return undefined;
 
   const pairs: Array<[number, string]> = [];
+
   for (const [word, positions] of Object.entries(index)) {
     for (const position of positions || []) {
       pairs.push([position, word]);
@@ -167,6 +188,7 @@ function openAlexAbstract(index?: Record<string, number[]> | null) {
 
   pairs.sort((a, b) => a[0] - b[0]);
   const text = cleanText(pairs.map(([, word]) => word).join(" "));
+
   return text.length > 520 ? `${text.slice(0, 517)}…` : text;
 }
 
@@ -192,22 +214,253 @@ function openAlexLicense(location?: OpenAlexLocation | null) {
   return labels[raw.toLowerCase()] || raw;
 }
 
+function openLicense(url?: string) {
+  if (!url) return false;
+
+  return /creativecommons\.org\/licenses|creativecommons\.org\/publicdomain|opensource\.org|apache\.org\/licenses|gnu\.org\/licenses/i.test(
+    url
+  );
+}
+
+function uniqueUrls(values: Array<string | undefined | null>) {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const raw of values) {
+    if (!raw) continue;
+
+    try {
+      const url = new URL(raw);
+      if (url.protocol !== "https:") continue;
+
+      const value = url.toString();
+      if (seen.has(value)) continue;
+
+      seen.add(value);
+      output.push(value);
+    } catch {
+      // Ignore malformed provider URLs.
+    }
+  }
+
+  return output;
+}
+
+function allOpenAlexLocations(work: OpenAlexWork) {
+  const locations = [
+    work.best_oa_location,
+    work.primary_location,
+    ...(work.locations || []),
+  ].filter(Boolean) as OpenAlexLocation[];
+
+  const byKey = new Map<string, OpenAlexLocation>();
+
+  for (const location of locations) {
+    const key =
+      location.pdf_url ||
+      location.landing_page_url ||
+      `${location.source?.display_name || ""}-${location.license || ""}`;
+
+    if (!key || byKey.has(key)) continue;
+    byKey.set(key, location);
+  }
+
+  return [...byKey.values()];
+}
+
 function openAlexSourceLabel(work: OpenAlexWork) {
-  const location = work.best_oa_location || work.primary_location;
-  return cleanText(
-    location?.source?.host_organization_name ||
-      location?.source?.display_name ||
-      ""
-  ) || undefined;
+  const locations = allOpenAlexLocations(work);
+  const location =
+    locations.find((item) => item.pdf_url) ||
+    work.best_oa_location ||
+    work.primary_location;
+
+  return (
+    cleanText(
+      location?.source?.host_organization_name ||
+        location?.source?.display_name ||
+        ""
+    ) || undefined
+  );
+}
+
+function mechanismScore(source: EvidenceScoutSource) {
+  const text = cleanText(
+    `${source.title} ${source.summary || ""}`
+  ).toLowerCase();
+
+  const patterns = [
+    /\bdrainage\b/,
+    /\bstormwater\b/,
+    /\brunoff\b/,
+    /\briparian\b/,
+    /\bfloodplain\b/,
+    /\bencroach(?:ment|ed|ing)?\b/,
+    /\burban(?:ization|isation| growth)?\b/,
+    /\bland[- ]use\b/,
+    /\bsettlement planning\b/,
+    /\binformal settlement\b/,
+    /\bimpervious\b/,
+    /\bpermeab(?:le|ility)\b/,
+    /\binfiltrat(?:e|ion)\b/,
+    /\bblocked drains?\b/,
+    /\bwaste accumulation\b/,
+    /\bculvert\b/,
+    /\bsewer\b/,
+    /\bchannel\b/,
+    /\briver\b/,
+    /\bmaintenance\b/,
+    /\bdrain capacity\b/,
+    /\bflood modelling\b/,
+    /\bflood modeling\b/,
+    /\bheavy rainfall\b/,
+    /\bmulti-day rainfall\b/,
+  ];
+
+  let score = 0;
+
+  for (const pattern of patterns) {
+    if (pattern.test(text)) score += 7;
+  }
+
+  if (/\bnairobi\b/.test(text)) score += 14;
+  if (/\bflood(?:s|ing|ed)?\b/.test(text)) score += 10;
+
+  return clamp(score);
+}
+
+function looksLikePdfHeader(bytes: Uint8Array) {
+  return (
+    bytes.length >= 5 &&
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46 &&
+    bytes[4] === 0x2d
+  );
+}
+
+function textLooksLikeChallenge(bytes: Uint8Array) {
+  const sample = new TextDecoder("utf-8", { fatal: false })
+    .decode(bytes.slice(0, 12_000))
+    .toLowerCase();
+
+  return (
+    /<html|<!doctype|<script|<iframe/.test(sample) ||
+    /\b(akamai|cloudflare|captcha|interstitial|access denied|verify you are human|security challenge|request blocked)\b/.test(
+      sample
+    )
+  );
+}
+
+async function readProbeBytes(response: Response) {
+  if (!response.body) {
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    while (total < 12_000) {
+      const { value, done } = await reader.read();
+      if (done || !value) break;
+
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // Nothing to do.
+    }
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    const slice =
+      offset + chunk.byteLength <= total
+        ? chunk
+        : chunk.slice(0, total - offset);
+
+    merged.set(slice, offset);
+    offset += slice.byteLength;
+
+    if (offset >= total) break;
+  }
+
+  return merged;
+}
+
+async function probePdf(url: string) {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        accept: "application/pdf,*/*;q=0.5",
+        range: "bytes=0-11999",
+        "user-agent":
+          "Evidence-Studio-Scout/1.3 (+https://github.com/BasilOkoth/proof-of-origin-studio)",
+      },
+      signal: AbortSignal.timeout(12_000),
+    });
+
+    if (!response.ok && response.status !== 206) {
+      return {
+        ok: false,
+        reason: `HTTP ${response.status}`,
+      };
+    }
+
+    const bytes = await readProbeBytes(response);
+
+    if (looksLikePdfHeader(bytes)) {
+      return {
+        ok: true,
+        finalUrl: response.url || url,
+        reason: "verified PDF signature",
+      };
+    }
+
+    if (textLooksLikeChallenge(bytes)) {
+      return {
+        ok: false,
+        reason: "HTML/challenge response",
+      };
+    }
+
+    const contentType = (
+      response.headers.get("content-type") || ""
+    ).toLowerCase();
+
+    return {
+      ok: false,
+      reason: contentType
+        ? `not a verified PDF (${contentType})`
+        : "not a verified PDF",
+    };
+  } catch (error: any) {
+    return {
+      ok: false,
+      reason: error?.name === "TimeoutError"
+        ? "verification timed out"
+        : error?.message || "verification failed",
+    };
+  }
 }
 
 async function searchOpenAlex(
   query: string,
   limit: number
-): Promise<EvidenceScoutSource[]> {
+): Promise<AcquisitionSource[]> {
   const params = new URLSearchParams({
     search: query,
-    "per-page": String(Math.min(25, Math.max(4, limit))),
+    "per-page": String(Math.min(25, Math.max(5, limit))),
   });
 
   const mailto =
@@ -223,7 +476,9 @@ async function searchOpenAlex(
       `https://api.openalex.org/works?${params.toString()}`,
       {
         headers: {
-          "user-agent": `Evidence-Studio/1.1${mailto ? ` (mailto:${mailto})` : ""}`,
+          "user-agent": `Evidence-Studio/1.3${
+            mailto ? ` (mailto:${mailto})` : ""
+          }`,
           accept: "application/json",
         },
         signal: AbortSignal.timeout(12_000),
@@ -251,9 +506,27 @@ async function searchOpenAlex(
     if (!title) return [];
 
     const doi = normalizedDoi(work.doi);
-    const location = work.best_oa_location || work.primary_location;
+    const locations = allOpenAlexLocations(work);
+
+    const pdfCandidates = uniqueUrls(
+      locations.flatMap((location) => [
+        location.pdf_url,
+        location.landing_page_url &&
+        /\.pdf(?:$|[?#])|\/pdf(?:$|[/?#])|article\/download/i.test(
+          location.landing_page_url
+        )
+          ? location.landing_page_url
+          : undefined,
+      ])
+    );
+
+    const primaryLocation =
+      locations.find((location) => location.pdf_url) ||
+      work.best_oa_location ||
+      work.primary_location;
+
     const landing =
-      location?.landing_page_url ||
+      primaryLocation?.landing_page_url ||
       work.open_access?.oa_url ||
       work.doi ||
       work.id ||
@@ -262,15 +535,10 @@ async function searchOpenAlex(
     if (!landing) return [];
 
     const abstract = openAlexAbstract(work.abstract_inverted_index);
-    const pdfUrl = location?.pdf_url || undefined;
     const isOpen = Boolean(work.open_access?.is_oa);
-    const license = openAlexLicense(location);
-
-    // OpenAlex occasionally knows that a work is OA but has no direct PDF.
-    // Only mark it auto-downloadable when a concrete PDF URL exists.
-    const access = pdfUrl
-      ? ("open_download" as const)
-      : ("landing_page" as const);
+    const license =
+      openAlexLicense(primaryLocation) ||
+      locations.map(openAlexLicense).find(Boolean);
 
     const relevance = lexicalRelevance(
       query,
@@ -283,6 +551,7 @@ async function searchOpenAlex(
       .slice(0, 8);
 
     const citations = work.cited_by_count || 0;
+
     const strength = Math.min(
       98,
       74 +
@@ -293,9 +562,10 @@ async function searchOpenAlex(
         (citations > 100 ? 3 : 0)
     );
 
-    return [{
-      id: `openalex-${(work.id || doi || index).toString().replace(/^https?:\/\/openalex\.org\//i, "")}`,
-      // Keep the existing UI type contract stable; JSON still carries "openalex".
+    const source: AcquisitionSource = {
+      id: `openalex-${(work.id || doi || index)
+        .toString()
+        .replace(/^https?:\/\/openalex\.org\//i, "")}`,
       provider: "openalex" as unknown as EvidenceScoutSource["provider"],
       sourceType:
         work.type === "report"
@@ -307,67 +577,39 @@ async function searchOpenAlex(
       publisher: openAlexSourceLabel(work),
       doi,
       url: landing,
-      downloadUrl: pdfUrl,
+      downloadUrl: pdfCandidates[0],
+      downloadCandidates: pdfCandidates,
       license:
         license ||
-        (isOpen ? `Open access (${work.open_access?.oa_status || "OA"})` : undefined),
+        (isOpen
+          ? `Open access (${work.open_access?.oa_status || "OA"})`
+          : undefined),
       summary: abstract,
-      access,
+      access: pdfCandidates.length
+        ? ("open_download" as const)
+        : ("landing_page" as const),
       relevance,
       evidenceStrength: strength,
       visualPotential: abstract ? 70 : 60,
-      reason: pdfUrl
-        ? "Scholarly work discovered through OpenAlex with an open-access full-text location, often including repository-hosted copies."
-        : "Scholarly work discovered through OpenAlex. An open or repository landing page may be available even when a direct PDF URL is not exposed.",
-    }];
+      reason: pdfCandidates.length
+        ? `OpenAlex found ${pdfCandidates.length} potential full-text location${
+            pdfCandidates.length === 1 ? "" : "s"
+          }; download verification pending.`
+        : "OpenAlex found the scholarly work but no direct full-text PDF location.",
+    };
+
+    source.mechanismScore = mechanismScore(source);
+    return [source];
   });
-}
-
-function openLicense(url?: string) {
-  if (!url) return false;
-  return /creativecommons\.org\/licenses|creativecommons\.org\/publicdomain|opensource\.org|apache\.org\/licenses|gnu\.org\/licenses/i.test(url);
-}
-
-function lexicalRelevance(query: string, text: string) {
-  const queryTokens = new Set(tokenise(query));
-  if (!queryTokens.size) return 0;
-
-  const textTokens = new Set(tokenise(text));
-  let matches = 0;
-
-  queryTokens.forEach((token) => {
-    if (textTokens.has(token)) matches += 1;
-  });
-
-  return Math.max(
-    0,
-    Math.min(100, Math.round((matches / queryTokens.size) * 100))
-  );
-}
-
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
-function retryDelayMs(response: Response, attempt: number) {
-  const retryAfter = response.headers.get("retry-after");
-  if (retryAfter) {
-    const seconds = Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0) {
-      return Math.min(8_000, Math.max(750, seconds * 1000));
-    }
-  }
-
-  return Math.min(6_000, 900 * Math.pow(2, attempt));
 }
 
 async function searchCrossref(
   query: string,
   limit: number
-): Promise<EvidenceScoutSource[]> {
+): Promise<AcquisitionSource[]> {
   const params = new URLSearchParams({
     "query.bibliographic": query,
-    rows: String(Math.min(15, limit)),
+    rows: String(Math.min(15, Math.max(5, limit))),
   });
 
   const mailto = process.env.CROSSREF_MAILTO?.trim();
@@ -380,7 +622,9 @@ async function searchCrossref(
       `https://api.crossref.org/works?${params.toString()}`,
       {
         headers: {
-          "user-agent": `Evidence-Studio/0.9${mailto ? ` (mailto:${mailto})` : ""}`,
+          "user-agent": `Evidence-Studio/1.3${
+            mailto ? ` (mailto:${mailto})` : ""
+          }`,
           accept: "application/json",
         },
         signal: AbortSignal.timeout(12_000),
@@ -401,6 +645,7 @@ async function searchCrossref(
   }
 
   const data = await response.json();
+
   const items: CrossrefWork[] = Array.isArray(data?.message?.items)
     ? data.message.items
     : [];
@@ -410,19 +655,30 @@ async function searchCrossref(
     if (!title) return [];
 
     const doi = cleanText(work.DOI || "") || undefined;
-    const landing = work.URL || (doi ? `https://doi.org/${doi}` : "");
+    const landing =
+      work.URL || (doi ? `https://doi.org/${doi}` : "");
+
     if (!landing) return [];
 
-    const license = work.license?.map((item) => item.URL).find(Boolean);
-    const candidateLinks = work.link || [];
-    const pdfLink = candidateLinks.find(
-      (link) =>
-        Boolean(link.URL) &&
-        (/pdf/i.test(link["content-type"] || "") ||
-          /\.pdf(?:$|\?)/i.test(link.URL || ""))
-    )?.URL;
+    const license = work.license
+      ?.map((item) => item.URL)
+      .find(Boolean);
 
-    const downloadable = Boolean(pdfLink && openLicense(license));
+    const pdfCandidates = uniqueUrls(
+      (work.link || [])
+        .filter(
+          (link) =>
+            Boolean(link.URL) &&
+            (
+              /pdf/i.test(link["content-type"] || "") ||
+              /\.pdf(?:$|[?#])/i.test(link.URL || "") ||
+              /article\/download/i.test(link.URL || "")
+            )
+        )
+        .map((link) => link.URL)
+    );
+
+    const openlyLicensed = openLicense(license);
     const abstract = stripMarkup(work.abstract);
     const year = safeYear(work);
     const citations = work["is-referenced-by-count"] || 0;
@@ -434,7 +690,9 @@ async function searchCrossref(
 
     const authors = (work.author || [])
       .map((author) =>
-        cleanText([author.given, author.family].filter(Boolean).join(" "))
+        cleanText(
+          [author.given, author.family].filter(Boolean).join(" ")
+        )
       )
       .filter(Boolean)
       .slice(0, 8);
@@ -448,179 +706,51 @@ async function searchCrossref(
         (citations > 100 ? 4 : 0)
     );
 
-    return [{
+    const source: AcquisitionSource = {
       id: `crossref-${doi || index}`,
-      provider: "crossref" as const,
-      sourceType: work.type === "report" ? ("report" as const) : ("paper" as const),
+      provider: "crossref",
+      sourceType:
+        work.type === "report"
+          ? ("report" as const)
+          : ("paper" as const),
       title,
       authors,
       year,
       publisher: work.publisher,
       doi,
       url: landing,
-      downloadUrl: downloadable ? pdfLink : undefined,
+      downloadUrl:
+        openlyLicensed && pdfCandidates.length
+          ? pdfCandidates[0]
+          : undefined,
+      downloadCandidates:
+        openlyLicensed ? pdfCandidates : [],
       license,
       summary: abstract,
-      access: downloadable ? ("open_download" as const) : ("landing_page" as const),
+      access:
+        openlyLicensed && pdfCandidates.length
+          ? ("open_download" as const)
+          : ("landing_page" as const),
       relevance,
       evidenceStrength: strength,
       visualPotential: abstract ? 68 : 58,
-      reason: downloadable
-        ? "Scholarly source with DOI metadata and an openly licensed full-text link reported by Crossref."
-        : "Scholarly source discovered through Crossref. Review the landing page/full text before using substantive findings.",
-    }];
-  });
-}
-
-function meaningfulWorldBankTerms(query: string) {
-  const preferred = tokenise(query).filter((token) =>
-    /^(flood|flooding|urban|drainage|rainfall|stormwater|climate|population|growth|land|infrastructure|risk|hazard|resilience|waste)$/.test(token)
-  );
-
-  const fallback = tokenise(query).filter(
-    (token) => !/^(nairobi|kenya)$/.test(token)
-  );
-
-  return [...new Set(preferred.length ? preferred : fallback)].slice(0, 4);
-}
-
-function extractWorldBankCodes(data: WorldBankSearchResponse) {
-  const codes: string[] = [];
-
-  for (const source of data.source || []) {
-    for (const concept of source.concept || []) {
-      if (concept.id?.toLowerCase() !== "series") continue;
-
-      for (const variable of concept.variable || []) {
-        const code = cleanText(variable.id || "");
-        if (!code) continue;
-        if (!codes.includes(code)) codes.push(code);
-      }
-    }
-  }
-
-  return codes;
-}
-
-async function indicatorMetadata(code: string) {
-  const response = await fetch(
-    `https://api.worldbank.org/v2/indicator/${encodeURIComponent(code)}?format=json`,
-    {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(10_000),
-    }
-  );
-
-  if (!response.ok) return null;
-
-  const data = (await response.json()) as WorldBankIndicatorResponse;
-  const record = Array.isArray(data?.[1]) ? data[1]?.[0] : undefined;
-  if (!record?.id || !record?.name) return null;
-
-  return record;
-}
-
-async function searchWorldBank(
-  query: string,
-  limit: number
-): Promise<EvidenceScoutSource[]> {
-  const terms = meaningfulWorldBankTerms(query);
-  if (!terms.length) return [];
-
-  const searches = await Promise.allSettled(
-    terms.map(async (term) => {
-      const response = await fetch(
-        `https://api.worldbank.org/v2/sources/2/search/${encodeURIComponent(term)}?format=json`,
-        {
-          headers: { accept: "application/json" },
-          signal: AbortSignal.timeout(10_000),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`World Bank metadata search returned HTTP ${response.status}.`);
-      }
-
-      return (await response.json()) as WorldBankSearchResponse;
-    })
-  );
-
-  const codes: string[] = [];
-
-  for (const result of searches) {
-    if (result.status !== "fulfilled") continue;
-
-    for (const code of extractWorldBankCodes(result.value)) {
-      if (!codes.includes(code)) codes.push(code);
-      if (codes.length >= Math.min(20, Math.max(8, limit * 2))) break;
-    }
-  }
-
-  const metadataResults = await Promise.allSettled(
-    codes.map((code) => indicatorMetadata(code))
-  );
-
-  const candidates: EvidenceScoutSource[] = [];
-
-  metadataResults.forEach((result, index) => {
-    if (result.status !== "fulfilled" || !result.value) return;
-
-    const record = result.value;
-    const code = record.id || codes[index];
-    const title = cleanText(record.name || "");
-    if (!code || !title) return;
-
-    const summary = stripMarkup(
-      [
-        record.sourceNote,
-        record.sourceOrganization,
-        ...(record.topics || []).map((item) => item.value || ""),
-      ]
-        .filter(Boolean)
-        .join(" ")
-    );
-
-    const relevance = lexicalRelevance(
-      query,
-      `${title} ${summary || ""}`
-    );
-
-    candidates.push({
-      id: `world-bank-${code}`,
-      provider: "world_bank",
-      sourceType: "dataset",
-      title,
-      publisher: "World Bank",
-      url: `https://api.worldbank.org/v2/indicator/${encodeURIComponent(code)}?format=json`,
-      downloadUrl: `https://api.worldbank.org/v2/country/all/indicator/${encodeURIComponent(code)}?source=2&downloadformat=csv&dataformat=list`,
-      license: "World Bank data terms / CC BY 4.0 where indicated by source metadata",
-      summary,
-      access: "open_download",
-      relevance,
-      evidenceStrength: 94,
-      visualPotential: 97,
       reason:
-        "Official World Bank indicator discovered through the World Bank V2 metadata search API. Review indicator definition and geographic coverage before use.",
-    });
-  });
+        openlyLicensed && pdfCandidates.length
+          ? `Crossref reported ${pdfCandidates.length} openly licensed full-text location${
+              pdfCandidates.length === 1 ? "" : "s"
+            }; download verification pending.`
+          : "Crossref found the scholarly source, but no verified openly licensed PDF is currently attached.",
+    };
 
-  return candidates
-    .sort(
-      (a, b) =>
-        b.relevance * 0.7 +
-          b.visualPotential * 0.15 +
-          b.evidenceStrength * 0.15 -
-        (a.relevance * 0.7 +
-          a.visualPotential * 0.15 +
-          a.evidenceStrength * 0.15)
-    )
-    .slice(0, limit);
+    source.mechanismScore = mechanismScore(source);
+    return [source];
+  });
 }
 
 function existingSources(
   evidence: EvidenceItem[],
   query: string
-): EvidenceScoutSource[] {
+): AcquisitionSource[] {
   return evidence.flatMap((item, index) => {
     const source = cleanText(item.source || "");
     if (!source) return [];
@@ -630,24 +760,28 @@ function existingSources(
 
     if (!isUrl && !isDoi) return [];
 
-    const url = isDoi ? `https://doi.org/${source}` : source;
+    const url = isDoi
+      ? `https://doi.org/${source}`
+      : source;
+
     const title =
       cleanText(item.sourceLabel || item.statement).slice(0, 220) ||
       "Existing source";
 
-    return [{
+    const record: AcquisitionSource = {
       id: `existing-${index}`,
-      provider: "existing" as const,
+      provider: "existing",
       sourceType: item.sourceType || "other",
       title,
       year: item.year,
       url,
-      access: "landing_page" as const,
+      access: "landing_page",
       relevance: lexicalRelevance(
         query,
         `${title} ${item.statement}`
       ),
-      evidenceStrength: item.kind === "observed" ? 80 : 64,
+      evidenceStrength:
+        item.kind === "observed" ? 80 : 64,
       visualPotential:
         item.sourceType === "dataset"
           ? 90
@@ -655,13 +789,18 @@ function existingSources(
             ? 88
             : 62,
       reason:
-        "Already present in the Evidence Studio ledger; retained so the scout can compare new discoveries with existing sources.",
-    }];
+        "Already present in the Evidence Studio ledger; retained for comparison with new discoveries.",
+    };
+
+    record.mechanismScore = mechanismScore(record);
+    return [record];
   });
 }
 
-function dedupeSources(sources: EvidenceScoutSource[]) {
-  const byKey = new Map<string, EvidenceScoutSource>();
+function dedupeSources(
+  sources: AcquisitionSource[]
+): AcquisitionSource[] {
+  const byKey = new Map<string, AcquisitionSource>();
 
   for (const source of sources) {
     const key = (
@@ -677,7 +816,6 @@ function dedupeSources(sources: EvidenceScoutSource[]) {
       continue;
     }
 
-    // Keep the strongest metadata when the same source is found by multiple queries.
     const providerRank = (provider: string) =>
       provider === "openalex"
         ? 4
@@ -689,31 +827,56 @@ function dedupeSources(sources: EvidenceScoutSource[]) {
               ? 1
               : 0;
 
+    const allCandidates = uniqueUrls([
+      ...(existing.downloadCandidates || []),
+      existing.downloadUrl,
+      ...(source.downloadCandidates || []),
+      source.downloadUrl,
+    ]);
+
     const sourceWinsProvider =
       providerRank(String(source.provider)) >
       providerRank(String(existing.provider));
 
-    const sourceWinsAccess =
-      source.access === "open_download" &&
-      existing.access !== "open_download";
+    const sourceWinsMechanism =
+      (source.mechanismScore || 0) >
+      (existing.mechanismScore || 0) + 10;
 
     const preferred =
-      sourceWinsProvider || sourceWinsAccess
+      sourceWinsProvider || sourceWinsMechanism
         ? source
         : existing;
 
-    const secondary = preferred === existing ? source : existing;
+    const secondary =
+      preferred === existing ? source : existing;
 
     byKey.set(key, {
       ...secondary,
       ...preferred,
-      provider: preferred.provider,
-      relevance: Math.max(existing.relevance, source.relevance),
-      evidenceStrength: Math.max(existing.evidenceStrength, source.evidenceStrength),
-      visualPotential: Math.max(existing.visualPotential, source.visualPotential),
-      downloadUrl: existing.downloadUrl || source.downloadUrl,
-      license: existing.license || source.license,
-      summary: existing.summary || source.summary,
+      relevance: Math.max(
+        existing.relevance,
+        source.relevance
+      ),
+      evidenceStrength: Math.max(
+        existing.evidenceStrength,
+        source.evidenceStrength
+      ),
+      visualPotential: Math.max(
+        existing.visualPotential,
+        source.visualPotential
+      ),
+      mechanismScore: Math.max(
+        existing.mechanismScore || 0,
+        source.mechanismScore || 0
+      ),
+      downloadCandidates: allCandidates,
+      downloadUrl: allCandidates[0],
+      license:
+        existing.license ||
+        source.license,
+      summary:
+        existing.summary ||
+        source.summary,
       reason: `${preferred.reason} Found across multiple story-focused searches/providers.`,
     });
   }
@@ -721,7 +884,98 @@ function dedupeSources(sources: EvidenceScoutSource[]) {
   return [...byKey.values()];
 }
 
-function coverage(sources: EvidenceScoutSource[]): EvidenceCoverage {
+async function verifyAcquisitionSources(
+  sources: AcquisitionSource[]
+) {
+  const candidates = [...sources]
+    .filter(
+      (source) =>
+        source.sourceType === "paper" &&
+        source.downloadCandidates?.length
+    )
+    .sort((a, b) => {
+      const aPre =
+        a.relevance * 0.5 +
+        (a.mechanismScore || 0) * 0.35 +
+        a.evidenceStrength * 0.15;
+
+      const bPre =
+        b.relevance * 0.5 +
+        (b.mechanismScore || 0) * 0.35 +
+        b.evidenceStrength * 0.15;
+
+      return bPre - aPre;
+    })
+    .slice(0, 12);
+
+  const checked = new Map<string, AcquisitionSource>();
+
+  for (const source of candidates) {
+    let verifiedUrl = "";
+    const failures: string[] = [];
+
+    for (const url of (source.downloadCandidates || []).slice(0, 5)) {
+      const probe = await probePdf(url);
+
+      if (probe.ok) {
+        verifiedUrl = probe.finalUrl || url;
+        break;
+      }
+
+      failures.push(probe.reason);
+      await sleep(100);
+    }
+
+    if (verifiedUrl) {
+      checked.set(source.id, {
+        ...source,
+        verifiedDownload: true,
+        downloadUrl: verifiedUrl,
+        access: "open_download",
+        evidenceStrength: clamp(
+          source.evidenceStrength + 4
+        ),
+        reason: `${source.reason} Verified full-text PDF endpoint passed signature checking.`,
+      });
+    } else {
+      checked.set(source.id, {
+        ...source,
+        verifiedDownload: false,
+        downloadUrl: undefined,
+        access: "landing_page",
+        reason: `${source.reason} Full-text candidates did not pass verification${
+          failures.length
+            ? ` (${[...new Set(failures)].slice(0, 2).join(", ")})`
+            : ""
+        }; kept as a discovery candidate, not auto-ingestible evidence.`,
+      });
+    }
+  }
+
+  return sources.map(
+    (source) => checked.get(source.id) || source
+  );
+}
+
+function acquisitionRank(source: AcquisitionSource) {
+  const mechanism = source.mechanismScore ?? mechanismScore(source);
+  const verifiedBonus = source.verifiedDownload ? 18 : 0;
+  const openBonus =
+    source.access === "open_download" ? 7 : 0;
+
+  return (
+    source.relevance * 0.43 +
+    mechanism * 0.27 +
+    source.evidenceStrength * 0.18 +
+    source.visualPotential * 0.05 +
+    verifiedBonus +
+    openBonus
+  );
+}
+
+function coverage(
+  sources: EvidenceScoutSource[]
+): EvidenceCoverage {
   const scholarly = sources.filter(
     (source) => source.sourceType === "paper"
   ).length;
@@ -750,7 +1004,9 @@ function coverage(sources: EvidenceScoutSource[]): EvidenceCoverage {
 
 export async function POST(request: Request) {
   try {
-    const parsed = BodySchema.safeParse(await request.json());
+    const parsed = BodySchema.safeParse(
+      await request.json()
+    );
 
     if (!parsed.success) {
       return Response.json(
@@ -762,8 +1018,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const rawEvidence = parsed.data.evidence as EvidenceItem[];
-    const datasets = parsed.data.datasets as DatasetAnalysis[];
+    const rawEvidence =
+      parsed.data.evidence as EvidenceItem[];
+
+    const datasets =
+      parsed.data.datasets as DatasetAnalysis[];
 
     const evidence = filterEvidenceForStory({
       topic: parsed.data.topic,
@@ -777,7 +1036,8 @@ export async function POST(request: Request) {
       evidence,
     });
 
-    const generatedQueries = buildResearchQueries(intent);
+    const generatedQueries =
+      buildResearchQueries(intent);
 
     const fallbackQuery =
       buildLockedSearchQuery({
@@ -790,11 +1050,16 @@ export async function POST(request: Request) {
         question: parsed.data.question,
         evidence,
       }) ||
-      cleanText(parsed.data.question || parsed.data.topic) ||
+      cleanText(
+        parsed.data.question ||
+        parsed.data.topic
+      ) ||
       "evidence research";
 
-    // A manual searchQuery remains a deliberate override. Otherwise use the layered set.
-    const manualQuery = cleanText(parsed.data.searchQuery || "");
+    const manualQuery = cleanText(
+      parsed.data.searchQuery || ""
+    );
+
     const queries = manualQuery
       ? [manualQuery]
       : generatedQueries.length
@@ -803,11 +1068,12 @@ export async function POST(request: Request) {
 
     const query = queries.join(" | ");
 
-    const discoveredQuestions = discoverQuestions({
-      topic: parsed.data.topic,
-      evidence,
-      datasets,
-    });
+    const discoveredQuestions =
+      discoverQuestions({
+        topic: parsed.data.topic,
+        evidence,
+        datasets,
+      });
 
     const questions = guardStoryQuestions({
       topic: parsed.data.topic,
@@ -818,105 +1084,151 @@ export async function POST(request: Request) {
     });
 
     const providerErrors: string[] = [];
+
     const perQueryLimit = Math.max(
-      4,
-      Math.ceil(parsed.data.maxSources / Math.max(2, queries.length))
-    );
-
-    // Crossref is deliberately queried sequentially. Bursting several scholarly
-    // searches in parallel can trigger HTTP 429 and silently starve the evidence pool.
-    const crossrefResults: PromiseSettledResult<EvidenceScoutSource[]>[] = [];
-
-    for (let index = 0; index < queries.length; index += 1) {
-      if (index > 0) {
-        await sleep(650);
-      }
-
-      try {
-        const value = await searchCrossref(queries[index], perQueryLimit);
-        crossrefResults.push({ status: "fulfilled", value });
-      } catch (reason) {
-        crossrefResults.push({ status: "rejected", reason });
-      }
-    }
-
-    // OpenAlex complements Crossref with broader scholarly graph coverage and
-    // repository/open-access locations. Keep it paced to avoid unnecessary bursts.
-    const openAlexResults: PromiseSettledResult<EvidenceScoutSource[]>[] = [];
-
-    for (let index = 0; index < queries.length; index += 1) {
-      if (index > 0) {
-        await sleep(900);
-      }
-
-      try {
-        const value = await searchOpenAlex(
-          queries[index],
-          Math.max(5, perQueryLimit + 2)
-        );
-        openAlexResults.push({ status: "fulfilled", value });
-      } catch (reason) {
-        openAlexResults.push({ status: "rejected", reason });
-      }
-    }
-
-    // World Bank remains intentionally narrow because it is contextual/data
-    // coverage, not the primary source of local causal mechanism evidence.
-    const worldBankResults = await Promise.allSettled(
-      queries.slice(0, 2).map((candidateQuery) =>
-        searchWorldBank(candidateQuery, perQueryLimit)
+      5,
+      Math.ceil(
+        parsed.data.maxSources /
+          Math.max(2, queries.length)
       )
     );
 
-    const discovered: EvidenceScoutSource[] = [
-      ...existingSources(evidence, queries[0] || fallbackQuery),
+    const crossrefResults:
+      PromiseSettledResult<AcquisitionSource[]>[] = [];
+
+    for (
+      let index = 0;
+      index < queries.length;
+      index += 1
+    ) {
+      if (index > 0) await sleep(650);
+
+      try {
+        crossrefResults.push({
+          status: "fulfilled",
+          value: await searchCrossref(
+            queries[index],
+            perQueryLimit
+          ),
+        });
+      } catch (reason) {
+        crossrefResults.push({
+          status: "rejected",
+          reason,
+        });
+      }
+    }
+
+    const openAlexResults:
+      PromiseSettledResult<AcquisitionSource[]>[] = [];
+
+    for (
+      let index = 0;
+      index < queries.length;
+      index += 1
+    ) {
+      if (index > 0) await sleep(900);
+
+      try {
+        openAlexResults.push({
+          status: "fulfilled",
+          value: await searchOpenAlex(
+            queries[index],
+            Math.max(6, perQueryLimit + 3)
+          ),
+        });
+      } catch (reason) {
+        openAlexResults.push({
+          status: "rejected",
+          reason,
+        });
+      }
+    }
+
+    const discovered: AcquisitionSource[] = [
+      ...existingSources(
+        evidence,
+        queries[0] || fallbackQuery
+      ),
     ];
 
-    crossrefResults.forEach((result, index) => {
-      if (result.status === "fulfilled") {
-        discovered.push(...result.value);
-      } else {
-        providerErrors.push(
-          `Crossref [${queries[index]}]: ${
-            result.reason?.message || "search failed"
-          }`
-        );
+    crossrefResults.forEach(
+      (result, index) => {
+        if (result.status === "fulfilled") {
+          discovered.push(...result.value);
+        } else {
+          providerErrors.push(
+            `Crossref [${queries[index]}]: ${
+              (result.reason as any)?.message ||
+              "search failed"
+            }`
+          );
+        }
       }
-    });
+    );
 
-    openAlexResults.forEach((result, index) => {
-      if (result.status === "fulfilled") {
-        discovered.push(...result.value);
-      } else {
-        providerErrors.push(
-          `OpenAlex [${queries[index]}]: ${
-            result.reason?.message || "search failed"
-          }`
-        );
+    openAlexResults.forEach(
+      (result, index) => {
+        if (result.status === "fulfilled") {
+          discovered.push(...result.value);
+        } else {
+          providerErrors.push(
+            `OpenAlex [${queries[index]}]: ${
+              (result.reason as any)?.message ||
+              "search failed"
+            }`
+          );
+        }
       }
-    });
+    );
 
-    worldBankResults.forEach((result, index) => {
-      if (result.status === "fulfilled") {
-        discovered.push(...result.value);
-      } else {
-        providerErrors.push(
-          `World Bank [${queries[index]}]: ${
-            result.reason?.message || "search failed"
-          }`
-        );
-      }
-    });
+    /*
+     * Acquisition upgrade:
+     * 1. merge the same work across providers and preserve every PDF candidate;
+     * 2. test the strongest mechanism-focused candidates before ranking;
+     * 3. downgrade dead/blocked links to landing-page candidates;
+     * 4. strongly reward verified full text + local causal mechanisms.
+     */
+    const deduped = dedupeSources(discovered);
 
-    const sources = filterAndRescoreSources({
-      topic: parsed.data.topic,
-      question: parsed.data.question,
-      sources: dedupeSources(discovered),
-    }).slice(0, parsed.data.maxSources);
+    const verified = await verifyAcquisitionSources(
+      deduped
+    );
+
+    const relevanceFiltered =
+      filterAndRescoreSources({
+        topic: parsed.data.topic,
+        question: parsed.data.question,
+        sources: verified,
+      }) as AcquisitionSource[];
+
+    const sources = relevanceFiltered
+      .map((source) => {
+        const mechanism =
+          source.mechanismScore ??
+          mechanismScore(source);
+
+        return {
+          ...source,
+          mechanismScore: mechanism,
+          acquisitionScore:
+            acquisitionRank({
+              ...source,
+              mechanismScore: mechanism,
+            }),
+        };
+      })
+      .sort(
+        (a, b) =>
+          (b.acquisitionScore || 0) -
+          (a.acquisitionScore || 0)
+      )
+      .slice(0, parsed.data.maxSources);
 
     const result: EvidenceScoutResponse = {
       query,
-      searchedAt: new Date().toISOString(),
+      searchedAt:
+        new Date().toISOString(),
       questions,
       sources,
       coverage: coverage(sources),
@@ -924,12 +1236,16 @@ export async function POST(request: Request) {
     };
 
     return Response.json(result, {
-      headers: { "cache-control": "no-store" },
+      headers: {
+        "cache-control": "no-store",
+      },
     });
   } catch (error: any) {
     return Response.json(
       {
-        error: error?.message || "Evidence Scout failed.",
+        error:
+          error?.message ||
+          "Evidence Scout failed.",
       },
       { status: 500 }
     );
