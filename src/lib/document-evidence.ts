@@ -265,13 +265,13 @@ export function ingestDocumentText(args: {
   const limitations = choose(
     all,
     /\b(limit(?:ation|ations|ed)?|however|uncertain(?:ty)?|cannot|could not|caution|bias|constraint|further research|future research|data gap|lack of|insufficient|may not|should be interpreted|not measured|not assessed|not evaluated|beyond the scope)\b/i,
-    4
+    8
   );
 
   const inferences = choose(
     all,
     /\b(suggest(?:s|ed)?|indicat(?:e|es|ed)|impli(?:es|ed)|therefore|conclud(?:e|es|ed)|recommend(?:s|ed)?|interpret(?:ed|ation)|likely|may reflect|could be due|would be advantageous)\b/i,
-    4
+    8
   ).filter((sentence) => !limitations.includes(sentence));
 
   const observed = unique(
@@ -292,11 +292,22 @@ export function ingestDocumentText(args: {
     }))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 10)
+    .slice(0, 18)
     .map((entry) => entry.statement);
 
+  const mechanismCandidates = choose(
+    all,
+    /\b(drainage|stormwater|runoff|riparian|floodplain|encroach(?:ment|ed|ing)?|impervious|permeable|infiltration|blocked drains?|blockage|waste accumulation|channel constriction|culvert|sewer|urban growth|land[- ]use|settlement planning|maintenance|river narrowing|overflow|capacity|multi-day rainfall|heavy rainfall|rainfall episode|informal settlement)\b/i,
+    12
+  ).filter(
+    (sentence) =>
+      !observed.includes(sentence) &&
+      !inferences.includes(sentence) &&
+      !limitations.includes(sentence)
+  );
+
   const fallback = observed.length
-    ? observed
+    ? unique([...observed, ...mechanismCandidates])
     : all
         .filter(
           (sentence) =>
@@ -304,7 +315,7 @@ export function ingestDocumentText(args: {
             !FRONT_MATTER_TEXT.test(sentence) &&
             !/\b(citation|references?|license|doi|issn)\b/i.test(sentence)
         )
-        .slice(0, 5);
+        .slice(0, 8);
 
   /*
    * Important: sourceLabel is the parsed document title, not the opaque

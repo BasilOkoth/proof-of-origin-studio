@@ -44,7 +44,13 @@ export type StoryHunterAngle = {
   question: string;
   title: string;
   hook: string;
-  angle: "contradiction" | "causal" | "systems" | "comparison" | "change" | "unresolved";
+  angle:
+    | "contradiction"
+    | "causal"
+    | "systems"
+    | "comparison"
+    | "change"
+    | "unresolved";
   evidence: number;
   curiosity: number;
   stakes: number;
@@ -70,14 +76,19 @@ export type EvidenceIntelligenceReport = {
 };
 
 const STOP = new Set([
-  "about", "after", "also", "among", "and", "are", "because", "been", "before", "being", "between",
-  "both", "but", "can", "could", "did", "does", "during", "from", "have", "into", "more", "most", "not",
-  "that", "the", "their", "there", "these", "they", "this", "those", "through", "under", "very", "was", "were",
-  "what", "when", "where", "which", "while", "with", "would", "your", "than", "then", "such", "only", "over",
+  "about","after","also","among","and","are","because","been","before","being",
+  "between","both","but","can","could","did","does","during","from","have","into",
+  "more","most","not","that","the","their","there","these","they","this","those",
+  "through","under","very","was","were","what","when","where","which","while",
+  "with","would","your","than","then","such","only","over",
 ]);
 
 function clean(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function clamp(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
 function normalizeToken(token: string) {
@@ -112,39 +123,49 @@ function similarity(a: string, b: string) {
   return overlap / Math.max(left.size, right.size);
 }
 
-function clamp(value: number) {
-  return Math.max(0, Math.min(100, Math.round(value)));
-}
-
 function polarity(text: string): ClaimNode["polarity"] {
-  if (/\b(uncertain|unclear|inconclusive|may|might|possibly|cannot establish|could not establish|insufficient|limited evidence)\b/i.test(text)) {
+  if (
+    /\b(uncertain|unclear|inconclusive|may|might|possibly|cannot establish|could not establish|insufficient|limited evidence)\b/i.test(
+      text
+    )
+  ) {
     return "uncertain";
   }
-  if (/\b(no |not |did not|does not|was not|were not|cannot|never|declin(?:e|ed|ing)|decreas(?:e|ed|ing)|lower|fell|falling|reduc(?:e|ed|ing)|negative)\b/i.test(text)) {
+
+  if (
+    /\b(no |not |did not|does not|was not|were not|cannot|never|declin(?:e|ed|ing)|decreas(?:e|ed|ing)|lower|fell|falling|reduc(?:e|ed|ing)|negative)\b/i.test(
+      text
+    )
+  ) {
     return "negative";
   }
+
   return "positive";
 }
 
 function directionalConflict(a: string, b: string) {
-  const up = /\b(increas(?:e|ed|ing)|higher|rose|rising|grew|growth|more|worsen(?:ed|ing)?)\b/i;
-  const down = /\b(decreas(?:e|ed|ing)|lower|fell|falling|declin(?:e|ed|ing)|reduc(?:e|ed|ing)|less|improv(?:e|ed|ing)?)\b/i;
+  const up =
+    /\b(increas(?:e|ed|ing)|higher|rose|rising|grew|growth|more|worsen(?:ed|ing)?)\b/i;
+  const down =
+    /\b(decreas(?:e|ed|ing)|lower|fell|falling|declin(?:e|ed|ing)|reduc(?:e|ed|ing)|less|improv(?:e|ed|ing)?)\b/i;
   return (up.test(a) && down.test(b)) || (down.test(a) && up.test(b));
 }
 
-function sourceIdentity(item: EvidenceItem, library: EvidenceLibraryRecord[]) {
+function sourceIdentity(
+  item: EvidenceItem,
+  library: EvidenceLibraryRecord[]
+) {
   const direct = clean(item.source || "").toLowerCase();
   const label = clean(item.sourceLabel || "").toLowerCase();
 
-  // Strongest provenance path: ingestion writes source as library:<record-id>.
   if (direct.startsWith("library:")) {
     const id = direct.slice("library:".length);
-    if (library.some((source) => source.id.toLowerCase() === id)) {
-      return library.find((source) => source.id.toLowerCase() === id)?.id;
-    }
+    return library.find(
+      (source) => source.id.toLowerCase() === id
+    )?.id;
   }
 
-  const matched = library.find((source) => {
+  return library.find((source) => {
     const candidates = [
       source.id,
       source.url,
@@ -155,82 +176,110 @@ function sourceIdentity(item: EvidenceItem, library: EvidenceLibraryRecord[]) {
       .filter(Boolean)
       .map((value) => clean(String(value)).toLowerCase());
 
-    return candidates.some((candidate) =>
-      Boolean(candidate) &&
-      (candidate === direct ||
+    return candidates.some(
+      (candidate) =>
+        candidate === direct ||
         candidate === label ||
         (direct.length > 12 && direct.includes(candidate)) ||
         (label.length > 12 && label.includes(candidate)) ||
-        (label.length > 12 && candidate.includes(label)))
+        (label.length > 12 && candidate.includes(label))
     );
-  });
-
-  return matched?.id;
+  })?.id;
 }
 
-function claimVisualPotential(item: EvidenceItem, datasets: DatasetAnalysis[]) {
+function sourceIsPersistent(source?: EvidenceLibraryRecord) {
+  return Boolean(
+    source &&
+      (source.status === "ingested" || source.status === "reviewed")
+  );
+}
+
+function claimVisualPotential(
+  item: EvidenceItem,
+  datasets: DatasetAnalysis[]
+) {
   let score = 50;
   if (item.sourceType === "dataset" || item.value !== undefined) score += 25;
   if (item.latitude !== undefined && item.longitude !== undefined) score += 20;
   if (item.year !== undefined) score += 10;
   if (item.sourceType === "field") score += 15;
-  if (datasets.some((dataset) => dataset.recommendedChart || dataset.recommendedMap)) score += 6;
+  if (datasets.some((d) => d.recommendedChart || d.recommendedMap)) score += 6;
   return clamp(score);
 }
 
-function uniqueEvidence(evidence: EvidenceItem[]) {
+function uniqueEvidence(items: EvidenceItem[]) {
   const result: EvidenceItem[] = [];
-  evidence.forEach((item) => {
-    const statement = clean(item.statement);
-    if (!statement) return;
-    const duplicate = result.some((existing) => similarity(existing.statement, statement) >= 0.86);
+
+  for (const item of items) {
+    const statement = clean(item.statement || "");
+    if (!statement) continue;
+
+    const duplicate = result.some(
+      (existing) => similarity(existing.statement, statement) >= 0.86
+    );
+
     if (!duplicate) result.push(item);
-  });
+  }
+
   return result;
 }
 
-function claimConfidence(item: EvidenceItem, sourceCount: number) {
-  const kind = item.kind === "observed" ? 72 : item.kind === "inference" ? 58 : 52;
-  const sourceBonus = sourceCount ? Math.min(18, sourceCount * 8) : 0;
-  const explicitSource = item.source || item.sourceLabel ? 8 : 0;
-  return clamp(kind + sourceBonus + explicitSource);
-}
-
-function sourcesForClaim(item: EvidenceItem, library: EvidenceLibraryRecord[]) {
+function sourcesForClaim(
+  item: EvidenceItem,
+  library: EvidenceLibraryRecord[]
+) {
   const direct = sourceIdentity(item, library);
-
-  // Explicit provenance is authoritative. Do not dilute it with guessed links.
   if (direct) return [direct];
 
   const text = `${item.statement} ${item.sourceLabel || ""} ${item.source || ""}`;
 
-  const lexical = library
-    .filter(
-      (source) =>
-        source.status === "ingested" || source.status === "reviewed"
-    )
-    .map((source) => {
-      const haystack = `${source.title} ${source.summary || ""} ${
-        source.extractedText?.slice(0, 5000) || ""
-      }`;
-      return {
-        id: source.id,
-        score: similarity(text, haystack),
-      };
-    })
-    .filter((candidate) => candidate.score >= 0.28)
+  return library
+    .filter(sourceIsPersistent)
+    .map((source) => ({
+      id: source.id,
+      score: similarity(
+        text,
+        `${source.title} ${source.summary || ""} ${
+          source.extractedText?.slice(0, 7000) || ""
+        }`
+      ),
+    }))
+    .filter((candidate) => candidate.score >= 0.3)
     .sort((a, b) => b.score - a.score)
     .slice(0, 2)
     .map((candidate) => candidate.id);
-
-  return lexical;
 }
 
-function relationFor(item: EvidenceItem, claim: ClaimNode, source: EvidenceLibraryRecord): ClaimRelation {
+function claimConfidence(item: EvidenceItem, sourceCount: number) {
+  const kind =
+    item.kind === "observed"
+      ? 72
+      : item.kind === "inference"
+        ? 58
+        : 52;
+
+  return clamp(
+    kind +
+      (sourceCount ? Math.min(18, sourceCount * 8) : 0) +
+      (item.source || item.sourceLabel ? 8 : 0)
+  );
+}
+
+function relationFor(
+  item: EvidenceItem,
+  claim: ClaimNode,
+  source: EvidenceLibraryRecord
+): ClaimRelation {
   if (item.kind === "limitation") return "limits";
-  const sourceText = `${source.title} ${source.summary || ""} ${source.extractedText?.slice(0, 2800) || ""}`;
+
+  const sourceText = `${source.title} ${source.summary || ""} ${
+    source.extractedText?.slice(0, 5000) || ""
+  }`;
+
   if (similarity(claim.text, sourceText) < 0.12) return "context";
+
   const sourcePolarity = polarity(sourceText);
+
   if (
     sourcePolarity !== "uncertain" &&
     claim.polarity !== "uncertain" &&
@@ -238,6 +287,7 @@ function relationFor(item: EvidenceItem, claim: ClaimNode, source: EvidenceLibra
   ) {
     return "contradicts";
   }
+
   return item.kind === "observed" ? "supports" : "context";
 }
 
@@ -247,21 +297,41 @@ function contradictionSeverity(a: ClaimNode, b: ClaimNode) {
 
   const lexical = similarity(a.text, b.text);
   if (lexical < 0.28) return 0;
+
   let severity = lexical * 65;
+
   if (
     a.polarity !== "uncertain" &&
     b.polarity !== "uncertain" &&
     a.polarity !== b.polarity
-  ) severity += 28;
+  ) {
+    severity += 28;
+  }
+
   if (directionalConflict(a.text, b.text)) severity += 30;
   return clamp(severity);
+}
+
+function compactTopic(topic: string) {
+  const value = clean(topic);
+  return value.length > 86
+    ? `${value.slice(0, 83)}…`
+    : value || "this story";
 }
 
 function storyScore(
   values: Omit<
     StoryHunterAngle,
-    "id" | "question" | "title" | "hook" | "angle" | "overall" |
-    "claimIds" | "sourceIds" | "visualPlan" | "rationale"
+    | "id"
+    | "question"
+    | "title"
+    | "hook"
+    | "angle"
+    | "overall"
+    | "claimIds"
+    | "sourceIds"
+    | "visualPlan"
+    | "rationale"
   >
 ) {
   return clamp(
@@ -274,9 +344,45 @@ function storyScore(
   );
 }
 
-function compactTopic(topic: string) {
-  const value = clean(topic);
-  return value.length > 86 ? `${value.slice(0, 83)}…` : value || "this story";
+function currentStoryEvidence(input: {
+  topic: string;
+  question: string;
+  evidence: EvidenceItem[];
+  library: EvidenceLibraryRecord[];
+}) {
+  const persistentIds = new Set(
+    input.library
+      .filter(sourceIsPersistent)
+      .map((source) => source.id)
+  );
+
+  const libraryEvidence = input.library
+    .filter(sourceIsPersistent)
+    .flatMap((source) => source.evidence || []);
+
+  const pageEvidence = input.evidence.filter((item) => {
+    const direct = sourceIdentity(item, input.library);
+
+    if (direct && persistentIds.has(direct)) return true;
+
+    const classification = classifyClaimForStory({
+      topic: input.topic,
+      question: input.question,
+      item,
+      library: input.library,
+      sourceIds: direct ? [direct] : [],
+    });
+
+    return classification.role !== "exclude" && classification.score >= 52;
+  });
+
+  /*
+   * Persistent reviewed/ingested evidence leads the graph.
+   * Page evidence is only retained when it still matches the active story.
+   * This prevents claims from old documents from reappearing after the library
+   * has already been cleaned.
+   */
+  return uniqueEvidence([...libraryEvidence, ...pageEvidence]);
 }
 
 function buildAngles(input: {
@@ -297,56 +403,63 @@ function buildAngles(input: {
       claim.role === "context"
   );
 
-  const coreClaims = storyClaims.filter((claim) => claim.role === "core_local");
-  const mechanismClaims = storyClaims.filter((claim) => claim.role === "mechanism");
+  const coreClaims = storyClaims.filter(
+    (claim) => claim.role === "core_local"
+  );
+
+  const mechanismClaims = storyClaims.filter(
+    (claim) => claim.role === "mechanism"
+  );
 
   const relevantSourceIds = new Set(
     storyClaims.flatMap((claim) => claim.sourceIds)
   );
 
-  const relevantLibrary = input.library.filter((source) =>
-    relevantSourceIds.has(source.id)
+  const ingested = input.library.filter(
+    (source) =>
+      relevantSourceIds.has(source.id) &&
+      sourceIsPersistent(source)
   );
 
-  const ingested = relevantLibrary.filter(
-    (source) => source.status === "ingested" || source.status === "reviewed"
-  );
+  const connectedCoreClaims = coreClaims.filter(
+    (claim) => claim.sourceIds.length > 0
+  ).length;
+
+  const connectedMechanismClaims = mechanismClaims.filter(
+    (claim) => claim.sourceIds.length > 0
+  ).length;
 
   const weightedClaimEvidence = storyClaims.reduce(
-    (sum, claim) => {
-      const sourceConnectionWeight = claim.sourceIds.length > 0 ? 1 : 0.35;
-      return sum + roleWeight(claim.role) * sourceConnectionWeight;
-    },
+    (sum, claim) =>
+      sum +
+      roleWeight(claim.role) *
+        (claim.sourceIds.length > 0 ? 1 : 0.3),
     0
   );
 
-  const connectedCoreClaims = coreClaims.filter((claim) => claim.sourceIds.length > 0).length;
-  const connectedMechanismClaims = mechanismClaims.filter((claim) => claim.sourceIds.length > 0).length;
-
   const evidence = clamp(
-    28 +
+    24 +
       connectedCoreClaims * 10 +
-      connectedMechanismClaims * 7 +
-      Math.min(18, weightedClaimEvidence * 3) +
-      Math.min(16, ingested.length * 5)
+      connectedMechanismClaims * 8 +
+      Math.min(22, weightedClaimEvidence * 3) +
+      Math.min(18, ingested.length * 5)
   );
 
-  const contradiction = input.contradictions.length
-    ? clamp(68 + input.contradictions[0].severity * 0.25)
-    : 48;
-
-  const map = input.datasets.some((dataset) => dataset.recommendedMap);
-  const chart = input.datasets.some((dataset) => dataset.recommendedChart);
+  const map = input.datasets.some((d) => d.recommendedMap);
+  const chart = input.datasets.some((d) => d.recommendedChart);
 
   const visual = clamp(
     55 +
       (map ? 18 : 0) +
       (chart ? 18 : 0) +
-      Math.min(10, storyClaims.filter((claim) => claim.visualPotential >= 70).length * 2)
+      Math.min(
+        10,
+        storyClaims.filter((claim) => claim.visualPotential >= 70).length * 2
+      )
   );
 
   const sourceIds = [...relevantSourceIds].slice(0, 8);
-  const claimIds = storyClaims
+  const claimIds = [...storyClaims]
     .sort((a, b) => b.relevance - a.relevance)
     .slice(0, 8)
     .map((claim) => claim.id);
@@ -368,7 +481,7 @@ function buildAngles(input: {
       curiosity: 96,
       stakes: 90,
       visualPotential: visual,
-      tension: contradiction,
+      tension: clamp(68 + input.contradictions[0].severity * 0.25),
       originality: 94,
       claimIds,
       sourceIds,
@@ -379,7 +492,7 @@ function buildAngles(input: {
         chart ? "Data chart" : "Comparison graphic",
       ],
       rationale:
-        "Only contradictions among story-relevant claims contribute to this angle; excluded claims cannot manufacture tension.",
+        "Only contradictions among current story-relevant claims contribute to this angle.",
     });
   }
 
@@ -398,18 +511,18 @@ function buildAngles(input: {
       claimIds,
       sourceIds,
       visualPlan: [
-        chart ? "Lead with the strongest chart" : "Lead with the strongest core-local source",
+        chart ? "Lead with strongest chart" : "Lead with strongest core-local source",
         map ? "Geographic comparison" : "Evidence comparison",
         "Systems diagram",
         "Trust-boundary limitation",
       ],
       rationale:
-        "The evidence score now uses only core-local, mechanism and contextual claims. Excluded hazards and unrelated material do not count.",
+        "The evidence score uses current core-local, mechanism and contextual claims only.",
     },
     {
       question: `How do the forces behind ${topic} interact to produce the outcome we see?`,
       title: `The Hidden System Behind ${topic}`,
-      hook: `${topic} looks like one problem. The relevant evidence suggests it is several systems interacting.`,
+      hook: `${topic} looks like one problem. The current evidence suggests it is several systems interacting.`,
       angle: "systems",
       evidence: clamp(evidence - 2),
       curiosity: 88,
@@ -426,72 +539,31 @@ function buildAngles(input: {
         "Intervention leverage points",
       ],
       rationale:
-        "This angle is built from story-relevant claims only, with local evidence prioritized over generic national or cross-city context.",
-    }
-  );
-
-  if (map) {
-    angles.push({
-      question: `Why does ${topic} look different across places?`,
-      title: `${topic} Changes When You Put It on a Map`,
-      hook: `A single average hides the most important part of ${topic}: where it happens changes the explanation.`,
-      angle: "comparison",
-      evidence,
-      curiosity: 90,
-      stakes: 85,
-      visualPotential: 98,
-      tension: 78,
-      originality: 92,
+        "This angle is built from current story-relevant claims with persistent sources prioritized.",
+    },
+    {
+      question: `What does the relevant evidence still fail to explain about ${topic}?`,
+      title: `The Missing Evidence Behind ${topic}`,
+      hook: `The biggest finding may be the part of ${topic} we still cannot honestly explain.`,
+      angle: "unresolved",
+      evidence: clamp(evidence - 8),
+      curiosity: 82,
+      stakes: 80,
+      visualPotential: clamp(visual - 6),
+      tension: 86,
+      originality: 95,
       claimIds,
       sourceIds,
       visualPlan: [
-        "Animated map",
-        "Place-to-place comparison",
-        chart ? "Small-multiple chart" : "Evidence cards by place",
-        "Local-condition overlay",
+        "Evidence coverage matrix",
+        "Known vs unknown",
+        "Source gaps",
+        "Next-test roadmap",
       ],
       rationale:
-        "Geographic comparison is enabled only when the data supports it; comparison claims remain explicitly separated from local proof.",
-    });
-  }
-
-  if (input.datasets.some((dataset) => dataset.dateColumns.length > 0)) {
-    angles.push({
-      question: `What changed in ${topic} over time, and what best explains the shift?`,
-      title: `What Changed in ${topic}?`,
-      hook: `The most revealing part of ${topic} may be the moment the pattern changed.`,
-      angle: "change",
-      evidence,
-      curiosity: 87,
-      stakes: 86,
-      visualPotential: clamp(visual + 6),
-      tension: 74,
-      originality: 84,
-      claimIds,
-      sourceIds,
-      visualPlan: ["Animated timeline", "Before/after", "Trend divergence", "Source-highlight turning point"],
-      rationale:
-        "A temporal story is offered only when the dataset contains date fields and the supporting claims survive relevance review.",
-    });
-  }
-
-  angles.push({
-    question: `What does the relevant evidence still fail to explain about ${topic}?`,
-    title: `The Missing Evidence Behind ${topic}`,
-    hook: `The biggest finding may be the part of ${topic} we still cannot honestly explain.`,
-    angle: "unresolved",
-    evidence: clamp(evidence - 8),
-    curiosity: 82,
-    stakes: 80,
-    visualPotential: clamp(visual - 6),
-    tension: 86,
-    originality: 95,
-    claimIds,
-    sourceIds,
-    visualPlan: ["Evidence coverage matrix", "Known vs unknown", "Source gaps", "Next-test roadmap"],
-    rationale:
-      "Evidence gaps are calculated after relevance filtering, so unrelated hazards cannot make the story look better supported than it is.",
-  });
+        "Evidence gaps are calculated after current-story filtering.",
+    }
+  );
 
   return angles
     .map((angle, index) => ({
@@ -510,46 +582,71 @@ export function buildEvidenceIntelligence(input: {
   library: EvidenceLibraryRecord[];
   questionCandidates?: StoryQuestionCandidate[];
 }): EvidenceIntelligenceReport {
-  const libraryEvidence = input.library.flatMap((source) => source.evidence || []);
-  const allEvidence = uniqueEvidence([...input.evidence, ...libraryEvidence]);
-
-  const claims: ClaimNode[] = allEvidence.slice(0, 100).map((item, index) => {
-    const sourceIds = sourcesForClaim(item, input.library);
-    const relevance = classifyClaimForStory({
-      topic: input.topic,
-      question: input.question,
-      item,
-      library: input.library,
-      sourceIds,
-    });
-
-    return {
-      id: `claim-${index + 1}`,
-      text: clean(item.statement),
-      evidenceKind: item.kind,
-      sourceIds,
-      confidence: claimConfidence(item, sourceIds.length),
-      visualPotential: claimVisualPotential(item, input.datasets),
-      polarity: polarity(item.statement),
-      role: relevance.role,
-      relevance: relevance.score,
-      relevanceReason: relevance.reason,
-    };
+  const activeEvidence = currentStoryEvidence({
+    topic: input.topic,
+    question: input.question,
+    evidence: input.evidence,
+    library: input.library,
   });
 
-  const storyClaims = claims.filter((claim) => claim.role !== "exclude");
+  const claims: ClaimNode[] = activeEvidence
+    .slice(0, 120)
+    .map((item, index) => {
+      const sourceIds = sourcesForClaim(item, input.library);
+
+      const relevance = classifyClaimForStory({
+        topic: input.topic,
+        question: input.question,
+        item,
+        library: input.library,
+        sourceIds,
+      });
+
+      return {
+        id: `claim-${index + 1}`,
+        text: clean(item.statement),
+        evidenceKind: item.kind,
+        sourceIds,
+        confidence: claimConfidence(item, sourceIds.length),
+        visualPotential: claimVisualPotential(item, input.datasets),
+        polarity: polarity(item.statement),
+        role: relevance.role,
+        relevance: relevance.score,
+        relevanceReason: relevance.reason,
+      };
+    })
+    .filter(
+      (claim) =>
+        claim.role !== "exclude" ||
+        claim.sourceIds.length > 0
+    )
+    .sort((a, b) => {
+      const aConnected = a.sourceIds.length ? 1 : 0;
+      const bConnected = b.sourceIds.length ? 1 : 0;
+      if (aConnected !== bConnected) return bConnected - aConnected;
+      return b.relevance - a.relevance;
+    });
+
+  const storyClaims = claims.filter(
+    (claim) => claim.role !== "exclude"
+  );
 
   const edges: ClaimSourceEdge[] = [];
-  storyClaims.forEach((claim) => {
-    const item = allEvidence.find(
+
+  for (const claim of storyClaims) {
+    const item = activeEvidence.find(
       (candidate) => clean(candidate.statement) === claim.text
     );
-    if (!item) return;
+    if (!item) continue;
 
-    claim.sourceIds.forEach((sourceId) => {
-      const source = input.library.find((candidate) => candidate.id === sourceId);
-      if (!source) return;
+    for (const sourceId of claim.sourceIds) {
+      const source = input.library.find(
+        (candidate) => candidate.id === sourceId
+      );
+      if (!source) continue;
+
       const relation = relationFor(item, claim, source);
+
       edges.push({
         id: `${claim.id}-${source.id}`,
         claimId: claim.id,
@@ -557,50 +654,74 @@ export function buildEvidenceIntelligence(input: {
         relation,
         strength:
           relation === "supports"
-            ? 86
+            ? 90
             : relation === "contradicts"
               ? 82
               : relation === "limits"
-                ? 76
+                ? 78
                 : 62,
         reason:
-          relation === "supports"
-            ? "The claim is linked to this ingested or source-visible evidence record."
-            : relation === "contradicts"
-              ? "The source text overlaps with the claim but appears to point in the opposite direction."
-              : relation === "limits"
-                ? "This evidence item explicitly limits the claim or its generality."
-                : "The source provides context but should not be treated as direct proof of the claim.",
+          item.source?.startsWith("library:")
+            ? "Explicit provenance link created during source ingestion."
+            : relation === "supports"
+              ? "The claim is connected to persistent source-visible evidence."
+              : relation === "contradicts"
+                ? "The source overlaps with the claim but appears to point in the opposite direction."
+                : relation === "limits"
+                  ? "This evidence item explicitly limits the claim or its generality."
+                  : "The source provides context but should not be treated as direct proof.",
       });
-    });
-  });
+    }
+  }
 
   const contradictions: ContradictionFinding[] = [];
+
   for (let i = 0; i < storyClaims.length; i += 1) {
     for (let j = i + 1; j < storyClaims.length; j += 1) {
-      const severity = contradictionSeverity(storyClaims[i], storyClaims[j]);
+      const severity = contradictionSeverity(
+        storyClaims[i],
+        storyClaims[j]
+      );
+
       if (severity < 58) continue;
+
       contradictions.push({
         id: `contradiction-${i}-${j}`,
         claimAId: storyClaims[i].id,
         claimBId: storyClaims[j].id,
         severity,
-        reason: directionalConflict(storyClaims[i].text, storyClaims[j].text)
-          ? "These story-relevant claims discuss overlapping subject matter but describe opposing directions of change."
-          : "These story-relevant claims are lexically similar while differing in polarity; review the underlying sources before choosing a conclusion.",
+        reason: directionalConflict(
+          storyClaims[i].text,
+          storyClaims[j].text
+        )
+          ? "These current story-relevant claims describe opposing directions of change."
+          : "These current story-relevant claims overlap but differ in polarity; review the underlying sources.",
       });
     }
   }
+
   contradictions.sort((a, b) => b.severity - a.severity);
 
+  const ingested = input.library.filter(sourceIsPersistent);
   const warnings: string[] = [];
-  const ingested = input.library.filter(
-    (source) => source.status === "ingested" || source.status === "reviewed"
-  );
 
-  const excludedCount = claims.filter((claim) => claim.role === "exclude").length;
-  const coreCount = claims.filter((claim) => claim.role === "core_local").length;
-  const mechanismCount = claims.filter((claim) => claim.role === "mechanism").length;
+  const coreCount = storyClaims.filter(
+    (claim) => claim.role === "core_local"
+  ).length;
+
+  const mechanismCount = storyClaims.filter(
+    (claim) => claim.role === "mechanism"
+  ).length;
+
+  const connectedRelevantClaims = storyClaims.filter(
+    (claim) => claim.sourceIds.length > 0
+  ).length;
+
+  const excludedConnected = claims.filter(
+    (claim) =>
+      claim.role === "exclude" &&
+      claim.sourceIds.length > 0
+  ).length;
 
   if (!input.library.length) {
     warnings.push(
@@ -614,13 +735,13 @@ export function buildEvidenceIntelligence(input: {
     );
   }
 
-  if (excludedCount) {
+  if (excludedConnected) {
     warnings.push(
-      `${excludedCount} extracted claim${excludedCount === 1 ? "" : "s"} were excluded from Story Hunter because they do not sufficiently match the current story question or geography.`
+      `${excludedConnected} persistent-source claim${
+        excludedConnected === 1 ? "" : "s"
+      } were retained for audit but excluded from Story Hunter because they do not match the active story.`
     );
   }
-
-  const connectedRelevantClaims = storyClaims.filter((claim) => claim.sourceIds.length > 0).length;
 
   if (!coreCount) {
     warnings.push(
@@ -628,9 +749,11 @@ export function buildEvidenceIntelligence(input: {
     );
   } else if (connectedRelevantClaims === 0) {
     warnings.push(
-      "Relevant claims exist, but none is connected to a persistent source record. Story Hunter evidence scores are intentionally capped until provenance links are established."
+      "Relevant claims exist, but none is connected to a persistent source record."
     );
-  } else if (mechanismCount === 0) {
+  }
+
+  if (mechanismCount === 0) {
     warnings.push(
       "Local evidence is present, but mechanism coverage is thin. Add evidence explaining how the observed outcome is produced."
     );
@@ -638,17 +761,19 @@ export function buildEvidenceIntelligence(input: {
 
   if (!contradictions.length) {
     warnings.push(
-      "No strong contradiction was detected automatically among story-relevant claims. This does not mean the evidence agrees."
+      "No strong contradiction was detected automatically among current story-relevant claims. This does not mean the evidence agrees."
     );
   }
 
   if (
     storyClaims.length &&
-    storyClaims.filter((claim) => claim.sourceIds.length === 0).length >
+    storyClaims.filter(
+      (claim) => claim.sourceIds.length === 0
+    ).length >
       storyClaims.length / 2
   ) {
     warnings.push(
-      "More than half of story-relevant claims are not yet connected to a persistent source record."
+      "More than half of current story-relevant claims are not yet connected to a persistent source record."
     );
   }
 
