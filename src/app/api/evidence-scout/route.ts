@@ -138,6 +138,22 @@ function lexicalRelevance(query: string, text: string) {
   );
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(response: Response, attempt: number) {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(8_000, Math.max(750, seconds * 1000));
+    }
+  }
+
+  return Math.min(6_000, 900 * Math.pow(2, attempt));
+}
+
 async function searchCrossref(
   query: string,
   limit: number
@@ -150,19 +166,31 @@ async function searchCrossref(
   const mailto = process.env.CROSSREF_MAILTO?.trim();
   if (mailto) params.set("mailto", mailto);
 
-  const response = await fetch(
-    `https://api.crossref.org/works?${params.toString()}`,
-    {
-      headers: {
-        "user-agent": `Evidence-Studio/0.8${mailto ? ` (mailto:${mailto})` : ""}`,
-        accept: "application/json",
-      },
-      signal: AbortSignal.timeout(12_000),
-    }
-  );
+  let response: Response | null = null;
 
-  if (!response.ok) {
-    throw new Error(`Crossref returned HTTP ${response.status}.`);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    response = await fetch(
+      `https://api.crossref.org/works?${params.toString()}`,
+      {
+        headers: {
+          "user-agent": `Evidence-Studio/0.9${mailto ? ` (mailto:${mailto})` : ""}`,
+          accept: "application/json",
+        },
+        signal: AbortSignal.timeout(12_000),
+      }
+    );
+
+    if (response.status !== 429) break;
+
+    if (attempt < 2) {
+      await sleep(retryDelayMs(response, attempt));
+    }
+  }
+
+  if (!response || !response.ok) {
+    throw new Error(
+      `Crossref returned HTTP ${response?.status || "unknown"} after retry.`
+    );
   }
 
   const data = await response.json();
@@ -561,12 +589,25 @@ export async function POST(request: Request) {
       Math.ceil(parsed.data.maxSources / Math.max(2, queries.length))
     );
 
-    const crossrefResults = await Promise.allSettled(
-      queries.map((candidateQuery) =>
-        searchCrossref(candidateQuery, perQueryLimit)
-      )
-    );
+    // Crossref is deliberately queried sequentially. Bursting several scholarly
+    // searches in parallel can trigger HTTP 429 and silently starve the evidence pool.
+    const crossrefResults: PromiseSettledResult<EvidenceScoutSource[]>[] = [];
 
+    for (let index = 0; index < queries.length; index += 1) {
+      if (index > 0) {
+        await sleep(650);
+      }
+
+      try {
+        const value = await searchCrossref(queries[index], perQueryLimit);
+        crossrefResults.push({ status: "fulfilled", value });
+      } catch (reason) {
+        crossrefResults.push({ status: "rejected", reason });
+      }
+    }
+
+    // World Bank can remain concurrent because only two low-volume metadata
+    // searches are issued and its endpoint has not been the limiting provider.
     const worldBankResults = await Promise.allSettled(
       queries.slice(0, 2).map((candidateQuery) =>
         searchWorldBank(candidateQuery, perQueryLimit)

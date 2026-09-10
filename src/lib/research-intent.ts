@@ -157,9 +157,17 @@ export function buildResearchIntent(input: {
 
 export function buildResearchQueries(intent: ResearchIntent) {
   const geography = intent.geography.join(" ");
-  const phenomenon = intent.phenomenon.slice(0, 2).join(" ");
 
-  const base = [geography, phenomenon].filter(Boolean).join(" ");
+  // Use one primary phenomenon in retrieval. Secondary phenomena found in imported
+  // evidence (for example "water") should not make a flood query unnecessarily narrow.
+  const primaryPhenomenon =
+    intent.phenomenon.includes("flood")
+      ? "flood"
+      : intent.phenomenon[0] || "";
+
+  const base = [geography, primaryPhenomenon]
+    .filter(Boolean)
+    .join(" ");
 
   const queries = [
     base,
