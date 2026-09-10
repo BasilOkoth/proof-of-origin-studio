@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeCheck,
   BarChart3,
@@ -56,6 +56,58 @@ import { EvidenceIntelligenceLab } from "@/components/EvidenceIntelligenceLab";
 import type { StoryHunterAngle } from "@/lib/evidence-intelligence";
 
 const initial = makeSample();
+
+const WORKSPACE_STORAGE_KEY = "evidence-studio:workspace:v1";
+
+type PersistedWorkspace = {
+  mode: StoryMode;
+  topic: string;
+  question: string;
+  brief: string;
+  audience: string;
+  minutes: number;
+  evidence: EvidenceItem[];
+  datasets: DatasetAnalysis[];
+  activeTab: Tab;
+  sourceKind: "research" | "report" | "text";
+  scoutQuery: string;
+  manualScriptEdits: boolean;
+  project: EpisodeProject;
+};
+
+function projectForWorkspaceStorage(project: EpisodeProject): EpisodeProject {
+  /*
+   * Keep the editable story/project, but do not copy heavy binary/data-URL
+   * assets into localStorage. Persistent source Blobs already live in the
+   * Evidence Library's IndexedDB store.
+   */
+  const next = {
+    ...project,
+    assets: [],
+  };
+
+  if (next.narration?.audioDataUrl) {
+    const { audioDataUrl: _audioDataUrl, ...restNarration } = next.narration;
+    next.narration = restNarration;
+  }
+
+  return next;
+}
+
+function isValidTab(value: unknown): value is Tab {
+  return [
+    "build",
+    "sources",
+    "discover",
+    "intelligence",
+    "story",
+    "visual",
+    "narration",
+    "retention",
+    "publish",
+  ].includes(String(value));
+}
+
 
 type Tab =
   | "build"
@@ -131,6 +183,8 @@ export default function StudioPage() {
   const [manualScriptEdits, setManualScriptEdits] = useState(false);
   const [visualRerunBusy, setVisualRerunBusy] = useState(false);
   const [visualRerunMessage, setVisualRerunMessage] = useState("");
+  const workspaceHydrated = useRef(false);
+  const [workspaceSavedAt, setWorkspaceSavedAt] = useState("");
 
   const [sourceKind, setSourceKind] = useState<"research" | "report" | "text">("research");
   const [documentBusy, setDocumentBusy] = useState(false);
@@ -152,6 +206,96 @@ export default function StudioPage() {
   const [narrationError, setNarrationError] = useState("");
   const [renderBusy, setRenderBusy] = useState<"video" | "short" | "thumbnail" | null>(null);
   const [renderError, setRenderError] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<PersistedWorkspace>;
+
+        if (saved.mode) setMode(saved.mode);
+        if (typeof saved.topic === "string") setTopic(saved.topic);
+        if (typeof saved.question === "string") setQuestion(saved.question);
+        if (typeof saved.brief === "string") setBrief(saved.brief);
+        if (typeof saved.audience === "string") setAudience(saved.audience);
+        if (typeof saved.minutes === "number" && Number.isFinite(saved.minutes)) {
+          setMinutes(saved.minutes);
+        }
+        if (Array.isArray(saved.evidence)) setEvidence(saved.evidence);
+        if (Array.isArray(saved.datasets)) setDatasets(saved.datasets);
+        if (saved.activeTab && isValidTab(saved.activeTab)) {
+          setActiveTab(saved.activeTab);
+        }
+        if (
+          saved.sourceKind === "research" ||
+          saved.sourceKind === "report" ||
+          saved.sourceKind === "text"
+        ) {
+          setSourceKind(saved.sourceKind);
+        }
+        if (typeof saved.scoutQuery === "string") setScoutQuery(saved.scoutQuery);
+        if (typeof saved.manualScriptEdits === "boolean") {
+          setManualScriptEdits(saved.manualScriptEdits);
+        }
+        if (saved.project?.episode && Array.isArray(saved.project.scenes)) {
+          setProject(saved.project);
+        }
+      }
+    } catch (error) {
+      console.warn("Unable to restore Evidence Studio workspace:", error);
+    } finally {
+      workspaceHydrated.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceHydrated.current) return;
+
+    const timer = window.setTimeout(() => {
+      try {
+        const payload: PersistedWorkspace = {
+          mode,
+          topic,
+          question,
+          brief,
+          audience,
+          minutes,
+          evidence,
+          datasets,
+          activeTab,
+          sourceKind,
+          scoutQuery,
+          manualScriptEdits,
+          project: projectForWorkspaceStorage(project),
+        };
+
+        window.localStorage.setItem(
+          WORKSPACE_STORAGE_KEY,
+          JSON.stringify(payload)
+        );
+        setWorkspaceSavedAt(new Date().toLocaleTimeString());
+      } catch (error) {
+        console.warn("Unable to persist Evidence Studio workspace:", error);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    mode,
+    topic,
+    question,
+    brief,
+    audience,
+    minutes,
+    evidence,
+    datasets,
+    activeTab,
+    sourceKind,
+    scoutQuery,
+    manualScriptEdits,
+    project,
+  ]);
 
   const pack = useMemo(() => getStoryPack(mode), [mode]);
   const durationInFrames = useMemo(
@@ -656,6 +800,11 @@ export default function StudioPage() {
         </div>
         <div className="topActions">
           <span className="truthBadge"><BadgeCheck size={15} /> Show your work</span>
+          {workspaceSavedAt && (
+            <span className="truthBadge" title="Story settings and workspace state are saved in this browser.">
+              <Save size={14} /> Saved {workspaceSavedAt}
+            </span>
+          )}
           <button
             className="button ghost"
             onClick={() => downloadText(`${project.id}.json`, JSON.stringify(project, null, 2), "application/json")}
