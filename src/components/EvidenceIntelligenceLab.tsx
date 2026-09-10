@@ -390,6 +390,7 @@ export function EvidenceIntelligenceLab({
         provider: source.provider,
         license: source.license,
         sourceUrl: source.url,
+        doi: source.doi,
         libraryId: source.id,
       }),
     });
@@ -430,7 +431,7 @@ export function EvidenceIntelligenceLab({
         dataset: data.dataset,
         fileBlob: blob,
         url: source.url,
-        downloadUrl: source.downloadUrl,
+        downloadUrl: data.finalUrl || source.downloadUrl,
         provider: source.provider,
         license: source.license,
         access: source.access,
