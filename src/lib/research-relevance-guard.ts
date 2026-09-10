@@ -6,6 +6,10 @@ import type {
   EvidenceScoutSource,
   StoryQuestionCandidate,
 } from "./evidence-scout";
+import {
+  buildResearchIntent,
+  buildResearchQueries,
+} from "./research-intent";
 
 const STOP = new Set([
   "about","after","again","against","also","and","are","because","been","before",
@@ -25,11 +29,11 @@ const PERSONAL_FRONT_MATTER =
 const CITATION_NOISE =
   /\b(issn|isbn|creative\s+commons|all\s+rights\s+reserved|copyright|retrieved\s+from|available\s+at|volume\s+\d+|issue\s+\d+)\b/i;
 
-const GENERIC_BACKGROUND = new Set([
-  "urban","flood","drain","rain","climate","infrastructure",
-  "stormwater","watershed","river","risk","hazard","resilience",
-  "planning","land","waste","population","growth","city",
-]);
+const HARD_OFF_TOPIC =
+  /\b(manuscript|palimpsest|uvaria|annonaceae|plant taxonomy|pig|pigs|reproductive effects|industrialization|industrialisation|natural resource extraction|unsafe buildings|building safety)\b/i;
+
+const FLOOD_MECHANISM =
+  /\b(drainage|stormwater|runoff|riparian|floodplain|encroachment|impervious|permeable|culvert|sewer|channel|blocked drain|blockage|urban growth|land[- ]use|settlement|maintenance|waste accumulation|solid waste|river|watershed|rainfall)\b/i;
 
 function clean(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -42,14 +46,11 @@ function normalizeToken(token: string) {
     .replace(/[^a-z0-9-]/g, "");
 
   if (!value) return "";
-
-  // Lightweight domain normalization so the guard does not reject
-  // legitimate evidence because of simple grammatical variants.
   if (/^flood(?:s|ed|ing)?$/.test(value)) return "flood";
-  if (/^drain(?:s|ed|ing|age)?$/.test(value)) return "drain";
-  if (/^rain(?:s|ed|ing|fall)?$/.test(value)) return "rain";
+  if (/^drain(?:s|ed|ing|age)?$/.test(value)) return "drainage";
+  if (/^rain(?:s|ed|ing|fall)?$/.test(value)) return "rainfall";
   if (/^river(?:s)?$/.test(value)) return "river";
-  if (/^city|cities$/.test(value)) return "city";
+  if (/^(?:city|cities)$/.test(value)) return "city";
   if (/^risk(?:s)?$/.test(value)) return "risk";
   if (/^hazard(?:s)?$/.test(value)) return "hazard";
   if (/^infrastructure(?:s)?$/.test(value)) return "infrastructure";
@@ -63,7 +64,6 @@ function normalizeToken(token: string) {
   if (/^watershed(?:s)?$/.test(value)) return "watershed";
   if (/^climat(?:e|ic)$/.test(value)) return "climate";
 
-  // Generic fallback stemming for common English endings.
   if (value.length > 6 && value.endsWith("ing")) value = value.slice(0, -3);
   else if (value.length > 5 && value.endsWith("ed")) value = value.slice(0, -2);
   else if (value.length > 4 && value.endsWith("es")) value = value.slice(0, -2);
@@ -81,46 +81,18 @@ function words(value: string) {
     .filter((x) => x.length >= 3 && !STOP.has(x));
 }
 
-function unique<T>(values: T[]) {
-  return [...new Set(values)];
-}
-
-function explicitPlaceAnchors(topic: string, question: string) {
-  const combined = `${topic} ${question}`;
-
-  const candidates =
-    combined.match(/\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})*\b/g) || [];
-
-  const banned = new Set([
-    "Why","What","How","When","Where","Who","Which","Create","Build","World",
-    "Explained","Evidence","Studio","Research","Report","Impact",
-  ]);
-
-  return unique(
-    candidates
-      .flatMap((phrase) => phrase.split(/\s+/))
-      .filter((token) => !banned.has(token))
-      .map((token) => normalizeToken(token))
-      .filter(Boolean)
-  );
-}
-
-function anchorTerms(topic: string, question: string) {
-  const all = unique([...words(topic), ...words(question)]);
-  return all
-    .filter((token) => GENERIC_BACKGROUND.has(token) || token.length >= 5)
-    .slice(0, 18);
-}
-
 function tokenSet(value: string) {
   return new Set(words(value));
+}
+
+function overlap(terms: string[], tokens: Set<string>) {
+  return terms.filter((term) => tokens.has(normalizeToken(term))).length;
 }
 
 export function looksLikeFrontMatter(value: string) {
   const text = clean(value);
   if (!text) return true;
 
-  // Keep abstract content. Only a standalone heading should be removed.
   if (/^abstract\s*[:.-]?$/i.test(text)) return true;
 
   return (
@@ -137,8 +109,7 @@ export function filterEvidenceForStory(input: {
   question: string;
   evidence: EvidenceItem[];
 }) {
-  const anchors = anchorTerms(input.topic, input.question);
-  const places = explicitPlaceAnchors(input.topic, input.question);
+  const intent = buildResearchIntent(input);
 
   return input.evidence.filter((item) => {
     const content = clean(
@@ -148,19 +119,15 @@ export function filterEvidenceForStory(input: {
     if (looksLikeFrontMatter(content)) return false;
 
     const tokens = tokenSet(content);
-    const placeMatch =
-      !places.length || places.some((place) => tokens.has(place));
+    const placeHits = overlap(intent.geography, tokens);
+    const phenomenonHits = overlap(intent.phenomenon, tokens);
+    const mechanismHits = overlap(intent.mechanisms, tokens);
 
-    const domainMatches = anchors.filter((token) => tokens.has(token)).length;
-
-    // Local evidence needs only one story/domain match.
-    if (placeMatch) {
-      return domainMatches >= 1 || item.kind === "limitation";
+    if (intent.geography.length && placeHits > 0) {
+      return phenomenonHits > 0 || mechanismHits > 0 || item.kind === "limitation";
     }
 
-    // General background may survive only when it strongly matches
-    // the phenomenon being explained.
-    return domainMatches >= 2;
+    return phenomenonHits > 0 && mechanismHits > 0;
   });
 }
 
@@ -169,22 +136,16 @@ export function buildLockedSearchQuery(input: {
   question: string;
   evidence: EvidenceItem[];
 }) {
-  const places = explicitPlaceAnchors(input.topic, input.question);
-  const anchors = anchorTerms(input.topic, input.question);
+  const intent = buildResearchIntent(input);
+  const queries = buildResearchQueries(intent);
 
-  const evidenceTerms = input.evidence
-    .filter((item) => !looksLikeFrontMatter(item.statement))
-    .slice(0, 10)
-    .flatMap((item) => words(item.statement))
-    .filter((token) => GENERIC_BACKGROUND.has(token));
-
-  return unique([
-    ...places,
-    ...anchors,
-    ...evidenceTerms,
-  ])
-    .slice(0, 12)
-    .join(" ");
+  // Existing route accepts a single query. Keep the highest-value query compact:
+  // geography + phenomenon + first causal mechanism bundle.
+  return queries[0] || [
+    ...intent.geography,
+    ...intent.phenomenon,
+    ...intent.mechanisms.slice(0, 4),
+  ].join(" ");
 }
 
 function sourceAlignment(input: {
@@ -196,28 +157,47 @@ function sourceAlignment(input: {
     `${input.source.title} ${input.source.summary || ""} ${input.source.publisher || ""}`
   );
 
-  const anchors = anchorTerms(input.topic, input.question);
-  const places = explicitPlaceAnchors(input.topic, input.question);
-  const textTokens = tokenSet(content);
+  const intent = buildResearchIntent({
+    topic: input.topic,
+    question: input.question,
+    evidence: [],
+  });
 
-  const anchorHits = anchors.filter((token) => textTokens.has(token)).length;
-  const placeHits = places.filter((token) => textTokens.has(token)).length;
+  const tokens = tokenSet(content);
+  const placeHits = overlap(intent.geography, tokens);
+  const phenomenonHits = overlap(intent.phenomenon, tokens);
+  const mechanismHits = overlap(intent.mechanisms, tokens);
+  const contextHits = overlap(intent.contextTerms, tokens);
 
-  const floodLike =
-    /\b(flood|floods|flooded|flooding|stormwater|drain|drains|drainage|rain|rainfall|watershed|river|rivers|urban\s+flood)\b/i.test(
-      content
-    );
+  const local = intent.geography.length === 0 || placeHits > 0;
+  const phenomenon = phenomenonHits > 0 || /\bflood(?:s|ed|ing)?\b/i.test(content);
+  const mechanism = mechanismHits > 0 || FLOOD_MECHANISM.test(content);
+  const hardOffTopic = HARD_OFF_TOPIC.test(content);
 
   let score = 0;
-  score += Math.min(50, anchorHits * 12);
-  score += Math.min(30, placeHits * 30);
-  if (floodLike) score += 20;
+  if (local) score += 42;
+  if (phenomenon) score += 24;
+  score += Math.min(24, mechanismHits * 8);
+  score += Math.min(10, contextHits * 3);
+
+  if (hardOffTopic) score -= 70;
+
+  // Explicitly penalize sources about other regions when a local geography exists.
+  if (
+    intent.geography.length &&
+    !local &&
+    /\b(west africa|ghana|benin|sweden|swedish|china|chinese|thailand|thai|japan|wuhan|kumamoto|arnhem)\b/i.test(content)
+  ) {
+    score -= 30;
+  }
 
   return {
-    score: Math.min(100, score),
-    placeMatch: places.length === 0 || placeHits > 0,
-    anchorHits,
-    floodLike,
+    score: Math.max(0, Math.min(100, score)),
+    local,
+    phenomenon,
+    mechanism,
+    mechanismHits,
+    hardOffTopic,
   };
 }
 
@@ -226,9 +206,13 @@ export function filterAndRescoreSources(input: {
   question: string;
   sources: EvidenceScoutSource[];
 }) {
-  const places = explicitPlaceAnchors(input.topic, input.question);
+  const intent = buildResearchIntent({
+    topic: input.topic,
+    question: input.question,
+    evidence: [],
+  });
 
-  return input.sources
+  const scored = input.sources
     .map((source) => {
       const alignment = sourceAlignment({
         topic: input.topic,
@@ -237,39 +221,86 @@ export function filterAndRescoreSources(input: {
       });
 
       const adjustedRelevance = Math.round(
-        source.relevance * 0.35 + alignment.score * 0.65
+        source.relevance * 0.2 + alignment.score * 0.8
       );
+
+      const role =
+        alignment.local && alignment.phenomenon && alignment.mechanism
+          ? "core_local"
+          : alignment.phenomenon && alignment.mechanism
+            ? "mechanism"
+            : alignment.local && alignment.phenomenon
+              ? "local_context"
+              : "comparison";
 
       return {
         ...source,
         relevance: adjustedRelevance,
         reason:
-          alignment.placeMatch && alignment.anchorHits >= 1
-            ? `${source.reason} Passed story relevance guard.`
-            : `${source.reason} Treated as general background rather than local evidence.`,
+          role === "core_local"
+            ? `${source.reason} Priority local mechanism source for the current story.`
+            : role === "mechanism"
+              ? `${source.reason} Non-local mechanism source; use only for clearly labelled explanatory context.`
+              : role === "local_context"
+                ? `${source.reason} Local source, but mechanism relevance is limited.`
+                : `${source.reason} Comparison/background only; not local proof.`,
         __guard: alignment,
+        __role: role,
       };
     })
     .filter((source) => {
-      if (source.relevance < 42) return false;
+      if (source.__guard.hardOffTopic) return false;
 
-      if (!places.length) return source.__guard.anchorHits >= 1;
+      // Geography-locked stories require the phenomenon everywhere.
+      if (!source.__guard.phenomenon) return false;
 
+      if (!intent.geography.length) {
+        return source.relevance >= 55 && source.__guard.mechanism;
+      }
+
+      // Local sources can survive with either mechanism or strong local context.
+      if (source.__guard.local) {
+        return source.relevance >= 55;
+      }
+
+      // Non-local sources need genuine mechanism value and a much higher threshold.
       return (
-        source.__guard.placeMatch ||
-        (source.__guard.anchorHits >= 2 && source.__guard.floodLike)
+        source.__guard.mechanism &&
+        source.__guard.mechanismHits >= 2 &&
+        source.relevance >= 68
       );
     })
-    .sort(
-      (a, b) =>
-        b.relevance * 0.58 +
-          b.evidenceStrength * 0.27 +
-          b.visualPotential * 0.15 -
-        (a.relevance * 0.58 +
-          a.evidenceStrength * 0.27 +
-          a.visualPotential * 0.15)
-    )
-    .map(({ __guard, ...source }) => source);
+    .sort((a, b) => {
+      const roleBoost = (value: string) =>
+        value === "core_local"
+          ? 35
+          : value === "local_context"
+            ? 20
+            : value === "mechanism"
+              ? 8
+              : 0;
+
+      const score = (source: typeof a) =>
+        roleBoost(source.__role) +
+        source.relevance * 0.55 +
+        source.evidenceStrength * 0.25 +
+        source.visualPotential * 0.2 +
+        (source.access === "open_download" ? 8 : 0);
+
+      return score(b) - score(a);
+    });
+
+  // Keep comparison/global mechanism material intentionally scarce.
+  let nonLocalKept = 0;
+
+  return scored
+    .filter((source) => {
+      if (source.__guard.local) return true;
+      if (nonLocalKept >= 2) return false;
+      nonLocalKept += 1;
+      return true;
+    })
+    .map(({ __guard, __role, ...source }) => source);
 }
 
 function questionAlignment(
@@ -277,16 +308,23 @@ function questionAlignment(
   originalQuestion: string,
   candidate: string
 ) {
-  const anchors = anchorTerms(topic, originalQuestion);
-  const places = explicitPlaceAnchors(topic, originalQuestion);
+  const intent = buildResearchIntent({
+    topic,
+    question: originalQuestion,
+    evidence: [],
+  });
+
   const text = tokenSet(candidate);
+  const phenomenonHits = overlap(intent.phenomenon, text);
+  const placeHits = overlap(intent.geography, text);
+  const mechanismHits = overlap(intent.mechanisms, text);
 
-  const hits = anchors.filter((token) => text.has(token)).length;
-  const placeHits = places.filter((token) => text.has(token)).length;
+  let score = 0;
+  score += Math.min(45, phenomenonHits * 25);
+  score += Math.min(35, placeHits * 35);
+  score += Math.min(20, mechanismHits * 5);
 
-  let score = Math.min(70, hits * 12);
-  if (places.length && placeHits) score += 30;
-  if (!places.length) score += 10;
+  if (!intent.geography.length) score += 15;
 
   return Math.min(100, score);
 }
@@ -336,13 +374,13 @@ export function guardStoryQuestions(input: {
       return {
         ...candidate,
         overall: Math.round(
-          candidate.overall * 0.55 + alignment * 0.45
+          candidate.overall * 0.5 + alignment * 0.5
         ),
         rationale: `${candidate.rationale} Story-question alignment: ${alignment}/100.`,
         __alignment: alignment,
       };
     })
-    .filter((candidate) => candidate.__alignment >= 40)
+    .filter((candidate) => candidate.__alignment >= 50)
     .sort((a, b) => b.overall - a.overall)
     .map(({ __alignment, ...candidate }) => candidate)
     .slice(0, 5);
