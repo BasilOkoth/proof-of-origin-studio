@@ -9,6 +9,12 @@ import {
   type EvidenceScoutResponse,
   type EvidenceScoutSource,
 } from "@/lib/evidence-scout";
+import {
+  buildLockedSearchQuery,
+  filterAndRescoreSources,
+  filterEvidenceForStory,
+  guardStoryQuestions,
+} from "@/lib/research-relevance-guard";
 import type { DatasetAnalysis, EvidenceItem } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -89,16 +95,25 @@ function openLicense(url?: string) {
 
 function lexicalRelevance(query: string, text: string) {
   const queryTokens = new Set(tokenise(query));
-  if (!queryTokens.size) return 60;
+  if (!queryTokens.size) return 0;
+
   const textTokens = new Set(tokenise(text));
   let matches = 0;
+
   queryTokens.forEach((token) => {
     if (textTokens.has(token)) matches += 1;
   });
-  return Math.max(35, Math.min(100, Math.round(45 + (matches / queryTokens.size) * 55)));
+
+  const ratio = matches / queryTokens.size;
+
+  // No artificial floor: weak matches must be allowed to score weakly.
+  return Math.max(0, Math.min(100, Math.round(ratio * 100)));
 }
 
-async function searchCrossref(query: string, limit: number): Promise<EvidenceScoutSource[]> {
+async function searchCrossref(
+  query: string,
+  limit: number
+): Promise<EvidenceScoutSource[]> {
   const params = new URLSearchParams({
     "query.bibliographic": query,
     rows: String(Math.min(15, limit)),
@@ -107,17 +122,25 @@ async function searchCrossref(query: string, limit: number): Promise<EvidenceSco
   const mailto = process.env.CROSSREF_MAILTO?.trim();
   if (mailto) params.set("mailto", mailto);
 
-  const response = await fetch(`https://api.crossref.org/works?${params.toString()}`, {
-    headers: {
-      "user-agent": `Evidence-Studio/0.5${mailto ? ` (mailto:${mailto})` : ""}`,
-      accept: "application/json",
-    },
-    signal: AbortSignal.timeout(12_000),
-  });
+  const response = await fetch(
+    `https://api.crossref.org/works?${params.toString()}`,
+    {
+      headers: {
+        "user-agent": `Evidence-Studio/0.6${mailto ? ` (mailto:${mailto})` : ""}`,
+        accept: "application/json",
+      },
+      signal: AbortSignal.timeout(12_000),
+    }
+  );
 
-  if (!response.ok) throw new Error(`Crossref returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    throw new Error(`Crossref returned HTTP ${response.status}.`);
+  }
+
   const data = await response.json();
-  const items: CrossrefWork[] = Array.isArray(data?.message?.items) ? data.message.items : [];
+  const items: CrossrefWork[] = Array.isArray(data?.message?.items)
+    ? data.message.items
+    : [];
 
   return items.flatMap((work, index) => {
     const title = cleanText(work.title?.[0] || "");
@@ -132,29 +155,44 @@ async function searchCrossref(query: string, limit: number): Promise<EvidenceSco
     const pdfLink = candidateLinks.find(
       (link) =>
         Boolean(link.URL) &&
-        (/pdf/i.test(link["content-type"] || "") || /\.pdf(?:$|\?)/i.test(link.URL || ""))
+        (/pdf/i.test(link["content-type"] || "") ||
+          /\.pdf(?:$|\?)/i.test(link.URL || ""))
     )?.URL;
+
     const downloadable = Boolean(pdfLink && openLicense(license));
     const abstract = stripMarkup(work.abstract);
     const year = safeYear(work);
     const citations = work["is-referenced-by-count"] || 0;
-    const relevance = lexicalRelevance(query, `${title} ${abstract || ""} ${work.publisher || ""}`);
+
+    const relevance = lexicalRelevance(
+      query,
+      `${title} ${abstract || ""} ${work.publisher || ""}`
+    );
 
     const authors = (work.author || [])
-      .map((author) => cleanText([author.given, author.family].filter(Boolean).join(" ")))
+      .map((author) =>
+        cleanText([author.given, author.family].filter(Boolean).join(" "))
+      )
       .filter(Boolean)
       .slice(0, 8);
 
     const strength = Math.min(
       98,
-      72 + (doi ? 7 : 0) + (abstract ? 5 : 0) + (citations > 10 ? 5 : 0) + (citations > 100 ? 4 : 0)
+      72 +
+        (doi ? 7 : 0) +
+        (abstract ? 5 : 0) +
+        (citations > 10 ? 5 : 0) +
+        (citations > 100 ? 4 : 0)
     );
 
     return [
       {
         id: `crossref-${doi || index}`,
         provider: "crossref" as const,
-        sourceType: work.type === "report" ? ("report" as const) : ("paper" as const),
+        sourceType:
+          work.type === "report"
+            ? ("report" as const)
+            : ("paper" as const),
         title,
         authors,
         year,
@@ -164,7 +202,9 @@ async function searchCrossref(query: string, limit: number): Promise<EvidenceSco
         downloadUrl: downloadable ? pdfLink : undefined,
         license,
         summary: abstract,
-        access: downloadable ? ("open_download" as const) : ("landing_page" as const),
+        access: downloadable
+          ? ("open_download" as const)
+          : ("landing_page" as const),
         relevance,
         evidenceStrength: strength,
         visualPotential: abstract ? 68 : 58,
@@ -198,21 +238,36 @@ function wdiCode(id?: string) {
   return id.slice("WB_WDI_".length).replace(/_/g, ".");
 }
 
-async function searchWorldBank(query: string, limit: number): Promise<EvidenceScoutSource[]> {
-  const response = await fetch("https://data360api.worldbank.org/data360/searchv2", {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({
-      count: true,
-      select: "series_description/idno, series_description/name, series_description/database_id",
-      search: query,
-      top: Math.min(12, limit),
-      skip: 0,
-    }),
-    signal: AbortSignal.timeout(12_000),
-  });
+async function searchWorldBank(
+  query: string,
+  limit: number
+): Promise<EvidenceScoutSource[]> {
+  const response = await fetch(
+    "https://data360api.worldbank.org/data360/searchv2",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({
+        count: true,
+        select:
+          "series_description/idno, series_description/name, series_description/database_id, series_description/description",
+        search: query,
+        top: Math.min(12, limit),
+        skip: 0,
+      }),
+      signal: AbortSignal.timeout(12_000),
+    }
+  );
 
-  if (!response.ok) throw new Error(`World Bank Data360 returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    throw new Error(
+      `World Bank Data360 returned HTTP ${response.status}.`
+    );
+  }
+
   const data = await response.json();
   const rows = data360Rows(data);
 
@@ -221,12 +276,18 @@ async function searchWorldBank(query: string, limit: number): Promise<EvidenceSc
     const title = cleanText(String(field(row, "name") || ""));
     if (!id || !title) return [];
 
-    const databaseId = cleanText(String(field(row, "database_id") || ""));
-    const description = stripMarkup(String(field(row, "description") || ""));
+    const databaseId = cleanText(
+      String(field(row, "database_id") || "")
+    );
+    const description = stripMarkup(
+      String(field(row, "description") || "")
+    );
+
     const code = wdiCode(id);
     const metadataUrl = code
       ? `https://api.worldbank.org/v2/indicator/${encodeURIComponent(code)}?format=json`
       : "https://data360.worldbank.org/";
+
     const downloadUrl = code
       ? `https://api.worldbank.org/v2/country/all/indicator/${encodeURIComponent(
           code
@@ -244,8 +305,13 @@ async function searchWorldBank(query: string, limit: number): Promise<EvidenceSc
         downloadUrl,
         license: "CC BY 4.0 (Data360 platform metadata/API)",
         summary: description,
-        access: downloadUrl ? ("open_download" as const) : ("landing_page" as const),
-        relevance: lexicalRelevance(query, `${title} ${description || ""} ${databaseId}`),
+        access: downloadUrl
+          ? ("open_download" as const)
+          : ("landing_page" as const),
+        relevance: lexicalRelevance(
+          query,
+          `${title} ${description || ""} ${databaseId}`
+        ),
         evidenceStrength: databaseId === "WB_WDI" ? 94 : 90,
         visualPotential: 97,
         reason: downloadUrl
@@ -256,15 +322,24 @@ async function searchWorldBank(query: string, limit: number): Promise<EvidenceSc
   });
 }
 
-function existingSources(evidence: EvidenceItem[], query: string): EvidenceScoutSource[] {
+function existingSources(
+  evidence: EvidenceItem[],
+  query: string
+): EvidenceScoutSource[] {
   return evidence.flatMap((item, index) => {
     const source = cleanText(item.source || "");
     if (!source) return [];
+
     const isUrl = /^https?:\/\//i.test(source);
     const isDoi = /^10\.\d{4,9}\//i.test(source);
+
     if (!isUrl && !isDoi) return [];
+
     const url = isDoi ? `https://doi.org/${source}` : source;
-    const title = cleanText(item.sourceLabel || item.statement).slice(0, 220) || "Existing source";
+    const title =
+      cleanText(item.sourceLabel || item.statement).slice(0, 220) ||
+      "Existing source";
+
     return [
       {
         id: `existing-${index}`,
@@ -274,10 +349,19 @@ function existingSources(evidence: EvidenceItem[], query: string): EvidenceScout
         year: item.year,
         url,
         access: "landing_page" as const,
-        relevance: lexicalRelevance(query, `${title} ${item.statement}`),
+        relevance: lexicalRelevance(
+          query,
+          `${title} ${item.statement}`
+        ),
         evidenceStrength: item.kind === "observed" ? 80 : 64,
-        visualPotential: item.sourceType === "dataset" ? 90 : item.sourceType === "field" ? 88 : 62,
-        reason: "Already present in the Evidence Studio ledger; retained so the scout can compare new discoveries with existing sources.",
+        visualPotential:
+          item.sourceType === "dataset"
+            ? 90
+            : item.sourceType === "field"
+              ? 88
+              : 62,
+        reason:
+          "Already present in the Evidence Studio ledger; retained so the scout can compare new discoveries with existing sources.",
       },
     ];
   });
@@ -285,8 +369,14 @@ function existingSources(evidence: EvidenceItem[], query: string): EvidenceScout
 
 function dedupeSources(sources: EvidenceScoutSource[]) {
   const seen = new Set<string>();
+
   return sources.filter((source) => {
-    const key = (source.doi || source.url || source.title).toLowerCase();
+    const key = (
+      source.doi ||
+      source.url ||
+      source.title
+    ).toLowerCase();
+
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -294,61 +384,128 @@ function dedupeSources(sources: EvidenceScoutSource[]) {
 }
 
 function coverage(sources: EvidenceScoutSource[]): EvidenceCoverage {
-  const scholarly = sources.filter((source) => source.sourceType === "paper").length;
-  const data = sources.filter((source) => source.sourceType === "dataset").length;
-  const providers = new Set(sources.map((source) => source.provider));
-  const open = sources.filter((source) => source.access === "open_download").length;
+  const scholarly = sources.filter(
+    (source) => source.sourceType === "paper"
+  ).length;
+
+  const data = sources.filter(
+    (source) => source.sourceType === "dataset"
+  ).length;
+
+  const providers = new Set(
+    sources.map((source) => source.provider)
+  );
+
+  const open = sources.filter(
+    (source) => source.access === "open_download"
+  ).length;
+
   return {
     scholarly: Math.min(100, scholarly * 18),
     data: Math.min(100, data * 24),
     sourceDiversity: Math.min(100, providers.size * 34),
-    openAccess: sources.length ? Math.round((open / sources.length) * 100) : 0,
+    openAccess: sources.length
+      ? Math.round((open / sources.length) * 100)
+      : 0,
   };
 }
 
 export async function POST(request: Request) {
   try {
     const parsed = BodySchema.safeParse(await request.json());
+
     if (!parsed.success) {
-      return Response.json({ error: "Evidence Scout received an invalid story/evidence payload." }, { status: 400 });
+      return Response.json(
+        {
+          error:
+            "Evidence Scout received an invalid story/evidence payload.",
+        },
+        { status: 400 }
+      );
     }
 
-    const evidence = parsed.data.evidence as EvidenceItem[];
+    const rawEvidence = parsed.data.evidence as EvidenceItem[];
     const datasets = parsed.data.datasets as DatasetAnalysis[];
+
+    const evidence = filterEvidenceForStory({
+      topic: parsed.data.topic,
+      question: parsed.data.question,
+      evidence: rawEvidence,
+    });
+
+    const lockedQuery =
+      buildLockedSearchQuery({
+        topic: parsed.data.topic,
+        question: parsed.data.question,
+        evidence,
+      }) ||
+      buildScoutQuery({
+        topic: parsed.data.topic,
+        question: parsed.data.question,
+        evidence,
+      });
+
     const query =
       cleanText(parsed.data.searchQuery || "") ||
-      buildScoutQuery({ topic: parsed.data.topic, question: parsed.data.question, evidence }) ||
+      lockedQuery ||
       cleanText(parsed.data.question || parsed.data.topic) ||
       "evidence research";
 
-    const questions = discoverQuestions({
+    const discoveredQuestions = discoverQuestions({
       topic: parsed.data.topic,
       evidence,
       datasets,
     });
 
+    const questions = guardStoryQuestions({
+      topic: parsed.data.topic,
+      question: parsed.data.question,
+      questions: discoveredQuestions,
+      evidence,
+      datasets,
+    });
+
     const providerErrors: string[] = [];
-    const perProvider = Math.max(4, Math.ceil(parsed.data.maxSources / 2));
+    const perProvider = Math.max(
+      4,
+      Math.ceil(parsed.data.maxSources / 2)
+    );
 
-    const [crossrefResult, worldBankResult] = await Promise.allSettled([
-      searchCrossref(query, perProvider),
-      searchWorldBank(query, perProvider),
-    ]);
+    const [crossrefResult, worldBankResult] =
+      await Promise.allSettled([
+        searchCrossref(query, perProvider),
+        searchWorldBank(query, perProvider),
+      ]);
 
-    const discovered: EvidenceScoutSource[] = [...existingSources(evidence, query)];
-    if (crossrefResult.status === "fulfilled") discovered.push(...crossrefResult.value);
-    else providerErrors.push(`Crossref: ${crossrefResult.reason?.message || "search failed"}`);
+    const discovered: EvidenceScoutSource[] = [
+      ...existingSources(evidence, query),
+    ];
 
-    if (worldBankResult.status === "fulfilled") discovered.push(...worldBankResult.value);
-    else providerErrors.push(`World Bank Data360: ${worldBankResult.reason?.message || "search failed"}`);
+    if (crossrefResult.status === "fulfilled") {
+      discovered.push(...crossrefResult.value);
+    } else {
+      providerErrors.push(
+        `Crossref: ${
+          crossrefResult.reason?.message || "search failed"
+        }`
+      );
+    }
 
-    const sources = dedupeSources(discovered)
-      .sort(
-        (a, b) =>
-          b.relevance * 0.5 + b.evidenceStrength * 0.35 + b.visualPotential * 0.15 -
-          (a.relevance * 0.5 + a.evidenceStrength * 0.35 + a.visualPotential * 0.15)
-      )
-      .slice(0, parsed.data.maxSources);
+    if (worldBankResult.status === "fulfilled") {
+      discovered.push(...worldBankResult.value);
+    } else {
+      providerErrors.push(
+        `World Bank Data360: ${
+          worldBankResult.reason?.message || "search failed"
+        }`
+      );
+    }
+
+    const sources = filterAndRescoreSources({
+      topic: parsed.data.topic,
+      question: parsed.data.question,
+      sources: dedupeSources(discovered),
+    }).slice(0, parsed.data.maxSources);
 
     const result: EvidenceScoutResponse = {
       query,
@@ -364,7 +521,9 @@ export async function POST(request: Request) {
     });
   } catch (error: any) {
     return Response.json(
-      { error: error?.message || "Evidence Scout failed." },
+      {
+        error: error?.message || "Evidence Scout failed.",
+      },
       { status: 500 }
     );
   }
