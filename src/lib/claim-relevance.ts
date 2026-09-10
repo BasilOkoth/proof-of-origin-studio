@@ -100,14 +100,24 @@ function overlapCount(left: string[], right: Set<string>) {
   return left.filter((token) => right.has(token)).length;
 }
 
-const FLOOD_PHENOMENON =
-  /\b(flood|flooding|stormwater|runoff|drain|drainage|river|riparian|rainfall|heavy rain)\b/i;
+const FLOOD_DIRECT =
+  /\b(flood|flooding|stormwater|runoff|drain|drainage|riparian|floodplain|overflow|inundation)\b/i;
 
-const CAUSAL_PROCESS =
-  /\b(caus(?:e|es|ed|ing)|lead(?:s|ing)? to|result(?:s|ed|ing)? in|driv(?:e|es|en|ing)|because|due to|contribut(?:e|es|ed|ing)|increase(?:s|d)? runoff|reduce(?:s|d)? capacity|block(?:s|ed|ing)?|overflow|exceed(?:s|ed|ing)? capacity|constrict(?:s|ed|ing)?|encroach(?:ment|es|ed|ing)?|impervious|impermeable|permeable|surface sealing|land[- ]use change|urban growth|rapid urbanisation|rapid urbanization|maintenance gap|drainage capacity|waste accumulation)\b/i;
+const FLOOD_SUPPORT =
+  /\b(rainfall|heavy rain|river|watershed|channel|culvert|sewer|surface water)\b/i;
+
+/*
+ * A mechanism must contain an actual system driver.
+ * Generic connectors such as "result in" or "due to" are NOT sufficient.
+ */
+const STRUCTURAL_MECHANISM =
+  /\b(blocked? drain|blocked? drainage|drain blockage|drainage capacity|inadequate drainage|ageing drainage|aging drainage|poor drainage|stormwater capacity|runoff|impervious|impermeable|permeable surface|surface sealing|riparian encroachment|floodplain encroachment|land[- ]use change|urban growth|rapid urbanisation|rapid urbanization|waste accumulation|solid waste accumulation|garbage accumulation|channel constriction|constricted channel|reduced capacity|exceed(?:s|ed|ing)? capacity|overflow(?:s|ed|ing)?|culvert blockage|sewer blockage|maintenance gap|drain maintenance|river narrowing|loss of permeable surface)\b/i;
 
 const IMPACT_OR_EXPOSURE =
-  /\b(exposed|exposure|damage|loss|losses|affected|facilities|buildings|transport network|insurance|people at risk|population at risk|economic loss|agricultural loss|agricultural income|crop yield)\b/i;
+  /\b(exposed|exposure|damage|damages|loss|losses|affected|facilities|buildings|transport network|insurance|people at risk|population at risk|economic loss|agricultural loss|agricultural income|crop yield|fatalit|displaced|displacement)\b/i;
+
+const MODEL_OR_METHOD =
+  /\b(model(?:led|ed|ling|ing)?|simulation|simulated|estimate|estimated|calculation|assum(?:e|ed|ption)|validation|resolution|dataset|data limitation|risk profile|return period)\b/i;
 
 const UNRELATED_LOCAL =
   /\b(lack of water|water availability|water scarcity|reproductive|pig|pigs|livestock|insurance losses|building safety|industrialization|industrialisation|manuscript|plant taxonomy|uvaria)\b/i;
@@ -146,13 +156,17 @@ export function classifyClaimForStory(input: {
   const placeHits = overlapCount(places, tokens);
   const directPlaceHits = overlapCount(places, claimTokens);
 
-  const phenomenon = FLOOD_PHENOMENON.test(claimOnly);
-  const causal = CAUSAL_PROCESS.test(claimOnly);
+  const directFlood = FLOOD_DIRECT.test(claimOnly);
+  const floodSupport = FLOOD_SUPPORT.test(claimOnly);
+  const mechanism = STRUCTURAL_MECHANISM.test(claimOnly);
   const impact = IMPACT_OR_EXPOSURE.test(claimOnly);
+  const modelling = MODEL_OR_METHOD.test(claimOnly);
   const unrelatedLocal = UNRELATED_LOCAL.test(claimOnly);
   const offHazard = NON_STORY_HAZARD.test(claimOnly);
+  const limitation = input.item.kind === "limitation";
 
-  if (offHazard && !phenomenon) {
+  // Different hazard beats incidental flood/rain/river wording.
+  if (offHazard && !/\bflood|flooding|drainage|stormwater|runoff\b/i.test(claimOnly)) {
     return {
       role: "exclude",
       score: 2,
@@ -161,7 +175,8 @@ export function classifyClaimForStory(input: {
     };
   }
 
-  if (unrelatedLocal && !phenomenon) {
+  // Nairobi/local mention alone cannot rescue an unrelated subject.
+  if (unrelatedLocal && !directFlood) {
     return {
       role: "exclude",
       score: 4,
@@ -170,73 +185,98 @@ export function classifyClaimForStory(input: {
     };
   }
 
-  if (directPlaceHits > 0 && phenomenon) {
-    if (causal) {
+  // Limitations are never mechanisms. Keep only flood-relevant limitations as context.
+  if (limitation) {
+    if (directFlood && !offHazard) {
       return {
-        role: "core_local",
-        score: Math.min(100, 88 + directTopicHits * 3 + directPlaceHits * 4),
+        role: "context",
+        score: 52,
         reason:
-          "The claim is local to the story geography and directly describes the flood phenomenon or a causal process behind it.",
+          "This is a limitation on flood evidence or modelling. It informs trust boundaries but does not explain the flood mechanism.",
       };
     }
+    return {
+      role: "exclude",
+      score: 8,
+      reason:
+        "This limitation does not directly constrain evidence for the current flood story.",
+    };
+  }
 
+  // Explicit local + actual structural mechanism = strongest local causal evidence.
+  if (directPlaceHits > 0 && mechanism && (directFlood || floodSupport)) {
     return {
       role: "core_local",
-      score: Math.min(94, 78 + directTopicHits * 3 + directPlaceHits * 4),
+      score: Math.min(100, 90 + directTopicHits * 2 + directPlaceHits * 4),
       reason:
-        "The claim is explicitly local and directly concerns flooding, but it is primarily evidence of condition or outcome rather than mechanism.",
+        "The claim is explicitly local and describes a concrete system mechanism behind flooding.",
     };
   }
 
-  if (placeHits > 0 && phenomenon) {
-    if (causal) {
-      return {
-        role: "core_local",
-        score: Math.min(94, 76 + topicHits * 3 + placeHits * 4),
-        reason:
-          "The source provides local context and the claim directly describes a flood-related process.",
-      };
-    }
+  // Local flood observation/impact is useful, but not automatically a mechanism.
+  if (directPlaceHits > 0 && directFlood) {
+    return {
+      role: "core_local",
+      score: Math.min(92, 76 + directTopicHits * 3 + directPlaceHits * 4),
+      reason:
+        "The claim is explicitly local and directly concerns flooding, but it is evidence of condition, exposure or outcome rather than a causal mechanism.",
+    };
+  }
 
+  // Source-derived local context can support a mechanism if the claim itself names the driver.
+  if (placeHits > 0 && mechanism && (directFlood || floodSupport)) {
+    return {
+      role: "core_local",
+      score: Math.min(92, 78 + topicHits * 2 + placeHits * 4),
+      reason:
+        "The source is local and the claim names a concrete flood-system driver.",
+    };
+  }
+
+  // Exposure/damage/loss statements must be context before generic causal wording is considered.
+  if ((directFlood || floodSupport) && impact) {
     return {
       role: "context",
-      score: Math.min(78, 60 + topicHits * 3 + placeHits * 3),
+      score: Math.min(70, 52 + Math.max(1, topicHits) * 4),
       reason:
-        "The source is local and the claim concerns flooding, but it describes exposure, condition or impact rather than a causal mechanism.",
+        "The claim describes flood exposure or consequences. It is useful context but not a causal mechanism.",
     };
   }
 
-  if (phenomenon && causal) {
+  // Modelling/method statements are context, not mechanisms.
+  if ((directFlood || floodSupport) && modelling) {
+    return {
+      role: "context",
+      score: Math.min(64, 48 + Math.max(1, topicHits) * 4),
+      reason:
+        "The claim describes modelling, estimation or method context rather than a real-world causal mechanism.",
+    };
+  }
+
+  // Only concrete driver language can create MECHANISM.
+  if (mechanism && (directFlood || floodSupport)) {
     return {
       role: "mechanism",
-      score: Math.min(88, 68 + Math.max(1, topicHits) * 4),
+      score: Math.min(86, 68 + Math.max(1, topicHits) * 4),
       reason:
-        "The claim describes a causal flood mechanism that can explain the story even without explicit local geography.",
+        "The claim names a concrete flood-system driver that can explain the story even without explicit local geography.",
     };
   }
 
-  if (phenomenon && impact) {
+  // Flood/rain/river statements without a concrete driver are contextual.
+  if (directFlood || floodSupport) {
     return {
       role: "context",
-      score: Math.min(72, 54 + Math.max(1, topicHits) * 4),
+      score: Math.min(62, 46 + Math.max(1, topicHits) * 4),
       reason:
-        "The claim describes flood exposure or consequences, so it is useful context but not a mechanism.",
-    };
-  }
-
-  if (phenomenon && topicHits >= 1) {
-    return {
-      role: "context",
-      score: Math.min(68, 50 + topicHits * 4),
-      reason:
-        "The claim is flood-related but does not clearly establish a local causal process.",
+        "The claim is related to flooding or hydrology but does not identify a concrete causal driver.",
     };
   }
 
   if (topicHits >= 2 && input.sourceIds.length > 0) {
     return {
       role: "comparison",
-      score: 42,
+      score: 40,
       reason:
         "The claim has thematic overlap but is not strong enough to count as local proof or mechanism.",
     };
