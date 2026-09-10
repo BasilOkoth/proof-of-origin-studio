@@ -86,6 +86,78 @@ const FLOOD_MECHANISM =
 const STALE_HAZARD_NOISE =
   /\b(earthquake|volcano|volcanic|landslide|drought|agricultural income|crop loss|seismic)\b/i;
 
+
+const EXTRACTION_NOISE =
+  /(?:^|\s)(?:\d{1,3}\s+)?(?:\d+(?:\.\d+)+\s+)?(?:chapter\s+\w+|table of contents|list of (?:figures|tables|plates|charts)|references|appendix|appendices)\b|\.{4,}/i;
+
+const SECTION_HEADING_FRAGMENT =
+  /^(?:\d{1,3}\s+)?(?:\d+(?:\.\d+)+\s+)?[A-Z][A-Za-z &/,-]{3,90}(?:\.{3,}|$)/;
+
+const COMPARATOR_GEOGRAPHY =
+  /\b(delhi|india|bangladesh|germany|mississippi|budalangi|river nzoia|nyando|bangalore|bengaluru|mumbai|jakarta|london|new york|china|pakistan)\b/i;
+
+function cleanEvidenceStatement(value: string) {
+  let result = clean(value)
+    .replace(/^\s*\d{1,3}\s+(?=[A-Z])/g, "")
+    .replace(/^\s*\d+(?:\.\d+){1,4}\s+/g, "")
+    .replace(/\s*\.{4,}\s*/g, " ")
+    .replace(/\s+\d{1,3}\s*$/g, "")
+    .trim();
+
+  // OCR/text extractors sometimes leave bare page numbers in front of prose.
+  result = result.replace(/^\d{1,3}\s+(?=[A-Z][a-z])/g, "").trim();
+
+  return result;
+}
+
+function looksLikeExtractionNoise(value: string) {
+  const statement = clean(value);
+  if (!statement) return true;
+  if (EXTRACTION_NOISE.test(statement)) return true;
+  if (SECTION_HEADING_FRAGMENT.test(statement) && statement.length < 150) return true;
+  if (/^(?:page\s*)?\d{1,3}$/i.test(statement)) return true;
+  if (/^\d{1,3}\s+\d+(?:\.\d+)+\s+/.test(statement)) return true;
+  return false;
+}
+
+function topicLocalityScore(anchor: string, statement: string) {
+  let score = 0;
+  const wantsNairobi = /\bnairobi\b/i.test(anchor);
+
+  if (wantsNairobi) {
+    if (/\bnairobi\b/i.test(statement)) score += 40;
+    if (/\bsouth\s+c\b/i.test(statement)) score += 34;
+
+    // A source can be Nairobi-specific while quoting international literature.
+    // Do not let those comparator examples become core local story scenes.
+    if (
+      COMPARATOR_GEOGRAPHY.test(statement) &&
+      !/\bnairobi\b|\bsouth\s+c\b/i.test(statement)
+    ) {
+      score -= 55;
+    }
+  }
+
+  return score;
+}
+
+function evidenceQualityScore(item: EvidenceItem, anchor: string) {
+  const statement = cleanEvidenceStatement(item.statement || "");
+  if (!statement || looksLikeExtractionNoise(statement)) return -1000;
+
+  let score = topicLocalityScore(anchor, statement);
+
+  if (item.kind === "observed") score += 16;
+  if (item.source || item.sourceLabel) score += 8;
+  if (statement.length >= 70 && statement.length <= 380) score += 8;
+  if (FLOOD_MECHANISM.test(statement)) score += 14;
+
+  if (/^\d/.test(statement)) score -= 8;
+  if (/\baccording to\b/i.test(statement) && COMPARATOR_GEOGRAPHY.test(statement)) score -= 20;
+
+  return score;
+}
+
 function normalizeToken(token: string) {
   let value = token
     .toLowerCase()
@@ -148,9 +220,17 @@ function storyLockedEvidence(
     /\bflood/i.test(anchor);
 
   const scored = intake.evidence
-    .filter((item) => clean(item.statement || ""))
+    .map((item) => ({
+      ...item,
+      statement: cleanEvidenceStatement(item.statement || ""),
+    }))
+    .filter(
+      (item) =>
+        clean(item.statement || "") &&
+        !looksLikeExtractionNoise(item.statement)
+    )
     .map((item, index) => {
-      const statement = clean(item.statement);
+      const statement = cleanEvidenceStatement(item.statement);
       const sourceText = clean(
         `${item.sourceLabel || ""} ${item.source || ""}`
       );
@@ -169,7 +249,9 @@ function storyLockedEvidence(
         STALE_HAZARD_NOISE.test(statement) &&
         !/\bflood/i.test(statement);
 
-      let score = lexical * 100;
+      let score =
+        lexical * 100 +
+        evidenceQualityScore(item, anchor);
 
       if (mechanism) score += 28;
       if (item.kind === "observed") score += 8;
@@ -313,15 +395,41 @@ function bestEvidenceBy(
   kinds: EvidenceItem["kind"][] = [
     "observed",
     "inference",
-  ]
+  ],
+  options?: {
+    anchor?: string;
+    prefer?: RegExp;
+    avoid?: RegExp;
+    excludeIds?: string[];
+  }
 ) {
-  return evidence.find(
-    (item) =>
-      kinds.includes(item.kind) &&
-      pattern.test(
-        `${item.statement} ${item.sourceLabel || ""}`
-      )
-  );
+  const anchor = options?.anchor || "";
+  const excluded = new Set(options?.excludeIds || []);
+
+  return evidence
+    .filter(
+      (item) =>
+        !excluded.has(item.id) &&
+        kinds.includes(item.kind) &&
+        pattern.test(
+          `${item.statement} ${item.sourceLabel || ""}`
+        ) &&
+        !looksLikeExtractionNoise(item.statement)
+    )
+    .map((item, index) => {
+      const statement = cleanEvidenceStatement(item.statement);
+      let score = evidenceQualityScore(item, anchor);
+
+      if (options?.prefer?.test(statement)) score += 40;
+      if (options?.avoid?.test(statement)) score -= 35;
+
+      return { item, score, index };
+    })
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.index - b.index
+    )[0]?.item;
 }
 
 function uniqueEvidencePick(
@@ -375,24 +483,64 @@ function buildWorldExplainedEpisode(
       clean(item.statement)
   );
 
+  const anchor = `${intake.topic} ${intake.question}`;
+
   const trigger = bestEvidenceBy(
     evidence,
-    /\b(rainfall|heavy rain|multi-day rain|precipitation|storm)\b/i
+    /\b(rainfall|heavy rain|multi-day rain|precipitation|storm|wettest|rainy season)\b/i,
+    ["observed", "inference"],
+    {
+      anchor,
+      prefer:
+        /\b(multi-day|heavy rainfall|rainfall event|wettest|monthly rainfall|intense rainfall|rainy season|precipitation)\b/i,
+      avoid:
+        /\b(urbanization|urbanisation|impervious|pavement|drainage|waste|garbage)\b/i,
+    }
   );
 
   const drainage = bestEvidenceBy(
     evidence,
-    /\b(drainage|stormwater|blocked drains?|waterways?|culvert|sewer|garbage|waste)\b/i
+    /\b(drainage|stormwater|blocked drains?|waterways?|culvert|sewer|garbage|waste|channel capacity)\b/i,
+    ["observed", "inference"],
+    {
+      anchor,
+      prefer:
+        /\b(blocked|clogged|capacity|maintenance|waste|garbage|overflow|free flow)\b/i,
+      excludeIds: trigger ? [trigger.id] : [],
+    }
   );
 
   const landSystem = bestEvidenceBy(
     evidence,
-    /\b(riparian|floodplain|urban(?:ization|isation)?|settlement planning|informal settlement|impervious|permeab|infiltrat|land[- ]use|runoff|river|channel)\b/i
+    /\b(riparian|floodplain|urban(?:ization|isation)?|settlement planning|informal settlement|impervious|permeab|infiltrat|land[- ]use|runoff|built[- ]?up|paved|densification)\b/i,
+    ["observed", "inference"],
+    {
+      anchor,
+      prefer:
+        /\b(nairobi|south c|impervious|infiltration|built[- ]?up|paved|densification|runoff|land use)\b/i,
+      avoid: COMPARATOR_GEOGRAPHY,
+      excludeIds: [
+        ...(trigger ? [trigger.id] : []),
+        ...(drainage ? [drainage.id] : []),
+      ],
+    }
   );
 
   const governance = bestEvidenceBy(
     evidence,
-    /\b(governance|maintenance|response|politic|budget|coordination|planning|county|institution)\b/i
+    /\b(governance|maintenance|response|politic|budget|coordination|planning|county|institution|development control|by-?law|enforcement)\b/i,
+    ["observed", "inference"],
+    {
+      anchor,
+      prefer:
+        /\b(nairobi|south c|county|maintenance|development control|enforcement|coordination|response)\b/i,
+      avoid: COMPARATOR_GEOGRAPHY,
+      excludeIds: [
+        ...(trigger ? [trigger.id] : []),
+        ...(drainage ? [drainage.id] : []),
+        ...(landSystem ? [landSystem.id] : []),
+      ],
+    }
   );
 
   const picked = uniqueEvidencePick([
@@ -405,6 +553,17 @@ function buildWorldExplainedEpisode(
   ]);
 
   const primary =
+    bestEvidenceBy(
+      evidence,
+      /\b(flood|flooding|runoff|drainage|infiltration|urbanization|urbanisation|built[- ]?up)\b/i,
+      ["observed", "inference"],
+      {
+        anchor,
+        prefer:
+          /\b(nairobi|south c|runoff|drainage|infiltration|built[- ]?up)\b/i,
+        avoid: COMPARATOR_GEOGRAPHY,
+      }
+    ) ||
     picked[0] ||
     observed[0] ||
     evidence[0];
@@ -435,7 +594,19 @@ function buildWorldExplainedEpisode(
     primary;
 
   const limitation =
-    limitations[0];
+    limitations
+      .filter(
+        (item) =>
+          !looksLikeExtractionNoise(item.statement) &&
+          /\b(limit|limitation|scope|sample|case study|cannot|could not|not assess|not measure|not establish|uncertain|validation|data gap|further study|generaliz|generalis)\b/i.test(
+            item.statement
+          )
+      )
+      .sort(
+        (a, b) =>
+          evidenceQualityScore(b, anchor) -
+          evidenceQualityScore(a, anchor)
+      )[0];
 
   const totalSec = Math.round(
     Math.max(
@@ -471,7 +642,14 @@ function buildWorldExplainedEpisode(
 
   const limitationText = limitation
     ? evidenceText(limitation)
-    : "The current evidence does not yet establish every link in the causal chain. Missing mechanism evidence should remain visible rather than being filled with assumptions.";
+    : /\bnairobi\b/i.test(anchor) &&
+        /\bsouth\s+c\b/i.test(
+          evidence
+            .map((item) => `${item.sourceLabel || ""} ${item.statement}`)
+            .join(" ")
+        )
+      ? "The strongest local mechanism evidence in this draft comes from a South C case study. It can show how flooding works in that neighbourhood, but it cannot by itself establish that the same mechanisms explain every flood location across Nairobi."
+      : "The current evidence does not yet establish every link in the causal chain. Missing mechanism evidence should remain visible rather than being filled with assumptions.";
 
   const evidenceCount =
     evidence.length;
@@ -498,7 +676,7 @@ function buildWorldExplainedEpisode(
       pack.accentLabel,
       question,
       primaryText,
-      `${question} Start with what is visible and verifiable. ${primaryText} The important question is not whether flooding happens, but what turns rainfall into recurring urban disruption.`,
+      `When heavy rain hits Nairobi, water does not become a disaster everywhere in the same way. ${primaryText} So the useful question is not simply whether it rained. It is what the city has done to the paths that water is supposed to take.`,
       primary ? [primary.id] : []
     ),
 
@@ -528,8 +706,10 @@ function buildWorldExplainedEpisode(
       "TRIGGER",
       "Start with the rain — but do not stop there.",
       triggerText,
-      `First, the trigger. ${triggerText} This establishes what the evidence says about rainfall or flood conditions. It does not, by itself, explain why the same rainfall becomes damaging in particular parts of the city.`,
-      triggerItem ? [triggerItem.id] : []
+      trigger
+        ? `First, the trigger. ${triggerText} That tells us what the evidence says about the rainfall conditions. But rainfall alone does not explain why damage concentrates in particular streets and neighbourhoods.`
+        : `Heavy rainfall is the trigger we need to establish more precisely. The current local evidence discusses rain and flooding, but this draft still lacks a strong, separately ingested rainfall source. That gap stays visible until a rainfall-specific source is added.`,
+      trigger ? [trigger.id] : []
     ),
 
     scene(
@@ -538,7 +718,7 @@ function buildWorldExplainedEpisode(
       "FLOW PATH",
       "What happens after water hits the city?",
       drainageText,
-      `Now follow the water. ${drainageText} The causal question is whether drainage capacity, blocked waterways, waste, culverts or maintenance change how quickly water can leave streets and neighbourhoods. Only the links supported by evidence should be drawn as established; the rest stay visually marked as hypotheses.`,
+      `Now follow the water. The local evidence points to drainage capacity and altered or obstructed flow paths as part of the mechanism. ${drainageText} In the visual story, every arrow from runoff to drain to river should be marked as established only when a source supports it; unsupported links stay visibly uncertain.`,
       drainageItem ? [drainageItem.id] : [],
       {
         visualLabels: [
@@ -558,7 +738,7 @@ function buildWorldExplainedEpisode(
       "URBAN FORM",
       "The city changes where water can go.",
       landText,
-      `Flooding is also spatial. ${landText} This is where settlement planning, riparian systems, impervious surfaces, infiltration and development in flood-prone areas can become part of the explanation — but only where the source evidence actually supports those mechanisms.`,
+      `The city also changes the surface the rain lands on. ${landText} More roofs, roads and paved ground can reduce infiltration and increase runoff; development can also alter natural drainage routes. The point is not that every built surface causes a flood, but that urban form changes the hydrology the drainage system has to handle.`,
       landItem ? [landItem.id] : []
     ),
 
@@ -568,7 +748,7 @@ function buildWorldExplainedEpisode(
       "MAINTENANCE & RESPONSE",
       "Infrastructure is a system only if it is maintained.",
       governanceText,
-      `Physical infrastructure is only one layer. ${governanceText} Maintenance, coordination, planning and response determine whether known risks are reduced before the next storm or handled only after streets are already flooded.`,
+      `Drainage capacity is not fixed once concrete is poured. ${governanceText} Cleaning, maintenance, development control and coordination can determine whether the system keeps the capacity it was designed to have—or loses it before the next storm.`,
       governanceItem ? [governanceItem.id] : [],
       {
         visualLabels: [
@@ -588,7 +768,7 @@ function buildWorldExplainedEpisode(
       "TRUST BOUNDARY",
       "What does the evidence still not prove?",
       limitationText,
-      `This is the trust boundary. ${limitationText} A strong explainer should show uncertainty in the causal map instead of smoothing it away.`,
+      `This is where the evidence stops. ${limitationText} That boundary belongs in the final video, because a Nairobi-wide conclusion needs evidence that is wider than one neighbourhood or one type of source.`,
       limitation ? [limitation.id] : []
     ),
 
