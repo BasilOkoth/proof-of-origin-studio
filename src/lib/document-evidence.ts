@@ -99,7 +99,9 @@ function titleFromText(text: string, fileName: string) {
 }
 
 function sentences(text: string) {
-  return clean(text)
+  const cleaned = clean(text);
+
+  const sentenceCandidates = cleaned
     .split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
     .map(clean)
     .filter(
@@ -109,6 +111,48 @@ function sentences(text: string) {
         !looksLikeMetadata(sentence) &&
         !FRONT_MATTER_TEXT.test(sentence)
     );
+
+  if (sentenceCandidates.length >= 3) {
+    return sentenceCandidates;
+  }
+
+  /*
+   * Some PDFs collapse sentence boundaries during text extraction.
+   * Fall back to line/layout chunks without relaxing metadata safeguards.
+   */
+  const layoutCandidates = text
+    .split(/\n{1,}/)
+    .map(cleanLine)
+    .flatMap((line) => {
+      if (line.length <= 520) return [line];
+
+      const chunks: string[] = [];
+      const words = line.split(/\s+/);
+      let current = "";
+
+      for (const word of words) {
+        const next = current ? `${current} ${word}` : word;
+
+        if (next.length > 460 && current.length >= 38) {
+          chunks.push(current);
+          current = word;
+        } else {
+          current = next;
+        }
+      }
+
+      if (current) chunks.push(current);
+      return chunks;
+    })
+    .filter(
+      (candidate) =>
+        candidate.length >= 38 &&
+        candidate.length <= 520 &&
+        !looksLikeMetadata(candidate) &&
+        !FRONT_MATTER_TEXT.test(candidate)
+    );
+
+  return unique([...sentenceCandidates, ...layoutCandidates]);
 }
 
 function unique(values: string[]) {

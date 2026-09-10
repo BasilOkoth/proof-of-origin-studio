@@ -624,8 +624,12 @@ export async function POST(request: Request) {
     }
 
     if (!evidence.length && !dataset) {
+      const extractedChars = extractedText.trim().length;
+
       throw new Error(
-        "The source downloaded successfully, but no usable evidence items were extracted."
+        extractedChars
+          ? `The source downloaded and ${extractedChars.toLocaleString()} text characters were read, but the evidence extractor could not identify a usable claim. Keep it as a source record or ingest the file manually for review.`
+          : "The source downloaded successfully, but no readable evidence text was extracted."
       );
     }
 

@@ -268,13 +268,54 @@ export function EvidenceIntelligenceLab({
 
     void (async () => {
       try {
+        const currentScoutIds = new Set(
+          scout.sources.map((source) => source.id)
+        );
+
+        /*
+         * Scout candidates are refreshable discovery records.
+         * Remove stale, unreviewed scout candidates from older searches,
+         * but preserve ingested/reviewed/local/manual evidence.
+         */
+        const previous = await listEvidenceLibrary();
+
+        for (const record of previous) {
+          const staleScoutCandidate =
+            record.origin === "scout" &&
+            record.status === "candidate" &&
+            !currentScoutIds.has(record.id);
+
+          if (staleScoutCandidate) {
+            await deleteEvidenceLibraryRecord(record.id);
+          }
+        }
+
         for (const source of scout.sources) {
           const existing = await getEvidenceLibraryRecord(
             source.id
           );
-          if (existing) continue;
+
+          if (
+            existing?.status === "ingested" ||
+            existing?.status === "reviewed"
+          ) {
+            continue;
+          }
+
           await saveEvidenceLibraryRecord(
-            scoutSourceToLibraryRecord(source)
+            existing
+              ? mergeLibraryRecord(
+                  existing,
+                  {
+                    ...scoutSourceToLibraryRecord(source),
+                    id: source.id,
+                    title: source.title,
+                    sourceType: source.sourceType,
+                    status: "candidate",
+                    origin: "scout",
+                  }
+                )
+              : scoutSourceToLibraryRecord(source)
           );
         }
 
@@ -296,7 +337,7 @@ export function EvidenceIntelligenceLab({
         if (live) {
           setError(
             err?.message ||
-              "Unable to save Evidence Scout results to the library."
+              "Unable to synchronize Evidence Scout results with the library."
           );
         }
       }
