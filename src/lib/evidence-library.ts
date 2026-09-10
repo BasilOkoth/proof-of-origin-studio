@@ -2,7 +2,7 @@ import type { DatasetAnalysis, EvidenceAsset, EvidenceItem, EvidenceSourceType }
 import type { EvidenceScoutSource } from "./evidence-scout";
 
 export type LibraryStatus = "candidate" | "ingested" | "reviewed";
-export type LibraryOrigin = "scout" | "upload" | "manual";
+export type LibraryOrigin = "scout" | "upload" | "manual" | "extracted";
 
 export type EvidenceLibraryRecord = {
   id: string;

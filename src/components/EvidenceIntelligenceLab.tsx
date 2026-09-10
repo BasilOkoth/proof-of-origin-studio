@@ -34,6 +34,10 @@ import {
   VISUAL_EVIDENCE_VERSION,
 } from "@/lib/visual-evidence";
 import {
+  extractPdfVisuals,
+  PDF_VISUAL_EXTRACTION_VERSION,
+} from "@/lib/pdf-visual-extractor";
+import {
   buildEvidenceIntelligence,
   type EvidenceIntelligenceReport,
   type StoryHunterAngle,
@@ -246,6 +250,8 @@ export function EvidenceIntelligenceLab({
   const [localType, setLocalType] =
     useState<EvidenceSourceType>("paper");
   const [localBusy, setLocalBusy] = useState(false);
+  const [pdfVisualBusyId, setPdfVisualBusyId] = useState<string | null>(null);
+  const [pdfVisualStatus, setPdfVisualStatus] = useState("");
 
   const questionCandidates = useMemo(
     () => scout?.questions || [],
@@ -868,6 +874,107 @@ export function EvidenceIntelligenceLab({
     }
   }
 
+  async function extractAndStorePdfVisuals(
+    record: EvidenceLibraryRecord,
+    options: { quiet?: boolean } = {}
+  ) {
+    if (
+      !record.fileBlob ||
+      !record.fileName ||
+      !(
+        record.mimeType === "application/pdf" ||
+        record.fileName.toLowerCase().endsWith(".pdf")
+      )
+    ) {
+      if (!options.quiet) {
+        setError("This library item does not contain a stored PDF.");
+      }
+      return [];
+    }
+
+    setPdfVisualBusyId(record.id);
+    setPdfVisualStatus(
+      `Scanning ${record.fileName} for figures, maps, charts and plates…`
+    );
+
+    try {
+      const visuals = await extractPdfVisuals({
+        blob: record.fileBlob,
+        fileName: record.fileName,
+        maxVisuals: 32,
+        maxPages: 160,
+        onProgress: setPdfVisualStatus,
+      });
+
+      if (!visuals.length) {
+        setPdfVisualStatus(
+          `No explicit Plate, Figure, Map or Chart captions were detected in ${record.fileName}.`
+        );
+        return [];
+      }
+
+      const now = new Date().toISOString();
+
+      for (const visual of visuals) {
+        const extractedRecord: EvidenceLibraryRecord = {
+          id: visual.id,
+          createdAt: now,
+          updatedAt: now,
+          title: visual.caption,
+          provider: "PDF Visual Extraction",
+          sourceType: "field",
+          status: "ingested",
+          origin: "extracted",
+          tags: [
+            "visual-evidence",
+            "pdf-extracted",
+            visual.kind,
+            `parent:${record.id}`,
+            `page:${visual.pageNumber}`,
+            `pdf-visual:${PDF_VISUAL_EXTRACTION_VERSION}`,
+          ],
+          fileName: visual.fileName,
+          mimeType: visual.mimeType,
+          byteLength: visual.blob.size,
+          extractedText: "",
+          summary:
+            `${visual.label} extracted from ${record.fileName}, page ${visual.pageNumber}. ` +
+            `Crop confidence ${Math.round(visual.cropConfidence * 100)}%. ` +
+            "The original PDF remains the provenance source.",
+          evidence: [],
+          visualAsset: visual.asset,
+          fileBlob: visual.blob,
+        };
+
+        await saveEvidenceLibraryRecord(extractedRecord);
+      }
+
+      onIntegrateVisualAssets(
+        visuals.map((visual) => visual.asset)
+      );
+
+      const records = await refreshLibrary();
+      setLibrary(records);
+      reanalyze(records);
+
+      setPdfVisualStatus(
+        `✓ Extracted ${visuals.length} PDF visual${visuals.length === 1 ? "" : "s"} from ${record.fileName}. They are now persistent visual evidence and available to Story & Video.`
+      );
+
+      return visuals;
+    } catch (err: any) {
+      const message =
+        err?.message ||
+        "PDF visual extraction failed.";
+
+      setError(message);
+      setPdfVisualStatus("");
+      return [];
+    } finally {
+      setPdfVisualBusyId(null);
+    }
+  }
+
   async function importLocalFile(file?: File) {
     if (!file) return;
 
@@ -1092,6 +1199,21 @@ export function EvidenceIntelligenceLab({
 
       await saveEvidenceLibraryRecord(record);
 
+      /*
+       * PDF visual extraction is automatic for locally uploaded papers/reports.
+       * It is asynchronous from text ingestion but completes before the import
+       * busy state clears so the user immediately sees the extracted visuals.
+       */
+      const isPdf =
+        record.mimeType === "application/pdf" ||
+        record.fileName?.toLowerCase().endsWith(".pdf");
+
+      if (isPdf) {
+        await extractAndStorePdfVisuals(record, {
+          quiet: true,
+        });
+      }
+
       onIntegrate(
         newEvidence,
         importedDatasets.length
@@ -1245,6 +1367,9 @@ export function EvidenceIntelligenceLab({
         {rebuildStatus && (
           <Notice>{rebuildStatus}</Notice>
         )}
+        {pdfVisualStatus && (
+          <Notice>{pdfVisualStatus}</Notice>
+        )}
 
         <div
           style={{
@@ -1389,11 +1514,15 @@ export function EvidenceIntelligenceLab({
                         : "metadata"}
                     </span>
                     <span>
-                      {record.dataset
-                        ? `${record.dataset.rowCount} data rows`
-                        : record.extractedText
-                          ? `${record.extractedText.length.toLocaleString()} chars`
-                          : "not ingested"}
+                      {record.visualAsset
+                        ? record.tags.includes("pdf-extracted")
+                          ? `PDF visual · ${record.tags.find((tag) => tag.startsWith("page:"))?.replace("page:", "page ") || "page provenance"}`
+                          : "visual evidence"
+                        : record.dataset
+                          ? `${record.dataset.rowCount} data rows`
+                          : record.extractedText
+                            ? `${record.extractedText.length.toLocaleString()} chars`
+                            : "not ingested"}
                     </span>
                   </div>
 
@@ -1434,6 +1563,28 @@ export function EvidenceIntelligenceLab({
                         Download stored file
                       </button>
                     )}
+
+                    {record.fileBlob &&
+                      (record.mimeType === "application/pdf" ||
+                        record.fileName?.toLowerCase().endsWith(".pdf")) && (
+                        <button
+                          type="button"
+                          className="button"
+                          disabled={pdfVisualBusyId === record.id}
+                          onClick={() =>
+                            extractAndStorePdfVisuals(record)
+                          }
+                        >
+                          {pdfVisualBusyId === record.id ? (
+                            <LoaderCircle size={14} />
+                          ) : (
+                            <FileSearch size={14} />
+                          )}{" "}
+                          {pdfVisualBusyId === record.id
+                            ? "Extracting PDF visuals…"
+                            : "Extract figures / maps / plates"}
+                        </button>
+                      )}
 
                     {record.status ===
                       "ingested" && (
