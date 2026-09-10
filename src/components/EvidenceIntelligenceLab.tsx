@@ -17,7 +17,11 @@ import {
   WandSparkles,
 } from "lucide-react";
 
-import { analyzeCsv } from "@/lib/data-story";
+import {
+  analyzeCsv,
+  DATASET_ANALYSIS_VERSION,
+  isDatasetAnalysisCurrent,
+} from "@/lib/data-story";
 import { analyzeXlsx } from "@/lib/xlsx-story";
 import {
   buildEvidenceIntelligence,
@@ -108,6 +112,22 @@ function dedupeDatasets(items: DatasetAnalysis[]) {
   return [...byName.values()];
 }
 
+
+function datasetsFromLibrary(
+  records: EvidenceLibraryRecord[]
+) {
+  return dedupeDatasets(
+    records.flatMap((record) =>
+      record.datasets?.length
+        ? record.datasets
+        : record.dataset &&
+            isDatasetAnalysisCurrent(record.dataset)
+          ? [record.dataset]
+          : []
+    )
+  );
+}
+
 function sourceBadge(record: EvidenceLibraryRecord) {
   if (record.status === "reviewed") return "reviewed";
   if (record.status === "ingested") return "ingested";
@@ -144,22 +164,38 @@ function looksLikeExcel(file: Pick<File, "name" | "type">) {
   );
 }
 
-function looksCorruptedSpreadsheetRecord(record: EvidenceLibraryRecord) {
-  if (!record.fileName || !/\.(xlsx|xlsm)$/i.test(record.fileName)) {
+function isStoredDatasetFile(record: EvidenceLibraryRecord) {
+  return Boolean(
+    record.fileName &&
+      /\.(csv|xlsx|xlsm)$/i.test(record.fileName)
+  );
+}
+
+function datasetRecordNeedsRefresh(record: EvidenceLibraryRecord) {
+  if (!isStoredDatasetFile(record) || !record.fileBlob) {
     return false;
   }
 
   const title = record.title || "";
   const hasReplacementCharacters = /�/.test(title);
-  const hasControlCharacters = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(
-    title
-  );
+  const hasControlCharacters =
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(
+      title
+    );
 
   return (
     !record.dataset ||
+    !isDatasetAnalysisCurrent(record.dataset) ||
     hasReplacementCharacters ||
     hasControlCharacters
   );
+}
+
+function replaceAnalysisTag(tags: string[] = []) {
+  return [
+    ...tags.filter((tag) => !tag.startsWith("analysis:")),
+    `analysis:${DATASET_ANALYSIS_VERSION}`,
+  ];
 }
 
 export function EvidenceIntelligenceLab({
@@ -196,30 +232,81 @@ export function EvidenceIntelligenceLab({
   }
 
 
-  async function repairStoredSpreadsheets(
+  async function refreshStoredDatasets(
     records: EvidenceLibraryRecord[]
   ) {
-    const repaired: EvidenceLibraryRecord[] = [];
-    const repairedEvidence: EvidenceItem[] = [];
-    const repairedDatasets: DatasetAnalysis[] = [];
+    const refreshed: EvidenceLibraryRecord[] = [];
+    const refreshedEvidence: EvidenceItem[] = [];
+    const refreshedDatasets: DatasetAnalysis[] = [];
 
     for (const record of records) {
       if (
-        !looksCorruptedSpreadsheetRecord(record) ||
+        !datasetRecordNeedsRefresh(record) ||
         !record.fileBlob ||
         !record.fileName
       ) {
-        repaired.push(record);
+        refreshed.push(record);
+
+        if (record.sourceType === "dataset") {
+          refreshedEvidence.push(...(record.evidence || []));
+
+          if (record.datasets?.length) {
+            refreshedDatasets.push(...record.datasets);
+          } else if (
+            record.dataset &&
+            isDatasetAnalysisCurrent(record.dataset)
+          ) {
+            refreshedDatasets.push(record.dataset);
+          }
+        }
+
         continue;
       }
 
       try {
-        const workbook = await analyzeXlsx(
-          record.fileBlob,
-          record.fileName
-        );
+        const lowerName = record.fileName.toLowerCase();
+        const excel =
+          lowerName.endsWith(".xlsx") ||
+          lowerName.endsWith(".xlsm");
 
-        const spreadsheetEvidence = workbook.datasets.flatMap(
+        let parsedDatasets: DatasetAnalysis[] = [];
+        let primaryDataset: DatasetAnalysis | undefined;
+        let extractedText = record.extractedText || "";
+        let title = record.title;
+        let summary = record.summary;
+
+        if (excel) {
+          const workbook = await analyzeXlsx(
+            record.fileBlob,
+            record.fileName
+          );
+
+          parsedDatasets = workbook.datasets;
+          primaryDataset = workbook.primaryDataset;
+          extractedText = workbook.extractedText;
+          title = workbook.title;
+          summary = `${workbook.datasets.length} chartable dataset${
+            workbook.datasets.length === 1 ? "" : "s"
+          } refreshed from ${workbook.sheetNames.length} readable Excel sheet${
+            workbook.sheetNames.length === 1 ? "" : "s"
+          } using ${DATASET_ANALYSIS_VERSION}.`;
+        } else {
+          const csvText = await record.fileBlob.text();
+          const analysis = analyzeCsv(
+            csvText,
+            record.fileName
+          );
+
+          parsedDatasets = [analysis];
+          primaryDataset = analysis;
+          extractedText = csvText.slice(0, 120_000);
+          title = record.fileName
+            .replace(/\.csv$/i, "")
+            .replace(/[_-]+/g, " ");
+          summary = `CSV re-analysed using ${DATASET_ANALYSIS_VERSION}.`;
+        }
+
+        const datasetEvidence = parsedDatasets.flatMap(
           (item) =>
             item.insight
               ? [
@@ -237,50 +324,45 @@ export function EvidenceIntelligenceLab({
 
         const updated = mergeLibraryRecord(record, {
           id: record.id,
-          title: workbook.title,
+          title,
           sourceType: "dataset",
           status: "ingested",
-          summary: `${workbook.datasets.length} tabular sheet${
-            workbook.datasets.length === 1 ? "" : "s"
-          } parsed from the Excel workbook.`,
-          extractedText: workbook.extractedText,
-          evidence: spreadsheetEvidence,
-          dataset: workbook.primaryDataset,
-          mimeType:
-            record.mimeType ||
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          tags: Array.from(
-            new Set([
-              ...(record.tags || []),
-              "dataset",
-              "spreadsheet",
-              "xlsx",
-              "repaired",
-            ])
-          ),
+          summary,
+          extractedText,
+          evidence: datasetEvidence,
+          dataset: primaryDataset,
+          datasets: parsedDatasets,
+          tags: replaceAnalysisTag([
+            ...(record.tags || []),
+            "dataset",
+            ...(excel
+              ? ["spreadsheet", "xlsx"]
+              : ["csv"]),
+            "auto-refreshed",
+          ]),
         });
 
         await saveEvidenceLibraryRecord(updated);
-        repaired.push(updated);
-        repairedEvidence.push(...spreadsheetEvidence);
-        repairedDatasets.push(...workbook.datasets);
-      } catch (spreadsheetError) {
+        refreshed.push(updated);
+        refreshedEvidence.push(...datasetEvidence);
+        refreshedDatasets.push(...parsedDatasets);
+      } catch (datasetError) {
         console.warn(
-          `Unable to repair stored spreadsheet ${record.fileName}:`,
-          spreadsheetError
+          `Unable to refresh stored dataset ${record.fileName}:`,
+          datasetError
         );
-        repaired.push(record);
+        refreshed.push(record);
       }
     }
 
-    if (repairedEvidence.length || repairedDatasets.length) {
+    if (refreshedEvidence.length || refreshedDatasets.length) {
       onIntegrate(
-        dedupeEvidence(repairedEvidence),
-        dedupeDatasets(repairedDatasets)
+        dedupeEvidence(refreshedEvidence),
+        dedupeDatasets(refreshedDatasets)
       );
     }
 
-    return repaired.sort((a, b) =>
+    return refreshed.sort((a, b) =>
       b.updatedAt.localeCompare(a.updatedAt)
     );
   }
@@ -307,7 +389,7 @@ export function EvidenceIntelligenceLab({
 
     try {
       const listed = await listEvidenceLibrary();
-      const records = await repairStoredSpreadsheets(listed);
+      const records = await refreshStoredDatasets(listed);
       setLibrary(records);
 
       setRebuildStatus(
@@ -322,7 +404,10 @@ export function EvidenceIntelligenceLab({
         topic,
         question,
         evidence,
-        datasets,
+        datasets: dedupeDatasets([
+          ...datasets,
+          ...datasetsFromLibrary(records),
+        ]),
         library: records,
         questionCandidates,
       });
@@ -353,7 +438,7 @@ export function EvidenceIntelligenceLab({
     void (async () => {
       try {
         const listed = await listEvidenceLibrary();
-        const records = await repairStoredSpreadsheets(listed);
+        const records = await refreshStoredDatasets(listed);
         if (!live) return;
 
         setLibrary(records);
@@ -362,7 +447,10 @@ export function EvidenceIntelligenceLab({
             topic,
             question,
             evidence,
-            datasets,
+            datasets: dedupeDatasets([
+              ...datasets,
+              ...datasetsFromLibrary(records),
+            ]),
             library: records,
             questionCandidates,
           })
@@ -410,7 +498,10 @@ export function EvidenceIntelligenceLab({
             topic,
             question,
             evidence,
-            datasets,
+            datasets: dedupeDatasets([
+              ...datasets,
+              ...datasetsFromLibrary(records),
+            ]),
             library: records,
             questionCandidates: scout.questions,
           })
@@ -730,6 +821,9 @@ export function EvidenceIntelligenceLab({
           dataset || importedDatasets.length
             ? "dataset"
             : localType,
+          ...(dataset || importedDatasets.length
+            ? [`analysis:${DATASET_ANALYSIS_VERSION}`]
+            : []),
           ...(looksLikeExcel(file)
             ? ["spreadsheet", "xlsx"]
             : []),
@@ -747,6 +841,11 @@ export function EvidenceIntelligenceLab({
         summary,
         evidence: newEvidence,
         dataset,
+        datasets: importedDatasets.length
+          ? importedDatasets
+          : dataset
+            ? [dataset]
+            : undefined,
         fileBlob: file,
       };
 

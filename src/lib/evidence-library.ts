@@ -28,6 +28,7 @@ export type EvidenceLibraryRecord = {
   extractedText?: string;
   evidence: EvidenceItem[];
   dataset?: DatasetAnalysis;
+  datasets?: DatasetAnalysis[];
   fileBlob?: Blob;
 };
 
@@ -57,7 +58,11 @@ function browserDb(): Promise<IDBDatabase> {
 
 async function withStore<T>(
   mode: IDBTransactionMode,
-  operation: (store: IDBObjectStore, resolve: (value: T) => void, reject: (reason?: unknown) => void) => void
+  operation: (
+    store: IDBObjectStore,
+    resolve: (value: T) => void,
+    reject: (reason?: unknown) => void
+  ) => void
 ): Promise<T> {
   const db = await browserDb();
   return new Promise<T>((resolve, reject) => {
@@ -83,15 +88,23 @@ export async function listEvidenceLibrary(): Promise<EvidenceLibraryRecord[]> {
   });
 }
 
-export async function getEvidenceLibraryRecord(id: string): Promise<EvidenceLibraryRecord | undefined> {
-  return withStore<EvidenceLibraryRecord | undefined>("readonly", (store, resolve, reject) => {
-    const request = store.get(id);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result as EvidenceLibraryRecord | undefined);
-  });
+export async function getEvidenceLibraryRecord(
+  id: string
+): Promise<EvidenceLibraryRecord | undefined> {
+  return withStore<EvidenceLibraryRecord | undefined>(
+    "readonly",
+    (store, resolve, reject) => {
+      const request = store.get(id);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () =>
+        resolve(request.result as EvidenceLibraryRecord | undefined);
+    }
+  );
 }
 
-export async function saveEvidenceLibraryRecord(record: EvidenceLibraryRecord): Promise<void> {
+export async function saveEvidenceLibraryRecord(
+  record: EvidenceLibraryRecord
+): Promise<void> {
   return withStore<void>("readwrite", (store, resolve, reject) => {
     const request = store.put(record);
     request.onerror = () => reject(request.error);
@@ -99,7 +112,9 @@ export async function saveEvidenceLibraryRecord(record: EvidenceLibraryRecord): 
   });
 }
 
-export async function deleteEvidenceLibraryRecord(id: string): Promise<void> {
+export async function deleteEvidenceLibraryRecord(
+  id: string
+): Promise<void> {
   return withStore<void>("readwrite", (store, resolve, reject) => {
     const request = store.delete(id);
     request.onerror = () => reject(request.error);
@@ -107,7 +122,9 @@ export async function deleteEvidenceLibraryRecord(id: string): Promise<void> {
   });
 }
 
-export function scoutSourceToLibraryRecord(source: EvidenceScoutSource): EvidenceLibraryRecord {
+export function scoutSourceToLibraryRecord(
+  source: EvidenceScoutSource
+): EvidenceLibraryRecord {
   const now = new Date().toISOString();
   return {
     id: source.id,
@@ -133,7 +150,8 @@ export function scoutSourceToLibraryRecord(source: EvidenceScoutSource): Evidenc
 
 export function mergeLibraryRecord(
   existing: EvidenceLibraryRecord | undefined,
-  patch: Partial<EvidenceLibraryRecord> & Pick<EvidenceLibraryRecord, "id" | "title" | "sourceType">
+  patch: Partial<EvidenceLibraryRecord> &
+    Pick<EvidenceLibraryRecord, "id" | "title" | "sourceType">
 ): EvidenceLibraryRecord {
   const now = new Date().toISOString();
   return {
@@ -160,6 +178,7 @@ export function mergeLibraryRecord(
     extractedText: patch.extractedText ?? existing?.extractedText,
     evidence: patch.evidence ?? existing?.evidence ?? [],
     dataset: patch.dataset ?? existing?.dataset,
+    datasets: patch.datasets ?? existing?.datasets,
     fileBlob: patch.fileBlob ?? existing?.fileBlob,
   };
 }
@@ -167,16 +186,29 @@ export function mergeLibraryRecord(
 export function base64ToBlob(base64: string, mimeType: string) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type: mimeType || "application/octet-stream" });
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], {
+    type: mimeType || "application/octet-stream",
+  });
 }
 
 export function downloadLibraryBlob(record: EvidenceLibraryRecord) {
-  if (!record.fileBlob) throw new Error("This library item does not contain a stored file.");
+  if (!record.fileBlob) {
+    throw new Error("This library item does not contain a stored file.");
+  }
+
   const href = URL.createObjectURL(record.fileBlob);
   const anchor = document.createElement("a");
   anchor.href = href;
-  anchor.download = record.fileName || `${record.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "evidence"}`;
+  anchor.download =
+    record.fileName ||
+    `${
+      record.title
+        .replace(/[^a-z0-9]+/gi, "-")
+        .replace(/^-|-$/g, "") || "evidence"
+    }`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

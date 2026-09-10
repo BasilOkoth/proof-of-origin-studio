@@ -17,6 +17,25 @@ type ColumnRoles = {
   categoryColumns: string[];
 };
 
+export const DATASET_ANALYSIS_VERSION = "data-story-2026-09-10-v4";
+
+type VersionedDatasetAnalysis = DatasetAnalysis & {
+  analysisVersion?: string;
+  sourceKind?: "csv" | "xlsx" | "legacy";
+  sourceText?: string;
+};
+
+export function datasetAnalysisVersion(dataset: DatasetAnalysis) {
+  return (dataset as VersionedDatasetAnalysis).analysisVersion;
+}
+
+export function isDatasetAnalysisCurrent(dataset?: DatasetAnalysis) {
+  return Boolean(
+    dataset &&
+      datasetAnalysisVersion(dataset) === DATASET_ANALYSIS_VERSION
+  );
+}
+
 function clean(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -556,5 +575,77 @@ export function analyzeCsv(
     recommendedChart,
     recommendedMap,
     insight: describeInsight(recommendedChart, recommendedMap),
-  };
+    analysisVersion: DATASET_ANALYSIS_VERSION,
+    sourceKind: "csv",
+    sourceText: input.length <= 250_000 ? input : undefined,
+  } as VersionedDatasetAnalysis;
+}
+
+export function upgradeLegacyDatasetAnalysis(
+  dataset: DatasetAnalysis
+): DatasetAnalysis {
+  const current = dataset as VersionedDatasetAnalysis;
+
+  if (current.analysisVersion === DATASET_ANALYSIS_VERSION) {
+    return dataset;
+  }
+
+  if (current.sourceText) {
+    return analyzeCsv(current.sourceText, dataset.name);
+  }
+
+  let recommendedChart = dataset.recommendedChart;
+  const recommendedMap = dataset.recommendedMap;
+
+  if (
+    recommendedChart &&
+    /^(lat|latitude|lon|lng|long|longitude)$/i.test(
+      (recommendedChart.yLabel || "").trim()
+    )
+  ) {
+    recommendedChart = undefined;
+  }
+
+  if (recommendedChart?.type === "line") {
+    const distinctLabels = new Set(
+      recommendedChart.data.map((item) => item.label.trim())
+    );
+
+    if (distinctLabels.size < 2) {
+      const mappedValues =
+        recommendedMap?.points.filter(
+          (point) =>
+            typeof point.value === "number" &&
+            Number.isFinite(point.value)
+        ) || [];
+
+      if (mappedValues.length >= 2) {
+        recommendedChart = {
+          type: mappedValues.length > 8 ? "ranking" : "bar",
+          title: `${recommendedChart.yLabel || "value"} by location`,
+          subtitle: dataset.name,
+          xLabel: "location",
+          yLabel: recommendedChart.yLabel,
+          data: mappedValues.map((point) => ({
+            label: point.label,
+            value: point.value as number,
+          })),
+          sourceLabel:
+            recommendedChart.sourceLabel ||
+            recommendedMap?.sourceLabel ||
+            dataset.name,
+        };
+      } else {
+        recommendedChart = undefined;
+      }
+    }
+  }
+
+  return {
+    ...dataset,
+    recommendedChart,
+    insight: describeInsight(recommendedChart, recommendedMap),
+    analysisVersion: DATASET_ANALYSIS_VERSION,
+    sourceKind: current.sourceKind || "legacy",
+  } as VersionedDatasetAnalysis;
 }

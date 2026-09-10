@@ -31,7 +31,10 @@ import {
 } from "lucide-react";
 import { Player } from "@remotion/player";
 
-import { analyzeCsv } from "@/lib/data-story";
+import {
+  analyzeCsv,
+  upgradeLegacyDatasetAnalysis,
+} from "@/lib/data-story";
 import { analyzeXlsx } from "@/lib/xlsx-story";
 import { scoutSourceToEvidence, type EvidenceScoutResponse, type EvidenceScoutSource, type StoryQuestionCandidate } from "@/lib/evidence-scout";
 import { downloadText, projectAsMarkdown } from "@/lib/export";
@@ -224,7 +227,11 @@ export default function StudioPage() {
           setMinutes(saved.minutes);
         }
         if (Array.isArray(saved.evidence)) setEvidence(saved.evidence);
-        if (Array.isArray(saved.datasets)) setDatasets(saved.datasets);
+        if (Array.isArray(saved.datasets)) {
+          setDatasets(
+            saved.datasets.map(upgradeLegacyDatasetAnalysis)
+          );
+        }
         if (saved.activeTab && isValidTab(saved.activeTab)) {
           setActiveTab(saved.activeTab);
         }
@@ -336,7 +343,14 @@ export default function StudioPage() {
 
     base.assets = project.assets;
     if (nextMode === "hps") base.hpsIngestion = project.hpsIngestion;
-    const enriched = applyVisualIntelligence(base, nextDatasets);
+    const currentDatasets = nextDatasets.map(
+      upgradeLegacyDatasetAnalysis
+    );
+    const enriched = applyVisualIntelligence(
+      base,
+      currentDatasets
+    );
+    setDatasets(currentDatasets);
     setProject(enriched);
     setMode(nextMode);
     setManualScriptEdits(false);
@@ -498,7 +512,13 @@ export default function StudioPage() {
         retentionPurpose: `Story Hunter opening · ${angle.angle} · score ${angle.overall}/100`,
       };
     }
-    setProject(applyVisualIntelligence(base, datasets));
+    const currentDatasets = datasets.map(
+      upgradeLegacyDatasetAnalysis
+    );
+    setDatasets(currentDatasets);
+    setProject(
+      applyVisualIntelligence(base, currentDatasets)
+    );
     setManualScriptEdits(false);
     setEditingSceneId(null);
     setActiveTab("story");
@@ -512,7 +532,16 @@ export default function StudioPage() {
 
     requestAnimationFrame(() => {
       try {
-        setProject((current) => applyVisualIntelligence(current, datasets));
+        const currentDatasets = datasets.map(
+          upgradeLegacyDatasetAnalysis
+        );
+        setDatasets(currentDatasets);
+        setProject((current) =>
+          applyVisualIntelligence(
+            current,
+            currentDatasets
+          )
+        );
         setVisualRerunMessage(
           `Visual reasoning refreshed at ${new Date().toLocaleTimeString()}.`
         );
