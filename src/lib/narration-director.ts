@@ -305,12 +305,131 @@ function jaccard(a: string, b: string) {
   return union ? overlap / union : 0;
 }
 
+
+function bestTemporalDataset(project: EpisodeProject) {
+  return [...(project.datasets || [])]
+    .filter(
+      (dataset) =>
+        dataset.recommendedChart?.type === "line" &&
+        dataset.recommendedChart.data?.length
+    )
+    .sort((a, b) => {
+      const score = (dataset: typeof a) => {
+        const title = `${dataset.name} ${dataset.recommendedChart?.title || ""} ${dataset.recommendedChart?.yLabel || ""}`.toLowerCase();
+        let value = dataset.rowCount || 0;
+        if (/rain|precip|monthly|2024/.test(title)) value += 100;
+        if (/mm/.test(title)) value += 20;
+        return value;
+      };
+      return score(b) - score(a);
+    })[0];
+}
+
+function buildTemporalTriggerNarration(project: EpisodeProject) {
+  const dataset = bestTemporalDataset(project);
+  const chart = dataset?.recommendedChart;
+
+  if (!chart || chart.type !== "line" || !chart.data?.length) {
+    return "";
+  }
+
+  const ranked = [...chart.data]
+    .filter((item) => Number.isFinite(item.value))
+    .sort((a, b) => b.value - a.value);
+
+  const peak = ranked[0];
+  const second = ranked[1];
+
+  if (!peak) return "";
+
+  const unit = chart.unit ? spokenUnits(chart.unit) : "millimetres";
+
+  if (second) {
+    return clean(
+      `Start with the rain. Across the plotted period, rainfall is highly uneven. ${peak.label} records the highest monthly total at ${peak.value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}, followed by ${second.label} at ${second.value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}. That establishes the weather signal, but rainfall alone does not explain the flooding.`
+    );
+  }
+
+  return clean(
+    `Start with the rain. ${peak.label} records the highest plotted rainfall value at ${peak.value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${unit}. That establishes the weather signal, but rainfall alone does not explain the flooding.`
+  );
+}
+
+function sceneLooksLikeTemporalTrigger(scene: Scene) {
+  const text = `${scene.eyebrow} ${scene.headline}`.toLowerCase();
+
+  return (
+    scene.chart?.type === "line" ||
+    /\btrigger\b/.test(text) ||
+    /start with the rain|rainfall.*over time|monthly rainfall/.test(text)
+  );
+}
+
+function narrationAlreadyContainsTemporalEvidence(scenes: Scene[]) {
+  const joined = scenes
+    .map((scene) => clean(scene.narration))
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    /highest monthly total/.test(joined) ||
+    /rainfall is highly uneven/.test(joined) ||
+    /\b595\.6\b/.test(joined)
+  );
+}
+
+function ensureTemporalTriggerNarration(
+  project: EpisodeProject,
+  scenes: Scene[]
+) {
+  const temporalNarration = buildTemporalTriggerNarration(project);
+  if (!temporalNarration) return scenes;
+  if (narrationAlreadyContainsTemporalEvidence(scenes)) return scenes;
+
+  const next = scenes.map((scene) => ({ ...scene }));
+
+  let targetIndex = next.findIndex(sceneLooksLikeTemporalTrigger);
+
+  /*
+   * If an earlier build lost the dedicated trigger scene but the dataset is
+   * still in the project, place the rainfall evidence immediately before the
+   * flow-path scene so the narration sequence remains:
+   * system -> rainfall trigger -> flow path.
+   */
+  if (targetIndex < 0) {
+    targetIndex = next.findIndex((scene) => isFlowPath(scene));
+  }
+
+  if (targetIndex < 0) return next;
+
+  const target = next[targetIndex];
+
+  if (isFlowPath(target)) {
+    next[targetIndex] = {
+      ...target,
+      narration: `${temporalNarration} ${clean(target.narration)}`.trim(),
+    };
+  } else {
+    next[targetIndex] = {
+      ...target,
+      narration: temporalNarration,
+    };
+  }
+
+  return next;
+}
+
 export function applyNarrationDirector(
   project: EpisodeProject
 ): EpisodeProject {
   let previous = "";
 
-  const scenes = project.scenes.map((scene, index) => {
+  const repairedScenes = ensureTemporalTriggerNarration(
+    project,
+    project.scenes
+  );
+
+  const scenes = repairedScenes.map((scene, index) => {
     let narration = approvedSceneNarration(scene, index);
 
     /*
