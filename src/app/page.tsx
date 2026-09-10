@@ -1403,7 +1403,7 @@ export default function StudioPage() {
     setNarrationBusy(true);
     setNarrationError("");
     try {
-      const approvedProject = applyNarrationDirector(project);
+      const approvedProject = applyNarrationDirector(project, datasets);
       const response = await fetch("/api/narration", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1424,7 +1424,7 @@ export default function StudioPage() {
     setNarrationBusy(true);
     setNarrationError("");
     try {
-      const approvedProject = applyNarrationDirector(project);
+      const approvedProject = applyNarrationDirector(project, datasets);
       const response = await fetch("/api/narration", {
         method: "POST",
         headers: { "content-type": "application/json" },

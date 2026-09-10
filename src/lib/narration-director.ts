@@ -1,4 +1,4 @@
-import type { EpisodeProject, Scene } from "./types";
+import type { DatasetAnalysis, EpisodeProject, Scene } from "./types";
 
 function clean(value?: string) {
   return (value || "")
@@ -306,8 +306,9 @@ function jaccard(a: string, b: string) {
 }
 
 
-function bestTemporalDataset(project: EpisodeProject) {
-  return [...(project.datasets || [])]
+function bestTemporalDataset(project: EpisodeProject, datasetsOverride?: DatasetAnalysis[]) {
+  const sourceDatasets = datasetsOverride?.length ? datasetsOverride : (project.datasets || []);
+  return [...sourceDatasets]
     .filter(
       (dataset) =>
         dataset.recommendedChart?.type === "line" &&
@@ -325,8 +326,8 @@ function bestTemporalDataset(project: EpisodeProject) {
     })[0];
 }
 
-function buildTemporalTriggerNarration(project: EpisodeProject) {
-  const dataset = bestTemporalDataset(project);
+function buildTemporalTriggerNarration(project: EpisodeProject, datasetsOverride?: DatasetAnalysis[]) {
+  const dataset = bestTemporalDataset(project, datasetsOverride);
   const chart = dataset?.recommendedChart;
 
   if (!chart || chart.type !== "line" || !chart.data?.length) {
@@ -380,9 +381,10 @@ function narrationAlreadyContainsTemporalEvidence(scenes: Scene[]) {
 
 function ensureTemporalTriggerNarration(
   project: EpisodeProject,
-  scenes: Scene[]
+  scenes: Scene[],
+  datasetsOverride?: DatasetAnalysis[]
 ) {
-  const temporalNarration = buildTemporalTriggerNarration(project);
+  const temporalNarration = buildTemporalTriggerNarration(project, datasetsOverride);
   if (!temporalNarration) return scenes;
   if (narrationAlreadyContainsTemporalEvidence(scenes)) return scenes;
 
@@ -420,13 +422,15 @@ function ensureTemporalTriggerNarration(
 }
 
 export function applyNarrationDirector(
-  project: EpisodeProject
+  project: EpisodeProject,
+  datasetsOverride?: DatasetAnalysis[]
 ): EpisodeProject {
   let previous = "";
 
   const repairedScenes = ensureTemporalTriggerNarration(
     project,
-    project.scenes
+    project.scenes,
+    datasetsOverride
   );
 
   const scenes = repairedScenes.map((scene, index) => {
