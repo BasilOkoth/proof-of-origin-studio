@@ -161,6 +161,473 @@ function scoreTone(value: number) {
   return "Needs evidence";
 }
 
+
+type StudioScene = EpisodeProject["scenes"][number];
+
+type DirectedDatasets = {
+  temporal?: DatasetAnalysis;
+  comparison?: DatasetAnalysis;
+  spatial?: DatasetAnalysis;
+};
+
+function cleanText(value?: string) {
+  return (value || "").replace(/\s+/g, " ").trim();
+}
+
+function hasAny(value: string | undefined, terms: string[]) {
+  const input = cleanText(value).toLowerCase();
+  return terms.some((term) => input.includes(term.toLowerCase()));
+}
+
+function datasetSourceLabel(dataset?: DatasetAnalysis) {
+  return (
+    dataset?.recommendedChart?.sourceLabel ||
+    dataset?.recommendedMap?.sourceLabel ||
+    dataset?.name ||
+    "Structured evidence"
+  );
+}
+
+function temporalDatasetScore(dataset: DatasetAnalysis) {
+  const chart = dataset.recommendedChart;
+  if (!chart || chart.type !== "line") return -1;
+
+  let score = 240;
+  score += Math.min(40, dataset.rowCount);
+  score += Math.min(40, dataset.dateColumns.length * 12);
+  if (hasAny(chart.title, ["over time", "monthly", "rainfall", "precipitation"])) score += 90;
+  if (hasAny(chart.yLabel, ["rainfall", "precipitation", "mm"])) score += 70;
+  if (hasAny(dataset.name, ["monthly", "rainfall", "2024"])) score += 35;
+  return score;
+}
+
+function comparisonDatasetScore(dataset: DatasetAnalysis) {
+  const chart = dataset.recommendedChart;
+  if (!chart || !(chart.type === "bar" || chart.type === "ranking" || chart.type === "scatter")) {
+    return -1;
+  }
+
+  let score = 220;
+  score += Math.min(35, dataset.rowCount);
+  if (hasAny(chart.title, ["by station", "by location", "flood event", "total"])) score += 90;
+  if (hasAny(chart.yLabel, ["7-day", "24h", "rainfall", "precipitation", "mm", "total"])) score += 65;
+  if (hasAny(dataset.name, ["flood event", "station", "event", "rainfall"])) score += 45;
+  return score;
+}
+
+function spatialDatasetScore(dataset: DatasetAnalysis) {
+  const map = dataset.recommendedMap;
+  if (!map) return -1;
+
+  let score = 260;
+  if (dataset.latitudeColumn && dataset.longitudeColumn) score += 120;
+  if (hasAny(dataset.name, ["geocoded", "nairobi", "rainfall", "station"])) score += 45;
+  if (map.points.some((point) => typeof point.value === "number")) score += 30;
+  return score;
+}
+
+function chooseDirectedDatasets(datasets: DatasetAnalysis[]): DirectedDatasets {
+  const temporal = [...datasets]
+    .sort((a, b) => temporalDatasetScore(b) - temporalDatasetScore(a))
+    .find((item) => temporalDatasetScore(item) >= 0);
+
+  let comparison = [...datasets]
+    .sort((a, b) => comparisonDatasetScore(b) - comparisonDatasetScore(a))
+    .find((item) => comparisonDatasetScore(item) >= 0);
+
+  if (comparison && temporal && comparison.name === temporal.name) {
+    comparison = [...datasets]
+      .sort((a, b) => comparisonDatasetScore(b) - comparisonDatasetScore(a))
+      .find((item) => item.name !== temporal.name && comparisonDatasetScore(item) >= 0) || comparison;
+  }
+
+  const spatial = [...datasets]
+    .sort((a, b) => spatialDatasetScore(b) - spatialDatasetScore(a))
+    .find((item) => spatialDatasetScore(item) >= 0);
+
+  return { temporal, comparison, spatial };
+}
+
+function makeDirectedChartScene(
+  scene: StudioScene,
+  dataset: DatasetAnalysis,
+  role: "trigger" | "comparison"
+): StudioScene {
+  const chart = dataset.recommendedChart;
+  if (!chart) return scene;
+
+  const insight = cleanText(dataset.insight) ||
+    `${chart.yLabel || "The measured value"} is visible in the underlying data.`;
+
+  return {
+    ...scene,
+    kind: "data_chart",
+    eyebrow: role === "trigger" ? "TRIGGER" : "DATA STORY",
+    headline: chart.title,
+    body: insight,
+    narration:
+      role === "trigger"
+        ? `Start with the measured rainfall pattern. ${insight} This establishes the trigger with data before the story moves into drainage, urban form and exposure.`
+        : `Now compare the event across stations or locations. ${insight} This comparison helps show the magnitude of the event without confusing a single measurement with the whole explanation for flooding.`,
+    chart,
+    map: undefined,
+    sourceLabel: datasetSourceLabel(dataset),
+    sourceExcerpt: insight,
+    visualPlan: {
+      kind: "data_chart",
+      reason:
+        role === "trigger"
+          ? "The strongest temporal rainfall dataset should establish the trigger visually."
+          : "A station or location comparison is best used as a separate quantitative comparison scene.",
+      evidenceIds: scene.factIds || [],
+      confidence: 99,
+    },
+    autoVisual: true,
+  };
+}
+
+function makeDirectedMapScene(scene: StudioScene, dataset: DatasetAnalysis): StudioScene {
+  const map = dataset.recommendedMap;
+  if (!map) return scene;
+
+  const insight = cleanText(dataset.insight) ||
+    `The dataset contains ${map.points.length} mapped observations.`;
+
+  return {
+    ...scene,
+    kind: "map_story",
+    eyebrow: "GEOGRAPHIC CONTEXT",
+    headline: map.title,
+    body: insight,
+    narration: `Now put the observations in place. ${insight} The map shows where the measured evidence exists and keeps the viewer from treating every part of Nairobi as interchangeable.`,
+    chart: undefined,
+    map,
+    sourceLabel: datasetSourceLabel(dataset),
+    sourceExcerpt: insight,
+    visualPlan: {
+      kind: "map_story",
+      reason: "Explicit coordinates make geography part of the evidence, not decoration.",
+      evidenceIds: scene.factIds || [],
+      confidence: 99,
+    },
+    autoVisual: true,
+  };
+}
+
+function findSceneIndex(
+  scenes: StudioScene[],
+  matcher: (scene: StudioScene, index: number) => boolean
+) {
+  return scenes.findIndex(matcher);
+}
+
+function improveDataStoryDirector(
+  project: EpisodeProject,
+  datasets: DatasetAnalysis[]
+) {
+  if (!datasets.length || !project.scenes.length) return project;
+
+  const directed = chooseDirectedDatasets(datasets);
+  const scenes = [...project.scenes];
+
+  const triggerIndex = findSceneIndex(
+    scenes,
+    (scene, index) =>
+      index >= 1 &&
+      (hasAny(scene.eyebrow, ["trigger"]) ||
+        hasAny(scene.headline, [
+          "start with the rain",
+          "rain — but do not stop there",
+          "rain - but do not stop there",
+        ]))
+  );
+
+  let comparisonIndex = findSceneIndex(
+    scenes,
+    (scene, index) =>
+      index !== triggerIndex &&
+      (hasAny(scene.eyebrow, ["data story"]) ||
+        scene.kind === "data_chart" ||
+        scene.visualPlan?.kind === "data_chart")
+  );
+
+  if (comparisonIndex < 0 && triggerIndex >= 0 && triggerIndex + 1 < scenes.length) {
+    comparisonIndex = triggerIndex + 1;
+  }
+
+  const mapIndex = findSceneIndex(
+    scenes,
+    (scene) =>
+      scene.kind === "map_story" ||
+      scene.visualPlan?.kind === "map_story" ||
+      hasAny(scene.headline, ["geographic pattern", "geographic context"])
+  );
+
+  if (directed.temporal && triggerIndex >= 0) {
+    scenes[triggerIndex] = makeDirectedChartScene(
+      scenes[triggerIndex],
+      directed.temporal,
+      "trigger"
+    );
+  }
+
+  if (directed.comparison && comparisonIndex >= 0) {
+    scenes[comparisonIndex] = makeDirectedChartScene(
+      scenes[comparisonIndex],
+      directed.comparison,
+      "comparison"
+    );
+  }
+
+  if (directed.spatial && mapIndex >= 0) {
+    scenes[mapIndex] = makeDirectedMapScene(
+      scenes[mapIndex],
+      directed.spatial
+    );
+  }
+
+  return {
+    ...project,
+    scenes,
+    datasets,
+  };
+}
+
+function evidenceTokens(value?: string) {
+  const stop = new Set([
+    "the", "and", "for", "that", "with", "from", "this", "into", "what",
+    "when", "where", "which", "while", "does", "how", "why", "are", "was",
+    "were", "have", "has", "had", "not", "but", "can", "could", "would",
+    "should", "their", "there", "than", "then", "they", "them", "its", "our",
+  ]);
+
+  return cleanText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(" ")
+    .filter((token) => token.length >= 4 && !stop.has(token));
+}
+
+function evidenceFitScore(scene: StudioScene, item: EvidenceItem) {
+  const sceneWords = new Set(
+    evidenceTokens(`${scene.eyebrow} ${scene.headline} ${scene.narration}`)
+  );
+  const evidenceWords = evidenceTokens(item.statement);
+
+  let overlap = 0;
+  evidenceWords.forEach((token) => {
+    if (sceneWords.has(token)) overlap += 1;
+  });
+
+  let score = overlap * 18;
+  if (item.kind === "observed") score += 35;
+  if (item.kind === "limitation" && hasAny(scene.eyebrow, ["trust", "limit", "uncertainty"])) score += 90;
+  if (item.kind === "limitation" && !hasAny(scene.eyebrow, ["trust", "limit", "uncertainty"])) score -= 25;
+  if (item.sourceLabel || item.source) score += 20;
+
+  if (hasAny(scene.headline, ["water", "drain", "infrastructure"]) && hasAny(item.statement, ["drain", "capacity", "culvert", "water", "flow"])) score += 45;
+  if (hasAny(scene.headline, ["city changes", "urban form", "surface"]) && hasAny(item.statement, ["infiltration", "runoff", "built", "paving", "urban", "surface"])) score += 45;
+  if (hasAny(scene.headline, ["maintained", "maintenance", "infrastructure"]) && hasAny(item.statement, ["maintenance", "solid waste", "blocked", "institution", "management"])) score += 45;
+
+  return score;
+}
+
+function bestEvidenceForScene(
+  scene: StudioScene,
+  evidence: EvidenceItem[],
+  used: Set<string>
+) {
+  return [...evidence]
+    .filter((item) => !used.has(item.id) && cleanText(item.statement))
+    .map((item) => ({ item, score: evidenceFitScore(scene, item) }))
+    .sort((a, b) => b.score - a.score)[0];
+}
+
+function visualAssetRole(asset: EvidenceAsset) {
+  const name = cleanText(`${asset.name} ${asset.sourceLabel || ""}`).toLowerCase();
+
+  if (/(drain|culvert|gutter|channel|stormwater|sewer)/.test(name)) return "drainage";
+  if (/(waste|garbage|trash|blocked|clogged|litter)/.test(name)) return "blockage";
+  if (/(river|riparian|stream|waterway|bridge)/.test(name)) return "river";
+  if (/(flood|flooded|waterlog|inundat|road)/.test(name)) return "flood-impact";
+  if (/(map|location|ward|south c|nairobi)/.test(name)) return "place";
+  if (/(building|pavement|urban|settlement|estate|roof|road)/.test(name)) return "urban-form";
+  return "general-evidence";
+}
+
+function assetSceneScore(asset: EvidenceAsset, scene: StudioScene, index: number) {
+  const role = visualAssetRole(asset);
+  const sceneText = cleanText(`${scene.eyebrow} ${scene.headline} ${scene.body}`).toLowerCase();
+  let score = 0;
+
+  if (index === 0) score += 25;
+  if (role === "drainage" && /(drain|water|flow|infrastructure|capacity)/.test(sceneText)) score += 120;
+  if (role === "blockage" && /(maintain|waste|block|drain|infrastructure)/.test(sceneText)) score += 120;
+  if (role === "river" && /(river|water|flow|geograph|place)/.test(sceneText)) score += 100;
+  if (role === "flood-impact" && /(flood|disaster|outcome|trigger|world explained)/.test(sceneText)) score += 120;
+  if (role === "urban-form" && /(city changes|urban form|surface|infiltration|runoff)/.test(sceneText)) score += 120;
+  if (role === "place" && /(geograph|trust boundary|south c|location)/.test(sceneText)) score += 70;
+  if (role === "general-evidence" && index === 0) score += 55;
+
+  if (scene.chart || scene.map) score -= 100;
+  return score;
+}
+
+function improveVisualAssetDirector(project: EpisodeProject) {
+  if (!project.assets?.length) return project;
+
+  const scenes = [...project.scenes];
+  const usedAssets = new Set<string>();
+
+  for (let index = 0; index < scenes.length; index += 1) {
+    const scene = scenes[index];
+    if (scene.assetId || scene.chart || scene.map) continue;
+
+    const candidate = project.assets
+      .filter((asset) => !usedAssets.has(asset.id))
+      .map((asset) => ({ asset, score: assetSceneScore(asset, scene, index) }))
+      .sort((a, b) => b.score - a.score)[0];
+
+    if (!candidate || candidate.score < 50) continue;
+
+    usedAssets.add(candidate.asset.id);
+    scenes[index] = {
+      ...scene,
+      assetId: candidate.asset.id,
+      ...( {
+        assetUrl: candidate.asset.dataUrl,
+        assetCaption: candidate.asset.sourceLabel || candidate.asset.name,
+      } as any),
+      visualPlan:
+        scene.visualPlan?.kind === "source_highlight" ||
+        scene.visualPlan?.kind === "field_evidence"
+          ? scene.visualPlan
+          : {
+              kind: "field_evidence",
+              reason: `Uploaded visual evidence classified as ${visualAssetRole(candidate.asset)} matches this scene's visual job.`,
+              evidenceIds: scene.factIds || [],
+              confidence: Math.min(99, Math.max(82, candidate.score)),
+            },
+      visualLabels: Array.from(
+        new Set([
+          ...(scene.visualLabels || []),
+          "source-visible",
+          visualAssetRole(candidate.asset),
+        ])
+      ),
+    };
+  }
+
+  return { ...project, scenes };
+}
+
+function improveEvidenceDensity(project: EpisodeProject) {
+  const scenes = [...project.scenes];
+  const usedEvidence = new Set<string>();
+
+  scenes.forEach((scene) => {
+    (scene.factIds || []).forEach((id) => usedEvidence.add(id));
+  });
+
+  for (let index = 0; index < scenes.length; index += 1) {
+    const scene = scenes[index];
+
+    if (scene.chart || scene.map) continue;
+    if ((scene.factIds || []).length > 0 && scene.sourceLabel && scene.sourceExcerpt) continue;
+
+    const candidate = bestEvidenceForScene(scene, project.evidence || [], usedEvidence);
+    if (!candidate || candidate.score < 35) continue;
+
+    usedEvidence.add(candidate.item.id);
+    const item = candidate.item;
+
+    scenes[index] = {
+      ...scene,
+      factIds: Array.from(new Set([...(scene.factIds || []), item.id])),
+      sourceLabel: scene.sourceLabel || item.sourceLabel || item.source || "Source evidence",
+      sourceExcerpt: scene.sourceExcerpt || cleanText(item.statement),
+      body: cleanText(scene.body) || cleanText(item.statement),
+      visualPlan:
+        scene.visualPlan?.kind === "minimal"
+          ? {
+              kind: "source_highlight",
+              reason: "A source-backed evidence item matches this scene, so the proof should be made visible rather than left abstract.",
+              evidenceIds: Array.from(new Set([...(scene.factIds || []), item.id])),
+              confidence: 91,
+            }
+          : scene.visualPlan,
+    };
+  }
+
+  return { ...project, scenes };
+}
+
+function updateVisualIntelligenceScore(project: EpisodeProject) {
+  const scenes = project.scenes || [];
+  const backed = scenes.filter((scene: any) =>
+    Boolean(
+      scene.chart ||
+      scene.map ||
+      scene.assetId ||
+      (scene.factIds || []).length ||
+      cleanText(scene.sourceExcerpt)
+    )
+  );
+
+  const evidenceDensity = Math.round(
+    (backed.length / Math.max(1, scenes.length)) * 100
+  );
+
+  const kinds = new Set(
+    scenes.map((scene) => scene.visualPlan?.kind || scene.kind)
+  );
+  const visualVariation = Math.max(
+    project.visualIntelligence?.visualVariation || 0,
+    Math.min(100, Math.round((kinds.size / 6) * 100))
+  );
+  const geographicContext = scenes.some((scene) => Boolean(scene.map)) ? 100 : (project.visualIntelligence?.geographicContext || 28);
+  const dataStorytelling = scenes.some((scene) => Boolean(scene.chart)) ? 100 : (project.visualIntelligence?.dataStorytelling || 24);
+  const sourceVisibility = scenes.some((scene) => Boolean(scene.sourceLabel || scene.chart?.sourceLabel || scene.map?.sourceLabel)) ? 100 : (project.visualIntelligence?.sourceVisibility || 40);
+
+  const warnings = [...(project.visualIntelligence?.warnings || [])].filter(
+    (warning) =>
+      !(evidenceDensity >= 70 && /explanation-only|visible proof density/i.test(warning)) &&
+      !(geographicContext === 100 && /no mapped evidence/i.test(warning)) &&
+      !(dataStorytelling === 100 && /no data-story scene/i.test(warning))
+  );
+
+  const overall = Math.round(
+    evidenceDensity * 0.35 +
+      visualVariation * 0.15 +
+      geographicContext * 0.2 +
+      dataStorytelling * 0.2 +
+      sourceVisibility * 0.1
+  );
+
+  return {
+    ...project,
+    visualIntelligence: {
+      overall,
+      evidenceDensity,
+      visualVariation,
+      geographicContext,
+      dataStorytelling,
+      sourceVisibility,
+      warnings,
+    },
+  };
+}
+
+function applyEditorialDirectors(
+  project: EpisodeProject,
+  datasets: DatasetAnalysis[]
+) {
+  const directed = improveDataStoryDirector(project, datasets);
+  const withEvidence = improveEvidenceDensity(directed);
+  const withVisualAssets = improveVisualAssetDirector(withEvidence);
+  return updateVisualIntelligenceScore(withVisualAssets);
+}
+
 export default function StudioPage() {
   const [project, setProject] = useState<EpisodeProject>(initial);
   const [mode, setMode] = useState<StoryMode>("world_explained");
@@ -365,7 +832,10 @@ export default function StudioPage() {
 
     base.assets = project.assets;
     if (nextMode === "hps") base.hpsIngestion = project.hpsIngestion;
-    const enriched = applyVisualIntelligence(base, nextDatasets);
+    const enriched = applyEditorialDirectors(
+      applyVisualIntelligence(base, nextDatasets),
+      nextDatasets
+    );
     setProject(enriched);
     setMode(nextMode);
     setManualScriptEdits(false);
@@ -510,10 +980,12 @@ export default function StudioPage() {
         byId.set(asset.id, asset)
       );
 
-      return {
+      const merged = {
         ...current,
         assets: [...byId.values()],
       };
+
+      return applyEditorialDirectors(merged, datasets);
     });
   }
 
@@ -588,7 +1060,12 @@ export default function StudioPage() {
         retentionPurpose: `Story Hunter opening · ${angle.angle} · score ${angle.overall}/100`,
       };
     }
-    setProject(applyVisualIntelligence(base, datasets));
+    setProject(
+      applyEditorialDirectors(
+        applyVisualIntelligence(base, datasets),
+        datasets
+      )
+    );
     setManualScriptEdits(false);
     setEditingSceneId(null);
     setActiveTab("story");
@@ -602,7 +1079,12 @@ export default function StudioPage() {
 
     requestAnimationFrame(() => {
       try {
-        setProject((current) => applyVisualIntelligence(current, datasets));
+        setProject((current) =>
+          applyEditorialDirectors(
+            applyVisualIntelligence(current, datasets),
+            datasets
+          )
+        );
         setVisualRerunMessage(
           `Visual reasoning refreshed at ${new Date().toLocaleTimeString()}.`
         );
@@ -702,7 +1184,12 @@ export default function StudioPage() {
       base.assets = project.assets;
       base.documentIngestion = parsed;
 
-      setProject(applyVisualIntelligence(base, datasets));
+      setProject(
+      applyEditorialDirectors(
+        applyVisualIntelligence(base, datasets),
+        datasets
+      )
+    );
 
       /*
        * Reset only the scout's manual search query. Do NOT reset the user's
@@ -787,7 +1274,12 @@ export default function StudioPage() {
       });
       next.assets = project.assets;
       next.hpsIngestion = parsed.ingestion;
-      setProject(applyVisualIntelligence(next, datasets));
+      setProject(
+        applyEditorialDirectors(
+          applyVisualIntelligence(next, datasets),
+          datasets
+        )
+      );
       setActiveTab("story");
     } catch (error: any) {
       setHpsError(error?.message || "Unable to ingest HPS evidence.");
