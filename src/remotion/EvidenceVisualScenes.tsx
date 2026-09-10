@@ -837,6 +837,10 @@ export function SourceHighlightScene({
     }
   );
 
+  const sourceScene = scene as any;
+  const assetUrl = sourceScene.assetUrl as string | undefined;
+  const assetCaption = sourceScene.assetCaption as string | undefined;
+
   return (
     <Shell scene={scene}>
       <Title>{scene.headline}</Title>
@@ -845,56 +849,110 @@ export function SourceHighlightScene({
         style={{
           marginTop: 58,
           display: "grid",
-          gridTemplateColumns: ".82fr 1.18fr",
+          gridTemplateColumns: assetUrl ? ".95fr 1.05fr" : ".82fr 1.18fr",
           gap: 52,
           alignItems: "stretch",
           maxWidth: 1510,
         }}
       >
-        <div
-          style={{
-            borderRadius: 28,
-            border:
-              "1px solid rgba(255,255,255,.11)",
-            background:
-              "rgba(255,255,255,.035)",
-            padding: 38,
-          }}
-        >
+        {assetUrl ? (
           <div
             style={{
-              color: cyan,
-              fontSize: 19,
-              fontWeight: 900,
-              letterSpacing: 3,
+              borderRadius: 28,
+              border: "1px solid rgba(255,255,255,.11)",
+              background: "rgba(255,255,255,.03)",
+              overflow: "hidden",
+              position: "relative",
             }}
           >
-            SOURCE
+            <Img
+              src={assetUrl}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                left: 20,
+                right: 20,
+                bottom: 20,
+                padding: "14px 16px",
+                borderRadius: 14,
+                background: "rgba(7,11,22,.8)",
+                border: "1px solid rgba(255,255,255,.12)",
+              }}
+            >
+              <div
+                style={{
+                  color: cyan,
+                  fontSize: 17,
+                  fontWeight: 900,
+                  letterSpacing: 2.5,
+                }}
+              >
+                SOURCE IMAGE
+              </div>
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 22,
+                  lineHeight: 1.35,
+                  fontWeight: 760,
+                }}
+              >
+                {assetCaption || scene.sourceLabel || "Visual evidence"}
+              </div>
+            </div>
           </div>
+        ) : (
+          <div
+            style={{
+              borderRadius: 28,
+              border:
+                "1px solid rgba(255,255,255,.11)",
+              background:
+                "rgba(255,255,255,.035)",
+              padding: 38,
+            }}
+          >
+            <div
+              style={{
+                color: cyan,
+                fontSize: 19,
+                fontWeight: 900,
+                letterSpacing: 3,
+              }}
+            >
+              SOURCE
+            </div>
 
-          <div
-            style={{
-              marginTop: 24,
-              fontSize: 30,
-              lineHeight: 1.25,
-              fontWeight: 900,
-            }}
-          >
-            {scene.sourceLabel || "Source evidence"}
-          </div>
+            <div
+              style={{
+                marginTop: 24,
+                fontSize: 30,
+                lineHeight: 1.25,
+                fontWeight: 900,
+              }}
+            >
+              {scene.sourceLabel || "Source evidence"}
+            </div>
 
-          <div
-            style={{
-              marginTop: 36,
-              color: muted,
-              fontSize: 22,
-              lineHeight: 1.5,
-            }}
-          >
-            Evidence is part of the frame, not buried
-            after the conclusion.
+            <div
+              style={{
+                marginTop: 36,
+                color: muted,
+                fontSize: 22,
+                lineHeight: 1.5,
+              }}
+            >
+              Evidence is part of the frame, not buried
+              after the conclusion.
+            </div>
           </div>
-        </div>
+        )}
 
         <div
           style={{

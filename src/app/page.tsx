@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   BadgeCheck,
   BarChart3,
@@ -31,13 +31,7 @@ import {
 } from "lucide-react";
 import { Player } from "@remotion/player";
 
-import {
-  analyzeCsv,
-  DATASET_ANALYSIS_VERSION,
-  upgradeLegacyDatasetAnalysis,
-} from "@/lib/data-story";
-import { analyzeXlsx } from "@/lib/xlsx-story";
-import { analyzeGeoJson } from "@/lib/geojson-map";
+import { analyzeCsv } from "@/lib/data-story";
 import { scoutSourceToEvidence, type EvidenceScoutResponse, type EvidenceScoutSource, type StoryQuestionCandidate } from "@/lib/evidence-scout";
 import { downloadText, projectAsMarkdown } from "@/lib/export";
 import { downloadLocalRenderPackage } from "@/lib/local-render-package";
@@ -62,58 +56,6 @@ import { EvidenceIntelligenceLab } from "@/components/EvidenceIntelligenceLab";
 import type { StoryHunterAngle } from "@/lib/evidence-intelligence";
 
 const initial = makeSample();
-
-const WORKSPACE_STORAGE_KEY = "evidence-studio:workspace:v1";
-
-type PersistedWorkspace = {
-  mode: StoryMode;
-  topic: string;
-  question: string;
-  brief: string;
-  audience: string;
-  minutes: number;
-  evidence: EvidenceItem[];
-  datasets: DatasetAnalysis[];
-  activeTab: Tab;
-  sourceKind: "research" | "report" | "text";
-  scoutQuery: string;
-  manualScriptEdits: boolean;
-  project: EpisodeProject;
-};
-
-function projectForWorkspaceStorage(project: EpisodeProject): EpisodeProject {
-  /*
-   * Keep the editable story/project, but do not copy heavy binary/data-URL
-   * assets into localStorage. Persistent source Blobs already live in the
-   * Evidence Library's IndexedDB store.
-   */
-  const next = {
-    ...project,
-    assets: [],
-  };
-
-  if (next.narration?.audioDataUrl) {
-    const { audioDataUrl: _audioDataUrl, ...restNarration } = next.narration;
-    next.narration = restNarration;
-  }
-
-  return next;
-}
-
-function isValidTab(value: unknown): value is Tab {
-  return [
-    "build",
-    "sources",
-    "discover",
-    "intelligence",
-    "story",
-    "visual",
-    "narration",
-    "retention",
-    "publish",
-  ].includes(String(value));
-}
-
 
 type Tab =
   | "build"
@@ -168,6 +110,294 @@ function scoreTone(value: number) {
   return "Needs evidence";
 }
 
+
+type StudioScene = EpisodeProject["scenes"][number];
+
+type DirectedDatasets = {
+  temporal?: DatasetAnalysis;
+  comparison?: DatasetAnalysis;
+  spatial?: DatasetAnalysis;
+};
+
+function lite(value?: string) {
+  return (value || "").replace(/\s+/g, " ").trim();
+}
+
+function containsAny(value: string | undefined, terms: string[]) {
+  const input = lite(value).toLowerCase();
+  return terms.some((term) => input.includes(term.toLowerCase()));
+}
+
+function datasetLabel(dataset?: DatasetAnalysis) {
+  return dataset?.recommendedChart?.sourceLabel || dataset?.recommendedMap?.sourceLabel || dataset?.name || "Structured evidence";
+}
+
+function temporalDatasetScore(dataset: DatasetAnalysis) {
+  const chart = dataset.recommendedChart;
+  if (!chart || chart.type !== "line") return -1;
+
+  let score = 220 + Math.min(40, dataset.rowCount);
+  score += Math.min(40, dataset.dateColumns.length * 12);
+  if (containsAny(chart.title, ["rainfall", "precip", "over time", "monthly", "annual"])) score += 80;
+  if (containsAny(chart.yLabel, ["rainfall", "precip", "mm", "amount"])) score += 60;
+  if (containsAny(dataset.name, ["monthly", "time", "trend", "rainfall", "2024"])) score += 30;
+  return score;
+}
+
+function comparisonDatasetScore(dataset: DatasetAnalysis) {
+  const chart = dataset.recommendedChart;
+  if (!chart || !(chart.type === "bar" || chart.type === "ranking" || chart.type === "scatter")) return -1;
+
+  let score = 200 + Math.min(35, dataset.rowCount);
+  if (containsAny(chart.title, ["by station", "by location", "flood event", "total", "rainfall"])) score += 80;
+  if (containsAny(chart.yLabel, ["rainfall", "precip", "mm", "total", "7-day"])) score += 55;
+  if (containsAny(dataset.name, ["station", "event", "rainfall", "nairobi"])) score += 35;
+  return score;
+}
+
+function spatialDatasetScore(dataset: DatasetAnalysis) {
+  const map = dataset.recommendedMap;
+  if (!map) return -1;
+
+  let score = 240 + Math.min(35, dataset.rowCount);
+  if (dataset.latitudeColumn && dataset.longitudeColumn) score += 100;
+  if (containsAny(dataset.name, ["nairobi", "geocoded", "rainfall", "station"])) score += 35;
+  if (map.points.some((point) => typeof point.value === "number")) score += 25;
+  return score;
+}
+
+function chooseDirectedDatasets(datasets: DatasetAnalysis[]): DirectedDatasets {
+  const byTemporal = [...datasets].sort((a, b) => temporalDatasetScore(b) - temporalDatasetScore(a));
+  const byComparison = [...datasets].sort((a, b) => comparisonDatasetScore(b) - comparisonDatasetScore(a));
+  const bySpatial = [...datasets].sort((a, b) => spatialDatasetScore(b) - spatialDatasetScore(a));
+
+  const temporal = byTemporal.find((item) => temporalDatasetScore(item) >= 0);
+  const spatial = bySpatial.find((item) => spatialDatasetScore(item) >= 0);
+  let comparison = byComparison.find((item) => comparisonDatasetScore(item) >= 0);
+
+  if (comparison && temporal && comparison.name === temporal.name && byComparison.length > 1) {
+    comparison = byComparison.find((item) => item.name !== temporal.name && comparisonDatasetScore(item) >= 0) || comparison;
+  }
+
+  return { temporal, comparison, spatial };
+}
+
+function strongestEvidence(project: EpisodeProject) {
+  return [...(project.evidence || [])].sort((a, b) => {
+    const aScore = (a.kind === "observed" ? 40 : a.kind === "limitation" ? 20 : 10) + (lite(a.sourceLabel || a.source).length ? 20 : 0) + Math.min(40, lite(a.statement).length / 6);
+    const bScore = (b.kind === "observed" ? 40 : b.kind === "limitation" ? 20 : 10) + (lite(b.sourceLabel || b.source).length ? 20 : 0) + Math.min(40, lite(b.statement).length / 6);
+    return bScore - aScore;
+  });
+}
+
+function makeChartScene(base: StudioScene, dataset: DatasetAnalysis, role: "trigger" | "comparison") {
+  const chart = dataset.recommendedChart;
+  if (!chart) return base;
+  const label = datasetLabel(dataset);
+  const insight = lite(dataset.insight) || `${chart.yLabel || "The measured value"} is visible in the underlying data.`;
+
+  if (role === "trigger") {
+    return {
+      ...base,
+      kind: "data_chart",
+      eyebrow: "TRIGGER",
+      headline: chart.title,
+      body: insight,
+      narration: `Start with the measurable weather context. ${insight} Use the chart to show the rainfall pattern directly, then explain that rain is the trigger, not the full explanation.` ,
+      chart,
+      map: undefined,
+      sourceLabel: label,
+      sourceExcerpt: insight,
+      visualPlan: {
+        kind: "data_chart",
+        reason: "A time-based dataset exists, so the trigger scene should show the measured pattern directly.",
+        evidenceIds: base.factIds || [],
+        confidence: 99,
+      },
+      autoVisual: true,
+    } as StudioScene;
+  }
+
+  return {
+    ...base,
+    kind: "data_chart",
+    eyebrow: "DATA STORY",
+    headline: chart.title,
+    body: insight,
+    narration: `Now compare the measured values directly. ${insight} The purpose of this chart is not decoration. It lets the viewer compare where the totals are highest and how the event differs across stations or locations.`,
+    chart,
+    map: undefined,
+    sourceLabel: label,
+    sourceExcerpt: insight,
+    visualPlan: {
+      kind: "data_chart",
+      reason: "A structured quantitative comparison is available and should be shown as a chart.",
+      evidenceIds: base.factIds || [],
+      confidence: 99,
+    },
+    autoVisual: true,
+  } as StudioScene;
+}
+
+function makeMapScene(base: StudioScene, dataset: DatasetAnalysis) {
+  const map = dataset.recommendedMap;
+  if (!map) return base;
+  const insight = lite(dataset.insight) || `The dataset contains ${map.points.length} mapped observations.`;
+
+  return {
+    ...base,
+    kind: "map_story",
+    eyebrow: "GEOGRAPHIC CONTEXT",
+    headline: map.title,
+    body: insight,
+    narration: `Location is part of the evidence. ${insight} Put the observations on a real map so the viewer can see where the evidence clusters and where it is absent.`,
+    chart: undefined,
+    map,
+    sourceLabel: datasetLabel(dataset),
+    sourceExcerpt: insight,
+    visualPlan: {
+      kind: "map_story",
+      reason: "The dataset contains explicit coordinates, so the pattern should be shown spatially.",
+      evidenceIds: base.factIds || [],
+      confidence: 99,
+    },
+    autoVisual: true,
+  } as StudioScene;
+}
+
+function sceneIndexByMeaning(scenes: StudioScene[], matcher: (scene: StudioScene) => boolean) {
+  return scenes.findIndex(matcher);
+}
+
+function improveDataStoryDirector(project: EpisodeProject, datasets: DatasetAnalysis[]) {
+  if (!datasets.length) return project;
+
+  const directed = chooseDirectedDatasets(datasets);
+  const scenes = [...project.scenes];
+
+  const triggerIndex = sceneIndexByMeaning(scenes, (scene) => containsAny(scene.eyebrow, ["trigger"]) || containsAny(scene.headline, ["start with the rain", "rain — but do not stop there", "rain - but do not stop there"]));
+  const chartIndices = scenes.map((scene, index) => ({ scene, index })).filter(({ scene }) => scene.kind === "data_chart" || scene.visualPlan?.kind === "data_chart");
+  const mapIndex = sceneIndexByMeaning(scenes, (scene) => scene.kind === "map_story" || scene.visualPlan?.kind === "map_story" || containsAny(scene.headline, ["geographic pattern", "geographic context"]));
+
+  if (directed.temporal) {
+    if (triggerIndex >= 0) {
+      scenes[triggerIndex] = makeChartScene(scenes[triggerIndex], directed.temporal, "trigger");
+    } else if (chartIndices[0]) {
+      scenes[chartIndices[0].index] = makeChartScene(scenes[chartIndices[0].index], directed.temporal, "trigger");
+    }
+  }
+
+  if (directed.comparison) {
+    const usedIndex = chartIndices.find(({ index }) => index !== triggerIndex)?.index;
+    if (usedIndex !== undefined) {
+      scenes[usedIndex] = makeChartScene(scenes[usedIndex], directed.comparison, "comparison");
+    } else if (!directed.temporal && chartIndices[0]) {
+      scenes[chartIndices[0].index] = makeChartScene(scenes[chartIndices[0].index], directed.comparison, "comparison");
+    }
+  }
+
+  if (directed.spatial) {
+    if (mapIndex >= 0) {
+      scenes[mapIndex] = makeMapScene(scenes[mapIndex], directed.spatial);
+    }
+  }
+
+  return { ...project, scenes, datasets };
+}
+
+function attachSceneEvidence(scene: StudioScene, evidenceItem?: EvidenceItem, asset?: EvidenceAsset) {
+  const next: any = { ...scene };
+
+  if (evidenceItem) {
+    next.sourceLabel = next.sourceLabel || evidenceItem.sourceLabel || evidenceItem.source || "Source evidence";
+    next.sourceExcerpt = next.sourceExcerpt || lite(evidenceItem.statement);
+    next.body = next.body || lite(evidenceItem.statement);
+    next.factIds = Array.from(new Set([...(next.factIds || []), evidenceItem.id]));
+
+    if (!next.visualPlan || next.visualPlan.kind === "minimal") {
+      next.visualPlan = {
+        kind: "source_highlight",
+        reason: "A source-backed statement exists and should be made visible in the scene.",
+        evidenceIds: next.factIds,
+        confidence: 91,
+      };
+    }
+  }
+
+  if (asset) {
+    next.assetId = next.assetId || asset.id;
+    next.assetUrl = next.assetUrl || asset.dataUrl;
+    next.assetCaption = next.assetCaption || asset.sourceLabel || asset.name;
+    next.visualLabels = Array.from(new Set([...(next.visualLabels || []), "documentary-b-roll", "source-visible"]));
+  }
+
+  return next as StudioScene;
+}
+
+function improveEvidenceDensity(project: EpisodeProject) {
+  const scenes = [...project.scenes];
+  const rankedEvidence = strongestEvidence(project);
+  const assets = [...(project.assets || [])];
+
+  let evidenceCursor = 0;
+  let assetCursor = 0;
+
+  const needsSupport = (scene: StudioScene) => {
+    if (scene.chart || scene.map) return false;
+    if (lite(scene.sourceExcerpt) && lite(scene.sourceLabel)) return false;
+    return true;
+  };
+
+  for (let i = 0; i < scenes.length; i += 1) {
+    const scene = scenes[i];
+    const evidenceItem = needsSupport(scene) ? rankedEvidence[evidenceCursor++] : undefined;
+    const asset = scene.kind === "source_highlight" || scene.visualPlan?.kind === "source_highlight"
+      ? assets[assetCursor++]
+      : undefined;
+    scenes[i] = attachSceneEvidence(scene, evidenceItem, asset);
+  }
+
+  return { ...project, scenes };
+}
+
+function recomputeVisualScore(project: EpisodeProject) {
+  const scenes = project.scenes || [];
+  const backed = scenes.filter((scene: any) => Boolean(scene.chart || scene.map || lite(scene.sourceExcerpt) || lite(scene.sourceLabel) || scene.assetUrl));
+  const evidenceDensity = Math.max(24, Math.min(100, Math.round((backed.length / Math.max(1, scenes.length)) * 100)));
+
+  const kinds = new Set(scenes.map((scene) => scene.visualPlan?.kind || scene.kind));
+  const variation = Math.max(30, Math.min(100, Math.round((kinds.size / 6) * 100)));
+  const geographic = scenes.some((scene) => Boolean(scene.map)) ? 100 : 28;
+  const dataStorytelling = scenes.some((scene) => Boolean(scene.chart)) ? 100 : 24;
+  const sourceVisibility = backed.length ? 100 : 40;
+
+  const warnings: string[] = [];
+  if (evidenceDensity < 70) warnings.push("Too many scenes are explanation-only. Increase visible proof density with source material, measured data or field evidence.");
+  if (!scenes.some((scene) => Boolean(scene.map))) warnings.push("World Explained mode has no mapped evidence yet. Add a geocoded CSV or a manually sourced map before publication.");
+  if (!scenes.some((scene) => Boolean(scene.chart))) warnings.push("World Explained mode has no data-story scene yet. Add a CSV or structured quantitative evidence when the topic supports it.");
+
+  const overall = Math.round((evidenceDensity * 0.35) + (variation * 0.15) + (geographic * 0.2) + (dataStorytelling * 0.2) + (sourceVisibility * 0.1));
+
+  return {
+    ...project,
+    visualIntelligence: {
+      overall,
+      evidenceDensity,
+      visualVariation: variation,
+      geographicContext: geographic,
+      dataStorytelling,
+      sourceVisibility,
+      warnings,
+    },
+  };
+}
+
+function polishProject(project: EpisodeProject, datasets: DatasetAnalysis[]) {
+  const withDirectedData = improveDataStoryDirector(project, datasets);
+  const withEvidenceDensity = improveEvidenceDensity(withDirectedData);
+  return recomputeVisualScore(withEvidenceDensity);
+}
+
 export default function StudioPage() {
   const [project, setProject] = useState<EpisodeProject>(initial);
   const [mode, setMode] = useState<StoryMode>("world_explained");
@@ -189,8 +419,6 @@ export default function StudioPage() {
   const [manualScriptEdits, setManualScriptEdits] = useState(false);
   const [visualRerunBusy, setVisualRerunBusy] = useState(false);
   const [visualRerunMessage, setVisualRerunMessage] = useState("");
-  const workspaceHydrated = useRef(false);
-  const [workspaceSavedAt, setWorkspaceSavedAt] = useState("");
 
   const [sourceKind, setSourceKind] = useState<"research" | "report" | "text">("research");
   const [documentBusy, setDocumentBusy] = useState(false);
@@ -212,100 +440,6 @@ export default function StudioPage() {
   const [narrationError, setNarrationError] = useState("");
   const [renderBusy, setRenderBusy] = useState<"video" | "short" | "thumbnail" | null>(null);
   const [renderError, setRenderError] = useState("");
-
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
-
-      if (raw) {
-        const saved = JSON.parse(raw) as Partial<PersistedWorkspace>;
-
-        if (saved.mode) setMode(saved.mode);
-        if (typeof saved.topic === "string") setTopic(saved.topic);
-        if (typeof saved.question === "string") setQuestion(saved.question);
-        if (typeof saved.brief === "string") setBrief(saved.brief);
-        if (typeof saved.audience === "string") setAudience(saved.audience);
-        if (typeof saved.minutes === "number" && Number.isFinite(saved.minutes)) {
-          setMinutes(saved.minutes);
-        }
-        if (Array.isArray(saved.evidence)) setEvidence(saved.evidence);
-        if (Array.isArray(saved.datasets)) {
-          setDatasets(
-            saved.datasets.map(upgradeLegacyDatasetAnalysis)
-          );
-        }
-        if (saved.activeTab && isValidTab(saved.activeTab)) {
-          setActiveTab(saved.activeTab);
-        }
-        if (
-          saved.sourceKind === "research" ||
-          saved.sourceKind === "report" ||
-          saved.sourceKind === "text"
-        ) {
-          setSourceKind(saved.sourceKind);
-        }
-        if (typeof saved.scoutQuery === "string") setScoutQuery(saved.scoutQuery);
-        if (typeof saved.manualScriptEdits === "boolean") {
-          setManualScriptEdits(saved.manualScriptEdits);
-        }
-        if (saved.project?.episode && Array.isArray(saved.project.scenes)) {
-          setProject(saved.project);
-        }
-      }
-    } catch (error) {
-      console.warn("Unable to restore Evidence Studio workspace:", error);
-    } finally {
-      workspaceHydrated.current = true;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!workspaceHydrated.current) return;
-
-    const timer = window.setTimeout(() => {
-      try {
-        const payload: PersistedWorkspace = {
-          mode,
-          topic,
-          question,
-          brief,
-          audience,
-          minutes,
-          evidence,
-          datasets,
-          activeTab,
-          sourceKind,
-          scoutQuery,
-          manualScriptEdits,
-          project: projectForWorkspaceStorage(project),
-        };
-
-        window.localStorage.setItem(
-          WORKSPACE_STORAGE_KEY,
-          JSON.stringify(payload)
-        );
-        setWorkspaceSavedAt(new Date().toLocaleTimeString());
-      } catch (error) {
-        console.warn("Unable to persist Evidence Studio workspace:", error);
-      }
-    }, 250);
-
-    return () => window.clearTimeout(timer);
-  }, [
-    mode,
-    topic,
-    question,
-    brief,
-    audience,
-    minutes,
-    evidence,
-    datasets,
-    activeTab,
-    sourceKind,
-    scoutQuery,
-    manualScriptEdits,
-    project,
-  ]);
 
   const pack = useMemo(() => getStoryPack(mode), [mode]);
   const durationInFrames = useMemo(
@@ -345,14 +479,7 @@ export default function StudioPage() {
 
     base.assets = project.assets;
     if (nextMode === "hps") base.hpsIngestion = project.hpsIngestion;
-    const currentDatasets = nextDatasets.map(
-      upgradeLegacyDatasetAnalysis
-    );
-    const enriched = applyVisualIntelligence(
-      base,
-      currentDatasets
-    );
-    setDatasets(currentDatasets);
+    const enriched = polishProject(applyVisualIntelligence(base, nextDatasets), nextDatasets);
     setProject(enriched);
     setMode(nextMode);
     setManualScriptEdits(false);
@@ -484,81 +611,6 @@ export default function StudioPage() {
     });
   }
 
-
-  function integrateVisualAssets(newAssets: EvidenceAsset[]) {
-    if (!newAssets.length) return;
-
-    setProject((current) => {
-      const byId = new Map<string, EvidenceAsset>();
-      current.assets.forEach((asset) => byId.set(asset.id, asset));
-      newAssets.forEach((asset) => byId.set(asset.id, asset));
-
-      return {
-        ...current,
-        assets: [...byId.values()],
-      };
-    });
-  }
-
-
-  function purgeEvidenceSources(sources: string[]) {
-    if (!sources.length) return;
-
-    const sourceSet = new Set(sources);
-
-    setEvidence((current) =>
-      current.filter(
-        (item) =>
-          !item.source ||
-          !sourceSet.has(item.source)
-      )
-    );
-
-    setProject((current) => {
-      const removedIds = new Set(
-        current.evidence
-          .filter(
-            (item) =>
-              item.source &&
-              sourceSet.has(item.source)
-          )
-          .map((item) => item.id)
-      );
-
-      return {
-        ...current,
-        evidence: current.evidence.filter(
-          (item) =>
-            !item.source ||
-            !sourceSet.has(item.source)
-        ),
-        scenes: current.scenes.map((scene) => ({
-          ...scene,
-          factIds: scene.factIds.filter(
-            (id) => !removedIds.has(id)
-          ),
-        })),
-      };
-    });
-  }
-
-  function updateSceneAsset(
-    sceneId: string,
-    assetId?: string
-  ) {
-    setProject((current) => ({
-      ...current,
-      scenes: current.scenes.map((scene) =>
-        scene.id === sceneId
-          ? {
-              ...scene,
-              assetId: assetId || undefined,
-            }
-          : scene
-      ),
-    }));
-  }
-
   function useIntelligenceAngle(angle: StoryHunterAngle, rebuild: boolean) {
     setQuestion(angle.question);
     if (!rebuild) {
@@ -589,13 +641,7 @@ export default function StudioPage() {
         retentionPurpose: `Story Hunter opening · ${angle.angle} · score ${angle.overall}/100`,
       };
     }
-    const currentDatasets = datasets.map(
-      upgradeLegacyDatasetAnalysis
-    );
-    setDatasets(currentDatasets);
-    setProject(
-      applyVisualIntelligence(base, currentDatasets)
-    );
+    setProject(polishProject(applyVisualIntelligence(base, datasets), datasets));
     setManualScriptEdits(false);
     setEditingSceneId(null);
     setActiveTab("story");
@@ -609,16 +655,7 @@ export default function StudioPage() {
 
     requestAnimationFrame(() => {
       try {
-        const currentDatasets = datasets.map(
-          upgradeLegacyDatasetAnalysis
-        );
-        setDatasets(currentDatasets);
-        setProject((current) =>
-          applyVisualIntelligence(
-            current,
-            currentDatasets
-          )
-        );
+        setProject((current) => polishProject(applyVisualIntelligence(current, datasets), datasets));
         setVisualRerunMessage(
           `Visual reasoning refreshed at ${new Date().toLocaleTimeString()}.`
         );
@@ -718,7 +755,7 @@ export default function StudioPage() {
       base.assets = project.assets;
       base.documentIngestion = parsed;
 
-      setProject(applyVisualIntelligence(base, datasets));
+      setProject(polishProject(applyVisualIntelligence(base, datasets), datasets));
 
       /*
        * Reset only the scout's manual search query. Do NOT reset the user's
@@ -745,133 +782,23 @@ export default function StudioPage() {
 
   async function ingestCsv(file: File | undefined) {
     if (!file) return;
-
-    const lowerName = file.name.toLowerCase();
-    const isExcel =
-      lowerName.endsWith(".xlsx") ||
-      lowerName.endsWith(".xlsm") ||
-      file.type ===
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-      file.type ===
-        "application/vnd.ms-excel.sheet.macroEnabled.12";
-
-    const isGeoJson =
-      lowerName.endsWith(".geojson") ||
-      file.type === "application/geo+json";
-
-    let importedDatasets: DatasetAnalysis[] = [];
-    let datasetEvidence: EvidenceItem[] = [];
-
-    if (isExcel) {
-      const workbook = await analyzeXlsx(
-        file,
-        file.name
-      );
-
-      importedDatasets = workbook.datasets;
-
-      datasetEvidence = workbook.datasets.flatMap(
-        (item) =>
-          item.insight
-            ? [
-                {
-                  id: crypto.randomUUID(),
-                  kind: "observed" as const,
-                  statement: item.insight,
-                  source: file.name,
-                  sourceLabel: `${file.name} · ${item.name}`,
-                  sourceType: "dataset" as const,
-                },
-              ]
-            : []
-      );
-    } else if (isGeoJson) {
-      const map = analyzeGeoJson(
-        await file.text(),
-        file.name
-      );
-
-      const analysis: DatasetAnalysis = {
-        name: file.name,
-        rowCount:
-          map.points.length +
-          (map.layers?.length || 0),
-        columns: [],
-        numericColumns: [],
-        dateColumns: [],
-        recommendedMap: map,
-        insight: `The GeoJSON contains ${
-          map.points.length
-        } mapped point${
-          map.points.length === 1 ? "" : "s"
-        } and ${map.layers?.length || 0} vector layer${
-          (map.layers?.length || 0) === 1
-            ? ""
-            : "s"
-        }.`,
-        analysisVersion:
-          DATASET_ANALYSIS_VERSION,
-        sourceKind: "geojson",
-        sourceText:
-          (await file.text()).length <= 250_000
-            ? await file.text()
-            : undefined,
-      };
-
-      importedDatasets = [analysis];
-      datasetEvidence = [
-        {
+    const analysis = analyzeCsv(await file.text(), file.name);
+    const nextDatasets = [...datasets.filter((item) => item.name !== analysis.name), analysis];
+    const datasetEvidence: EvidenceItem | null = analysis.insight
+      ? {
           id: crypto.randomUUID(),
           kind: "observed",
-          statement: analysis.insight!,
+          statement: analysis.insight,
           source: file.name,
           sourceLabel: file.name,
           sourceType: "dataset",
-        },
-      ];
-    } else {
-      const analysis = analyzeCsv(
-        await file.text(),
-        file.name
-      );
-
-      importedDatasets = [analysis];
-
-      if (analysis.insight) {
-        datasetEvidence = [
-          {
-            id: crypto.randomUUID(),
-            kind: "observed",
-            statement: analysis.insight,
-            source: file.name,
-            sourceLabel: file.name,
-            sourceType: "dataset",
-          },
-        ];
-      }
-    }
-
-    const incomingNames = new Set(
-      importedDatasets.map((item) => item.name)
-    );
-
-    const nextDatasets = [
-      ...datasets.filter(
-        (item) => !incomingNames.has(item.name)
-      ),
-      ...importedDatasets,
-    ];
-
-    const nextEvidence = [
-      ...evidence,
-      ...datasetEvidence,
-    ];
-
+        }
+      : null;
+    const nextEvidence = datasetEvidence ? [...evidence, datasetEvidence] : evidence;
     setDatasets(nextDatasets);
     setEvidence(nextEvidence);
     buildFrom(nextEvidence, nextDatasets);
     setScoutQuery("");
-
     await runEvidenceScout({
       nextEvidence,
       nextDatasets,
@@ -913,7 +840,7 @@ export default function StudioPage() {
       });
       next.assets = project.assets;
       next.hpsIngestion = parsed.ingestion;
-      setProject(applyVisualIntelligence(next, datasets));
+      setProject(polishProject(applyVisualIntelligence(next, datasets), datasets));
       setActiveTab("story");
     } catch (error: any) {
       setHpsError(error?.message || "Unable to ingest HPS evidence.");
@@ -1017,11 +944,6 @@ export default function StudioPage() {
         </div>
         <div className="topActions">
           <span className="truthBadge"><BadgeCheck size={15} /> Show your work</span>
-          {workspaceSavedAt && (
-            <span className="truthBadge" title="Story settings and workspace state are saved in this browser.">
-              <Save size={14} /> Saved {workspaceSavedAt}
-            </span>
-          )}
           <button
             className="button ghost"
             onClick={() => downloadText(`${project.id}.json`, JSON.stringify(project, null, 2), "application/json")}
@@ -1481,11 +1403,11 @@ export default function StudioPage() {
                     fontWeight: 500,
                   }}
                 >
-                  CSV, Excel or GeoJSON · detect trends, comparisons, coordinates and real map layers.
+                  CSV · detect trends, comparisons and coordinates.
                 </span>
                 <input
                   type="file"
-                  accept=".csv,.xlsx,.xlsm,.geojson,text/csv,application/geo+json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+                  accept=".csv,text/csv"
                   hidden
                   onChange={(e: any) => ingestCsv(e.target.files?.[0])}
                 />
@@ -2012,8 +1934,6 @@ export default function StudioPage() {
           datasets={datasets}
           scout={scout}
           onIntegrate={integrateIntelligence}
-          onIntegrateVisualAssets={integrateVisualAssets}
-          onPurgeEvidenceSources={purgeEvidenceSources}
           onUseAngle={useIntelligenceAngle}
         />
       )}
@@ -2054,38 +1974,6 @@ export default function StudioPage() {
                           <label>Headline<input value={scene.headline} onChange={(e: any) => updateScene(scene.id, "headline", e.target.value)} /></label>
                           <label>Narration<textarea rows={8} value={scene.narration} onChange={(e: any) => updateScene(scene.id, "narration", e.target.value)} /></label>
                           <label>On-screen evidence<textarea rows={4} value={scene.body} onChange={(e: any) => updateScene(scene.id, "body", e.target.value)} /></label>
-                          <label>
-                            Visual evidence
-                            <select
-                              value={scene.assetId || ""}
-                              onChange={(e: any) =>
-                                updateSceneAsset(
-                                  scene.id,
-                                  e.target.value || undefined
-                                )
-                              }
-                            >
-                              <option value="">
-                                No visual evidence assigned
-                              </option>
-                              {project.assets.map((asset) => (
-                                <option
-                                  key={asset.id}
-                                  value={asset.id}
-                                >
-                                  {asset.name}
-                                  {asset.sourceLabel
-                                    ? ` · ${asset.sourceLabel}`
-                                    : ""}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          {scene.assetId && (
-                            <p className="muted" style={{ marginTop: 8 }}>
-                              This scene will use the selected uploaded image as real visual evidence.
-                            </p>
-                          )}
                         </>
                       ) : (
                         <><h3>{scene.headline}</h3><p>{scene.narration}</p></>
