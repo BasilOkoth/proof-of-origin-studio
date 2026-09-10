@@ -29,6 +29,30 @@ export type IllustrationFrame = {
   durationSec: number;
 };
 
+export type IllustrationNode = {
+  id: string;
+  label: string;
+  role: "input" | "process" | "constraint" | "outcome" | "context";
+  evidenceStatus: "observed" | "interpreted" | "uncertain";
+};
+
+export type IllustrationEdge = {
+  id: string;
+  from: string;
+  to: string;
+  relation: "drives" | "increases" | "reduces" | "constrains" | "leads_to";
+  evidenceStatus: "observed" | "interpreted" | "uncertain";
+};
+
+export type IllustrationExecution = {
+  kind: "flow_network" | "risk_path" | "comparison" | "scale_ladder" | "system_reveal";
+  nodes: IllustrationNode[];
+  edges: IllustrationEdge[];
+  beforeLabel?: string;
+  afterLabel?: string;
+  evidenceBoundary?: string;
+};
+
 export type IllustrationScenePlan = {
   sceneId: string;
   mode: StyleMode;
@@ -41,10 +65,11 @@ export type IllustrationScenePlan = {
   motionLanguage: string[];
   iconStrategy: string;
   transitionStyle: string;
+  execution?: IllustrationExecution;
 };
 
 export type IllustrationDirection = {
-  version: "illustration-director-1";
+  version: "illustration-director-2";
   generatedAt: string;
   defaultMode: StyleMode;
   scenes: IllustrationScenePlan[];
@@ -53,7 +78,7 @@ export type IllustrationDirection = {
 };
 
 const ABSTRACT_WORDS =
-  /\b(system|network|flow|chain|relationship|mechanism|process|cycle|economy|distance|scale|growth|decline|trend|risk|probability|impact|trajectory|future|past|history|power|waste|trade|carbon|supply|drainage|flooding|health)\b/i;
+  /\b(system|network|flow|chain|relationship|mechanism|process|cycle|economy|distance|scale|growth|decline|trend|risk|probability|impact|trajectory|future|past|history|power|waste|trade|carbon|supply|drainage|flooding|health|runoff|infiltration|capacity|maintenance|governance)\b/i;
 
 const HUMAN_WORDS =
   /\b(people|workers|children|families|residents|communities|farmers|students|patients|citizens)\b/i;
@@ -168,7 +193,15 @@ function detectMode(project: EpisodeProject, scene: Scene): StyleMode {
 
 function shouldIllustrate(scene: Scene) {
   if (scene.kind === "diagram" || scene.kind === "timeline") return true;
-  if (scene.kind === "map_story" || scene.kind === "data_chart") return false;
+  if (
+    scene.kind === "map_story" ||
+    scene.kind === "data_chart" ||
+    scene.kind === "document" ||
+    scene.kind === "source_highlight" ||
+    scene.kind === "proof_card"
+  ) {
+    return false;
+  }
 
   const content = text(scene);
   return ABSTRACT_WORDS.test(content) || QUANT_WORDS.test(content);
@@ -177,7 +210,7 @@ function shouldIllustrate(scene: Scene) {
 function metaphorFor(scene: Scene): VisualMetaphor | undefined {
   const content = text(scene);
 
-  if (/\b(flow|chain|cycle|system|process)\b/i.test(content)) {
+  if (/\b(flow|chain|cycle|system|process|runoff|drainage|infiltration|water)\b/i.test(content)) {
     return {
       label: "Flow Network",
       description:
@@ -230,6 +263,190 @@ function metaphorFor(scene: Scene): VisualMetaphor | undefined {
   };
 }
 
+function compactLabel(value: string) {
+  return value
+    .replace(/[.:;!?]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 5)
+    .join(" ");
+}
+
+function labelsFromScene(scene: Scene) {
+  if (scene.visualLabels?.length) {
+    return scene.visualLabels
+      .map(compactLabel)
+      .filter(Boolean)
+      .slice(0, 6);
+  }
+
+  const content = text(scene);
+  const candidates: string[] = [];
+
+  const rules: Array<[RegExp, string]> = [
+    [/\bheavy rain(?:fall)?\b/i, "Heavy rainfall"],
+    [/\bimpervious|built surfaces?|paved surfaces?\b/i, "Built surfaces"],
+    [/\binfiltration\b/i, "Reduced infiltration"],
+    [/\brunoff\b/i, "Surface runoff"],
+    [/\bdrainage|drains?\b/i, "Drainage network"],
+    [/\bblocked|blockage|waste accumulation\b/i, "Blockage"],
+    [/\bcapacity\b/i, "Capacity limit"],
+    [/\briver|waterways?\b/i, "Rivers & waterways"],
+    [/\bmaintenance\b/i, "Maintenance"],
+    [/\bgovernance|institutions?|planning\b/i, "Planning & governance"],
+    [/\bexposure|settlement\b/i, "Exposure"],
+    [/\bflooding|flood risk\b/i, "Flooding"],
+    [/\bdamage\b/i, "Damage"],
+  ];
+
+  for (const [pattern, label] of rules) {
+    if (pattern.test(content) && !candidates.includes(label)) {
+      candidates.push(label);
+    }
+  }
+
+  if (candidates.length >= 3) return candidates.slice(0, 6);
+
+  const clauses = `${scene.headline}. ${scene.body}`
+    .split(/[.;:!?]\s+/)
+    .map(compactLabel)
+    .filter((item) => item.length >= 5 && item.length <= 44);
+
+  for (const clause of clauses) {
+    if (!candidates.includes(clause)) candidates.push(clause);
+    if (candidates.length >= 5) break;
+  }
+
+  return candidates.length
+    ? candidates
+    : ["Trigger", "Urban system", "Constraint", "Outcome"];
+}
+
+function statusFor(label: string, scene: Scene): IllustrationNode["evidenceStatus"] {
+  const lower = label.toLowerCase();
+  const sceneText = text(scene).toLowerCase();
+
+  if (
+    lower.includes("uncertain") ||
+    lower.includes("gap") ||
+    lower.includes("not prove") ||
+    scene.kind === "quote"
+  ) {
+    return "uncertain";
+  }
+
+  if (scene.factIds?.length) return "observed";
+
+  if (
+    sceneText.includes("evidence indicates") ||
+    sceneText.includes("local evidence") ||
+    sceneText.includes("evidence shows")
+  ) {
+    return "observed";
+  }
+
+  return "interpreted";
+}
+
+function roleFor(label: string, index: number, total: number): IllustrationNode["role"] {
+  const lower = label.toLowerCase();
+  if (index === 0 || /\brain|trigger|input\b/.test(lower)) return "input";
+  if (index === total - 1 || /\bflood|damage|outcome|result\b/.test(lower)) return "outcome";
+  if (/\bblock|capacity|constraint|limit|exposure\b/.test(lower)) return "constraint";
+  if (/\bgovernance|planning|maintenance|context\b/.test(lower)) return "context";
+  return "process";
+}
+
+function relationFor(from: string, to: string): IllustrationEdge["relation"] {
+  const pair = `${from} ${to}`.toLowerCase();
+  if (/\breduc|infiltration\b/.test(pair)) return "reduces";
+  if (/\bblock|capacity|constraint|limit\b/.test(pair)) return "constrains";
+  if (/\bincrease|runoff|exposure\b/.test(pair)) return "increases";
+  if (/\boutcome|flood|damage\b/.test(to.toLowerCase())) return "leads_to";
+  return "drives";
+}
+
+function executionFor(
+  scene: Scene,
+  metaphor?: VisualMetaphor
+): IllustrationExecution | undefined {
+  if (!metaphor) return undefined;
+
+  const labels = labelsFromScene(scene);
+  const nodes: IllustrationNode[] = labels.map((label, index) => ({
+    id: `${scene.id}-node-${index + 1}`,
+    label,
+    role: roleFor(label, index, labels.length),
+    evidenceStatus: statusFor(label, scene),
+  }));
+
+  const edges: IllustrationEdge[] = nodes.slice(0, -1).map((node, index) => ({
+    id: `${scene.id}-edge-${index + 1}`,
+    from: node.id,
+    to: nodes[index + 1].id,
+    relation: relationFor(node.label, nodes[index + 1].label),
+    evidenceStatus:
+      node.evidenceStatus === "uncertain" ||
+      nodes[index + 1].evidenceStatus === "uncertain"
+        ? "uncertain"
+        : node.evidenceStatus === "observed" &&
+            nodes[index + 1].evidenceStatus === "observed"
+          ? "observed"
+          : "interpreted",
+  }));
+
+  if (metaphor.purpose === "comparison") {
+    return {
+      kind: "comparison",
+      nodes,
+      edges,
+      beforeLabel: scene.before || labels[0] || "Before",
+      afterLabel: scene.after || labels[1] || "After",
+      evidenceBoundary:
+        "Visual comparison follows the scene's stated evidence; it does not imply an unmeasured effect.",
+    };
+  }
+
+  if (metaphor.purpose === "scale") {
+    return {
+      kind: "scale_ladder",
+      nodes,
+      edges,
+      evidenceBoundary:
+        "Scale is explanatory unless the scene contains source-backed quantitative values.",
+    };
+  }
+
+  if (metaphor.purpose === "risk") {
+    return {
+      kind: "risk_path",
+      nodes,
+      edges,
+      evidenceBoundary:
+        "Dashed links mark interpreted or uncertain causal steps.",
+    };
+  }
+
+  if (metaphor.purpose === "flow") {
+    return {
+      kind: "flow_network",
+      nodes,
+      edges,
+      evidenceBoundary:
+        "Observed and interpreted links are visually distinguished.",
+    };
+  }
+
+  return {
+    kind: "system_reveal",
+    nodes,
+    edges,
+    evidenceBoundary:
+      "Observed evidence and interpretation remain visually distinct.",
+  };
+}
+
 function framePlan(scene: Scene, metaphor?: VisualMetaphor): IllustrationFrame[] {
   if (!metaphor) {
     return [
@@ -244,30 +461,30 @@ function framePlan(scene: Scene, metaphor?: VisualMetaphor): IllustrationFrame[]
     ];
   }
 
-  if (metaphor.purpose === "flow") {
+  if (metaphor.purpose === "flow" || metaphor.purpose === "risk") {
     return [
       {
         id: `${scene.id}-frame-1`,
         order: 1,
         title: "System nodes",
-        action: "Show the main actors or nodes first.",
-        visual: "Simple labelled node layout.",
+        action: "Reveal the first conditions and actors.",
+        visual: "Executable labelled node layout.",
         durationSec: 3,
       },
       {
         id: `${scene.id}-frame-2`,
         order: 2,
         title: "Movement",
-        action: "Animate movement across pathways in narration order.",
-        visual: "Arrows, routes, transfers, flow pulses.",
+        action: "Animate links and flow pulses in narration order.",
+        visual: "Executable SVG paths, arrows and moving pulses.",
         durationSec: 4,
       },
       {
         id: `${scene.id}-frame-3`,
         order: 3,
-        title: "Accumulation / outcome",
-        action: "Reveal where the system leads and why it matters.",
-        visual: "Bottleneck, spillover or final destination emphasis.",
+        title: "Outcome",
+        action: "Reveal the bottleneck or final consequence.",
+        visual: "Executable outcome emphasis with evidence-status styling.",
         durationSec: 4,
       },
     ];
@@ -278,25 +495,25 @@ function framePlan(scene: Scene, metaphor?: VisualMetaphor): IllustrationFrame[]
       {
         id: `${scene.id}-frame-1`,
         order: 1,
-        title: "Reference object",
-        action: "Begin with something familiar in scale.",
-        visual: "House, truck, person, map unit or timeline segment.",
+        title: "Reference",
+        action: "Start with the smallest reference.",
+        visual: "Executable scale object.",
         durationSec: 3,
       },
       {
         id: `${scene.id}-frame-2`,
         order: 2,
         title: "Escalation",
-        action: "Multiply or zoom outward to show the next scale level.",
-        visual: "Progressive stacked or zoomed comparison.",
+        action: "Grow the comparison progressively.",
+        visual: "Executable scale ladder.",
         durationSec: 4,
       },
       {
         id: `${scene.id}-frame-3`,
         order: 3,
-        title: "Implication",
-        action: "Tie the scale back to the claim being made.",
-        visual: "Final comparison with labelled takeaway.",
+        title: "Meaning",
+        action: "Hold the largest comparison and takeaway.",
+        visual: "Resolved scale composition.",
         durationSec: 4,
       },
     ];
@@ -308,24 +525,24 @@ function framePlan(scene: Scene, metaphor?: VisualMetaphor): IllustrationFrame[]
         id: `${scene.id}-frame-1`,
         order: 1,
         title: "Baseline",
-        action: "Show the original state first.",
-        visual: "Clear left-side baseline.",
+        action: "Show the first state.",
+        visual: "Executable left-side state.",
         durationSec: 3,
       },
       {
         id: `${scene.id}-frame-2`,
         order: 2,
         title: "Change",
-        action: "Reveal the changed state with one emphasized difference.",
-        visual: "Split-screen or sliding before/after transition.",
+        action: "Reveal the second state.",
+        visual: "Animated before/after transition.",
         durationSec: 4,
       },
       {
         id: `${scene.id}-frame-3`,
         order: 3,
         title: "Meaning",
-        action: "Summarize why the difference matters.",
-        visual: "Callout or highlighted consequence.",
+        action: "Highlight the difference without overclaiming.",
+        visual: "Evidence-bound comparison.",
         durationSec: 3,
       },
     ];
@@ -336,24 +553,24 @@ function framePlan(scene: Scene, metaphor?: VisualMetaphor): IllustrationFrame[]
       id: `${scene.id}-frame-1`,
       order: 1,
       title: "Setup",
-      action: "Introduce the main actors or idea.",
-      visual: "Simple stage with one focal concept.",
+      action: "Introduce the focal concept.",
+      visual: "Executable focal node.",
       durationSec: 3,
     },
     {
       id: `${scene.id}-frame-2`,
       order: 2,
       title: "Development",
-      action: "Add motion and one explanatory layer.",
-      visual: "Progressive build with labels.",
+      action: "Add relationships progressively.",
+      visual: "Executable nodes and links.",
       durationSec: 4,
     },
     {
       id: `${scene.id}-frame-3`,
       order: 3,
       title: "Payoff",
-      action: "Deliver the explanatory insight visually.",
-      visual: "Resolved metaphor with takeaway.",
+      action: "Resolve the system visually.",
+      visual: "Complete evidence-labelled mechanism.",
       durationSec: 4,
     },
   ];
@@ -376,36 +593,40 @@ export function buildIllustrationDirection(
         scene.kind === "confidence"
           ? "high"
           : illustrate
-          ? "medium"
-          : "low",
+            ? "medium"
+            : "low",
       shouldIllustrate: illustrate,
       reason: illustrate
-        ? `This scene contains abstract or quantitative reasoning that benefits from explanatory illustration.`
-        : `This scene is better served by documentary, chart or map treatment.`,
+        ? "This scene contains a mechanism, relationship or abstraction that can now be executed as an animated visual."
+        : "This scene is better served by documentary, source, chart or map treatment.",
       metaphor,
       frames: framePlan(scene, metaphor),
       palette: paletteFor(mode),
       motionLanguage: motionFor(mode),
       iconStrategy: iconStrategyFor(mode),
       transitionStyle: transitionFor(mode),
+      execution: illustrate ? executionFor(scene, metaphor) : undefined,
     };
   });
 
   const warnings: string[] = [];
   const illustrated = scenes.filter((scene) => scene.shouldIllustrate).length;
+  const executable = scenes.filter((scene) => scene.execution?.nodes.length).length;
   const documentary = scenes.filter(
-    (scene) => scene.mode === "vox_documentary" || scene.mode === "johnny_cinematic"
+    (scene) =>
+      scene.mode === "vox_documentary" ||
+      scene.mode === "johnny_cinematic"
   ).length;
 
   if (!illustrated) {
     warnings.push(
-      "No scenes were flagged for explanatory illustration. This may leave abstract sections feeling too literal."
+      "No scenes were flagged for explanatory illustration."
     );
   }
 
-  if (illustrated < Math.ceil(project.scenes.length * 0.2)) {
+  if (illustrated && executable < illustrated) {
     warnings.push(
-      "Illustration coverage is light. Hybrid explainers often need at least a few clearly designed metaphor scenes."
+      "At least one illustration plan has no executable visual structure."
     );
   }
 
@@ -420,16 +641,17 @@ export function buildIllustrationDirection(
     Math.min(
       100,
       Math.round(
-        45 +
-          Math.min(30, illustrated * 5) +
-          Math.min(15, documentary * 2) -
-          warnings.length * 6
+        40 +
+          Math.min(25, illustrated * 4) +
+          Math.min(25, executable * 5) +
+          Math.min(10, documentary * 2) -
+          warnings.length * 5
       )
     )
   );
 
   return {
-    version: "illustration-director-1",
+    version: "illustration-director-2",
     generatedAt: new Date().toISOString(),
     defaultMode: "hybrid_world_explained",
     scenes,
