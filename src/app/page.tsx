@@ -361,50 +361,107 @@ export default function StudioPage() {
     if (!file) return;
     setDocumentBusy(true);
     setDocumentError("");
+
     try {
       const form = new FormData();
       form.append("file", file);
       form.append("kind", sourceKind);
-      const response = await fetch("/api/document-ingest", { method: "POST", body: form });
+
+      const response = await fetch("/api/document-ingest", {
+        method: "POST",
+        body: form,
+      });
+
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to ingest source.");
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to ingest source.");
+      }
 
       const parsed = data.result as DocumentIngestion;
       const merged = [...evidence, ...parsed.evidence];
-      const inferredMode: StoryMode =
-        sourceKind === "research" ? "research" : sourceKind === "report" ? "report" : mode;
 
-      setMode(inferredMode);
-      setTopic(parsed.suggestedTopic);
-      setQuestion(parsed.suggestedQuestion);
-      setBrief(parsed.suggestedBrief);
+      /*
+       * STORY CONTEXT POLICY
+       *
+       * If the user is already building a World Explained / Investigation /
+       * Explainer / Case Study story, the uploaded document is evidence for
+       * that story. It must not silently replace the user's topic, big
+       * question or systems brief.
+       *
+       * Research/report mode may still be inferred when the source itself is
+       * the story and the user has not chosen a broader story mode.
+       */
+      const preserveStoryContext =
+        mode === "world_explained" ||
+        mode === "investigation" ||
+        mode === "explainer" ||
+        mode === "case_study";
+
+      const nextMode: StoryMode = preserveStoryContext
+        ? mode
+        : sourceKind === "research"
+          ? "research"
+          : sourceKind === "report"
+            ? "report"
+            : mode;
+
+      const nextTopic = preserveStoryContext
+        ? topic
+        : parsed.suggestedTopic;
+
+      const nextQuestion = preserveStoryContext
+        ? question
+        : parsed.suggestedQuestion;
+
+      const nextBrief = preserveStoryContext
+        ? brief
+        : parsed.suggestedBrief;
+
+      setMode(nextMode);
       setEvidence(merged);
 
+      if (!preserveStoryContext) {
+        setTopic(nextTopic);
+        setQuestion(nextQuestion);
+        setBrief(nextBrief);
+      }
+
       const base = buildStoryEpisode({
-        mode: inferredMode,
+        mode: nextMode,
         channelName: "Evidence Studio",
         byline: "The world explained through evidence",
-        topic: parsed.suggestedTopic,
-        question: parsed.suggestedQuestion,
-        experiment: parsed.suggestedBrief,
+        topic: nextTopic,
+        question: nextQuestion,
+        experiment: nextBrief,
         audience,
         targetMinutes: minutes,
         evidence: merged,
       });
+
       base.assets = project.assets;
       base.documentIngestion = parsed;
+
       setProject(applyVisualIntelligence(base, datasets));
+
+      /*
+       * Reset only the scout's manual search query. Do NOT reset the user's
+       * Story-tab topic/question/brief.
+       */
       setScoutQuery("");
+
       await runEvidenceScout({
         nextEvidence: merged,
         nextDatasets: datasets,
-        nextTopic: parsed.suggestedTopic,
-        nextQuestion: parsed.suggestedQuestion,
+        nextTopic,
+        nextQuestion,
         nextSearchQuery: "",
         autoOpen: true,
       });
     } catch (error: any) {
-      setDocumentError(error?.message || "Document ingestion failed.");
+      setDocumentError(
+        error?.message || "Document ingestion failed."
+      );
     } finally {
       setDocumentBusy(false);
     }
