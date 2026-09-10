@@ -872,6 +872,31 @@ export function EditorialBeatScene({
   project: EpisodeProject;
   beat: EditorialBeat;
 }) {
+  const approvedVisualKind = String(scene.visualPlan?.kind || "");
+  const hasAssignedAsset = Boolean(
+    scene.assetId &&
+      project.assets.some(
+        (asset) => asset.id === scene.assetId && Boolean(asset.dataUrl)
+      )
+  );
+
+  /*
+   * First-class visual evidence must render as media even when an older
+   * story build left scene.kind="source_highlight".
+   */
+  if (
+    approvedVisualKind === "field_evidence" &&
+    hasAssignedAsset
+  ) {
+    return (
+      <MediaBeat
+        scene={scene}
+        project={project}
+        beat={{ ...beat, shotRole: "broll" }}
+      />
+    );
+  }
+
   if (beat.shotRole === "map" && scene.map) {
     return <MapStoryScene scene={scene} />;
   }
@@ -880,7 +905,11 @@ export function EditorialBeatScene({
     return <DataChartScene scene={scene} />;
   }
 
-  if (scene.kind === "source_highlight") {
+  if (
+    scene.kind === "source_highlight" &&
+    approvedVisualKind !== "systems_diagram" &&
+    approvedVisualKind !== "field_evidence"
+  ) {
     return <SourceHighlightScene scene={scene} />;
   }
 
@@ -894,9 +923,13 @@ export function EditorialBeatScene({
   }
 
   if (
-    beat.shotRole === "document" ||
-    scene.kind === "document" ||
-    scene.kind === "proof_card"
+    approvedVisualKind !== "systems_diagram" &&
+    approvedVisualKind !== "field_evidence" &&
+    (
+      beat.shotRole === "document" ||
+      scene.kind === "document" ||
+      scene.kind === "proof_card"
+    )
   ) {
     return (
       <DocumentBeat

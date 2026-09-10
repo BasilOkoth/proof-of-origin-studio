@@ -192,7 +192,25 @@ function detectMode(project: EpisodeProject, scene: Scene): StyleMode {
 }
 
 function shouldIllustrate(scene: Scene) {
+  const approvedVisualKind = String(scene.visualPlan?.kind || "");
+
+  /*
+   * Visual Intelligence is the approved render job.
+   * A stale scene.kind from an earlier story build must not override it.
+   */
+  if (approvedVisualKind === "systems_diagram") return true;
+
+  if (
+    approvedVisualKind === "map_story" ||
+    approvedVisualKind === "data_chart" ||
+    approvedVisualKind === "source_highlight" ||
+    approvedVisualKind === "field_evidence"
+  ) {
+    return false;
+  }
+
   if (scene.kind === "diagram" || scene.kind === "timeline") return true;
+
   if (
     scene.kind === "map_story" ||
     scene.kind === "data_chart" ||
