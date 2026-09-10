@@ -497,6 +497,67 @@ export default function StudioPage() {
     });
   }
 
+
+  function integrateVisualAssets(newAssets: EvidenceAsset[]) {
+    if (!newAssets.length) return;
+
+    setProject((current) => {
+      const byId = new Map<string, EvidenceAsset>();
+      (current.assets || []).forEach((asset) =>
+        byId.set(asset.id, asset)
+      );
+      newAssets.forEach((asset) =>
+        byId.set(asset.id, asset)
+      );
+
+      return {
+        ...current,
+        assets: [...byId.values()],
+      };
+    });
+  }
+
+  function purgeEvidenceSources(sources: string[]) {
+    if (!sources.length) return;
+
+    const sourceSet = new Set(sources);
+
+    setEvidence((current) =>
+      current.filter(
+        (item) =>
+          !item.source ||
+          !sourceSet.has(item.source)
+      )
+    );
+
+    setProject((current) => {
+      const removedIds = new Set(
+        (current.evidence || [])
+          .filter(
+            (item) =>
+              item.source &&
+              sourceSet.has(item.source)
+          )
+          .map((item) => item.id)
+      );
+
+      return {
+        ...current,
+        evidence: (current.evidence || []).filter(
+          (item) =>
+            !item.source ||
+            !sourceSet.has(item.source)
+        ),
+        scenes: current.scenes.map((scene) => ({
+          ...scene,
+          factIds: (scene.factIds || []).filter(
+            (id) => !removedIds.has(id)
+          ),
+        })),
+      };
+    });
+  }
+
   function useIntelligenceAngle(angle: StoryHunterAngle, rebuild: boolean) {
     setQuestion(angle.question);
     if (!rebuild) {
@@ -1828,6 +1889,8 @@ export default function StudioPage() {
           datasets={datasets}
           scout={scout}
           onIntegrate={integrateIntelligence}
+          onIntegrateVisualAssets={integrateVisualAssets}
+          onPurgeEvidenceSources={purgeEvidenceSources}
           onUseAngle={useIntelligenceAngle}
         />
       )}
