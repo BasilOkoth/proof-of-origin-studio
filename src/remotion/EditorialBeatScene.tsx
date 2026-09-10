@@ -881,12 +881,15 @@ export function EditorialBeatScene({
   );
 
   /*
-   * First-class visual evidence must render as media even when an older
-   * story build left scene.kind="source_highlight".
+   * First-class visual evidence must render as media whenever a scene has a
+   * real assigned asset. This is intentionally broader than field_evidence
+   * alone because many saved scenes still carry a stale source_highlight kind.
    */
   if (
-    approvedVisualKind === "field_evidence" &&
-    hasAssignedAsset
+    hasAssignedAsset &&
+    approvedVisualKind !== "systems_diagram" &&
+    !scene.map &&
+    !scene.chart
   ) {
     return (
       <MediaBeat

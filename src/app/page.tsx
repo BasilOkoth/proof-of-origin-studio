@@ -578,7 +578,48 @@ function improveVisualAssetDirector(project: EpisodeProject) {
 
   for (let index = 0; index < scenes.length; index += 1) {
     const scene = scenes[index];
-    if (scene.assetId || scene.chart || scene.map) continue;
+
+    /*
+     * If a scene already has an assigned asset, promote it to a true visual-evidence
+     * scene and rehydrate the preview-facing fields. This prevents stale
+     * source_highlight/document fallbacks from surviving across refreshes.
+     */
+    if (scene.assetId) {
+      const assignedAsset = project.assets.find((asset) => asset.id === scene.assetId);
+
+      if (assignedAsset?.dataUrl) {
+        usedAssets.add(assignedAsset.id);
+        scenes[index] = {
+          ...scene,
+          ...( {
+            assetUrl: assignedAsset.dataUrl,
+            assetCaption:
+              (scene as any).assetCaption ||
+              assignedAsset.sourceLabel ||
+              assignedAsset.name,
+          } as any),
+          visualPlan: {
+            kind: "field_evidence",
+            reason:
+              scene.visualPlan?.reason ||
+              `Persisted visual evidence restored for this scene from uploaded asset ${assignedAsset.name}.`,
+            evidenceIds: scene.visualPlan?.evidenceIds || scene.factIds || [],
+            confidence: Math.max(90, scene.visualPlan?.confidence || 0),
+          },
+          visualLabels: Array.from(
+            new Set([
+              ...(scene.visualLabels || []),
+              "source-visible",
+              visualAssetRole(assignedAsset),
+            ])
+          ),
+        };
+      }
+
+      continue;
+    }
+
+    if (scene.chart || scene.map) continue;
 
     const candidate = project.assets
       .filter((asset) => !usedAssets.has(asset.id))
@@ -595,16 +636,12 @@ function improveVisualAssetDirector(project: EpisodeProject) {
         assetUrl: candidate.asset.dataUrl,
         assetCaption: candidate.asset.sourceLabel || candidate.asset.name,
       } as any),
-      visualPlan:
-        scene.visualPlan?.kind === "source_highlight" ||
-        scene.visualPlan?.kind === "field_evidence"
-          ? scene.visualPlan
-          : {
-              kind: "field_evidence",
-              reason: `Uploaded visual evidence classified as ${visualAssetRole(candidate.asset)} matches this scene's visual job.`,
-              evidenceIds: scene.factIds || [],
-              confidence: Math.min(99, Math.max(82, candidate.score)),
-            },
+      visualPlan: {
+        kind: "field_evidence",
+        reason: `Uploaded visual evidence classified as ${visualAssetRole(candidate.asset)} matches this scene's visual job.`,
+        evidenceIds: scene.factIds || [],
+        confidence: Math.min(99, Math.max(82, candidate.score)),
+      },
       visualLabels: Array.from(
         new Set([
           ...(scene.visualLabels || []),
@@ -837,7 +874,7 @@ export default function StudioPage() {
           saved.project?.episode &&
           Array.isArray(saved.project.scenes)
         ) {
-          setProject(saved.project);
+          setProject(improveVisualAssetDirector(saved.project));
         }
       }
     } catch (error) {
@@ -873,10 +910,12 @@ export default function StudioPage() {
               byId.set(asset.id, asset)
             );
 
-            return {
+            const upgraded = improveVisualAssetDirector({
               ...current,
               assets: [...byId.values()],
-            };
+            });
+
+            return upgraded;
           });
 
           setVisualAssetStatus(
