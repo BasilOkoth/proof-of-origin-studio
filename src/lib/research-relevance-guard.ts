@@ -17,22 +17,59 @@ const STOP = new Set([
 ]);
 
 const FRONT_MATTER =
-  /\b(dedication|dedicated\s+to|acknowledg(?:e)?ments?|declaration|approval|copyright|table\s+of\s+contents|list\s+of\s+(?:tables|figures|abbreviations|acronyms)|abstract|foreword|preface|certificate|certification|plagiarism|supervisor|submitted\s+in\s+(?:partial|fulfilment|fulfillment)|degree\s+of|university\s+of|references|bibliography|appendix|appendices|chapter\s+\d+)\b/i;
+  /\b(dedication|dedicated\s+to|acknowledg(?:e)?ments?|declaration|approval|copyright|table\s+of\s+contents|list\s+of\s+(?:tables|figures|abbreviations|acronyms)|foreword|preface|certificate|certification|plagiarism|supervisor|submitted\s+in\s+(?:partial|fulfilment|fulfillment)|degree\s+of|references|bibliography|appendix|appendices|chapter\s+\d+)\b/i;
 
 const PERSONAL_FRONT_MATTER =
   /\b(helped\s+shape\s+my\s+life|my\s+family|my\s+parents|my\s+mother|my\s+father|gratitude|grateful|thank\s+god|almighty|friends?\s+and\s+family|this\s+work\s+is\s+dedicated)\b/i;
 
 const CITATION_NOISE =
-  /\b(doi|issn|isbn|creative\s+commons|all\s+rights\s+reserved|copyright|retrieved\s+from|available\s+at|volume\s+\d+|issue\s+\d+)\b/i;
+  /\b(issn|isbn|creative\s+commons|all\s+rights\s+reserved|copyright|retrieved\s+from|available\s+at|volume\s+\d+|issue\s+\d+)\b/i;
 
 const GENERIC_BACKGROUND = new Set([
-  "urban","flood","flooding","drainage","rainfall","climate","infrastructure",
-  "stormwater","watershed","river","rivers","risk","hazard","resilience",
-  "planning","land","use","waste","population","growth","city","cities",
+  "urban","flood","drain","rain","climate","infrastructure",
+  "stormwater","watershed","river","risk","hazard","resilience",
+  "planning","land","waste","population","growth","city",
 ]);
 
 function clean(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeToken(token: string) {
+  let value = token
+    .toLowerCase()
+    .replace(/^-+|-+$/g, "")
+    .replace(/[^a-z0-9-]/g, "");
+
+  if (!value) return "";
+
+  // Lightweight domain normalization so the guard does not reject
+  // legitimate evidence because of simple grammatical variants.
+  if (/^flood(?:s|ed|ing)?$/.test(value)) return "flood";
+  if (/^drain(?:s|ed|ing|age)?$/.test(value)) return "drain";
+  if (/^rain(?:s|ed|ing|fall)?$/.test(value)) return "rain";
+  if (/^river(?:s)?$/.test(value)) return "river";
+  if (/^city|cities$/.test(value)) return "city";
+  if (/^risk(?:s)?$/.test(value)) return "risk";
+  if (/^hazard(?:s)?$/.test(value)) return "hazard";
+  if (/^infrastructure(?:s)?$/.test(value)) return "infrastructure";
+  if (/^population(?:s)?$/.test(value)) return "population";
+  if (/^waste(?:s)?$/.test(value)) return "waste";
+  if (/^growth$/.test(value)) return "growth";
+  if (/^urban(?:isation|ization)?$/.test(value)) return "urban";
+  if (/^resilien(?:ce|t)$/.test(value)) return "resilience";
+  if (/^plan(?:ning|ned|s)?$/.test(value)) return "planning";
+  if (/^stormwater$/.test(value)) return "stormwater";
+  if (/^watershed(?:s)?$/.test(value)) return "watershed";
+  if (/^climat(?:e|ic)$/.test(value)) return "climate";
+
+  // Generic fallback stemming for common English endings.
+  if (value.length > 6 && value.endsWith("ing")) value = value.slice(0, -3);
+  else if (value.length > 5 && value.endsWith("ed")) value = value.slice(0, -2);
+  else if (value.length > 4 && value.endsWith("es")) value = value.slice(0, -2);
+  else if (value.length > 4 && value.endsWith("s")) value = value.slice(0, -1);
+
+  return value;
 }
 
 function words(value: string) {
@@ -40,7 +77,7 @@ function words(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
     .split(/\s+/)
-    .map((x) => x.replace(/^-+|-+$/g, ""))
+    .map(normalizeToken)
     .filter((x) => x.length >= 3 && !STOP.has(x));
 }
 
@@ -63,21 +100,28 @@ function explicitPlaceAnchors(topic: string, question: string) {
     candidates
       .flatMap((phrase) => phrase.split(/\s+/))
       .filter((token) => !banned.has(token))
-      .map((token) => token.toLowerCase())
+      .map((token) => normalizeToken(token))
+      .filter(Boolean)
   );
 }
 
 function anchorTerms(topic: string, question: string) {
   const all = unique([...words(topic), ...words(question)]);
-  const domain = all.filter(
-    (token) => GENERIC_BACKGROUND.has(token) || token.length >= 5
-  );
-  return domain.slice(0, 18);
+  return all
+    .filter((token) => GENERIC_BACKGROUND.has(token) || token.length >= 5)
+    .slice(0, 18);
+}
+
+function tokenSet(value: string) {
+  return new Set(words(value));
 }
 
 export function looksLikeFrontMatter(value: string) {
   const text = clean(value);
   if (!text) return true;
+
+  // Keep abstract content. Only a standalone heading should be removed.
+  if (/^abstract\s*[:.-]?$/i.test(text)) return true;
 
   return (
     FRONT_MATTER.test(text) ||
@@ -103,17 +147,20 @@ export function filterEvidenceForStory(input: {
 
     if (looksLikeFrontMatter(content)) return false;
 
-    const tokens = new Set(words(content));
+    const tokens = tokenSet(content);
     const placeMatch =
       !places.length || places.some((place) => tokens.has(place));
 
     const domainMatches = anchors.filter((token) => tokens.has(token)).length;
 
-    if (!placeMatch && places.length) {
-      return domainMatches >= 3;
+    // Local evidence needs only one story/domain match.
+    if (placeMatch) {
+      return domainMatches >= 1 || item.kind === "limitation";
     }
 
-    return domainMatches >= 1 || item.kind === "limitation";
+    // General background may survive only when it strongly matches
+    // the phenomenon being explained.
+    return domainMatches >= 2;
   });
 }
 
@@ -127,7 +174,7 @@ export function buildLockedSearchQuery(input: {
 
   const evidenceTerms = input.evidence
     .filter((item) => !looksLikeFrontMatter(item.statement))
-    .slice(0, 8)
+    .slice(0, 10)
     .flatMap((item) => words(item.statement))
     .filter((token) => GENERIC_BACKGROUND.has(token));
 
@@ -151,18 +198,17 @@ function sourceAlignment(input: {
 
   const anchors = anchorTerms(input.topic, input.question);
   const places = explicitPlaceAnchors(input.topic, input.question);
-  const textTokens = new Set(words(content));
+  const textTokens = tokenSet(content);
 
   const anchorHits = anchors.filter((token) => textTokens.has(token)).length;
   const placeHits = places.filter((token) => textTokens.has(token)).length;
 
   const floodLike =
-    /\b(flood|flooding|stormwater|drainage|rainfall|watershed|river|urban\s+flood)\b/i.test(
+    /\b(flood|floods|flooded|flooding|stormwater|drain|drains|drainage|rain|rainfall|watershed|river|rivers|urban\s+flood)\b/i.test(
       content
     );
 
   let score = 0;
-
   score += Math.min(50, anchorHits * 12);
   score += Math.min(30, placeHits * 30);
   if (floodLike) score += 20;
@@ -205,7 +251,7 @@ export function filterAndRescoreSources(input: {
       };
     })
     .filter((source) => {
-      if (source.relevance < 48) return false;
+      if (source.relevance < 42) return false;
 
       if (!places.length) return source.__guard.anchorHits >= 1;
 
@@ -233,7 +279,7 @@ function questionAlignment(
 ) {
   const anchors = anchorTerms(topic, originalQuestion);
   const places = explicitPlaceAnchors(topic, originalQuestion);
-  const text = new Set(words(candidate));
+  const text = tokenSet(candidate);
 
   const hits = anchors.filter((token) => text.has(token)).length;
   const placeHits = places.filter((token) => text.has(token)).length;
@@ -254,9 +300,13 @@ export function guardStoryQuestions(input: {
 }) {
   const original = clean(input.question);
 
+  const observedCount = input.evidence.filter(
+    (item) => item.kind === "observed"
+  ).length;
+
   const baseEvidence = Math.min(
     100,
-    45 + input.evidence.filter((item) => item.kind === "observed").length * 5
+    45 + observedCount * 5
   );
 
   const userQuestion: StoryQuestionCandidate | null = original
@@ -268,7 +318,7 @@ export function guardStoryQuestions(input: {
         curiosity: 88,
         consequence: 92,
         visualPotential: 92,
-        uncertainty: 72,
+        uncertainty: observedCount > 0 ? 62 : 72,
         overall: 94,
         rationale:
           "Original user question preserved as the story anchor. Discovery may refine the angle, but it cannot silently replace the subject or geography.",
@@ -298,7 +348,6 @@ export function guardStoryQuestions(input: {
     .slice(0, 5);
 
   const output = userQuestion ? [userQuestion, ...filtered] : filtered;
-
   const seen = new Set<string>();
 
   return output
