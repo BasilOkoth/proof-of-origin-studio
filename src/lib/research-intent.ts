@@ -159,27 +159,18 @@ export function buildResearchQueries(intent: ResearchIntent) {
   const geography = intent.geography.join(" ");
   const phenomenon = intent.phenomenon.slice(0, 2).join(" ");
 
-  const groups = [
-    intent.mechanisms.slice(0, 3),
-    intent.mechanisms.slice(3, 6),
-    intent.mechanisms.slice(6, 9),
-  ].filter((group) => group.length);
+  const base = [geography, phenomenon].filter(Boolean).join(" ");
 
-  const queries = groups.map((group) =>
-    [geography, phenomenon, ...group].filter(Boolean).join(" ")
-  );
+  const queries = [
+    base,
+    [base, "drainage", "stormwater"].filter(Boolean).join(" "),
+    [base, "river", "riparian", "runoff"].filter(Boolean).join(" "),
+    [base, "urban", "land use", "drainage"].filter(Boolean).join(" "),
+  ];
 
-  if (!queries.length) {
-    queries.push(
-      [
-        geography,
-        phenomenon,
-        ...intent.contextTerms.slice(0, 4),
-      ]
-        .filter(Boolean)
-        .join(" ")
-    );
-  }
-
-  return unique(queries.map(clean).filter(Boolean)).slice(0, 3);
+  return unique(
+    queries
+      .map(clean)
+      .filter((query) => query.length >= 3)
+  ).slice(0, 4);
 }

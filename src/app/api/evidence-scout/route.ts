@@ -15,6 +15,10 @@ import {
   filterEvidenceForStory,
   guardStoryQuestions,
 } from "@/lib/research-relevance-guard";
+import {
+  buildResearchIntent,
+  buildResearchQueries,
+} from "@/lib/research-intent";
 import type { DatasetAnalysis, EvidenceItem } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -114,9 +118,7 @@ function stripMarkup(value?: string) {
 
 function openLicense(url?: string) {
   if (!url) return false;
-  return /creativecommons\.org\/licenses|creativecommons\.org\/publicdomain|opensource\.org|apache\.org\/licenses|gnu\.org\/licenses/i.test(
-    url
-  );
+  return /creativecommons\.org\/licenses|creativecommons\.org\/publicdomain|opensource\.org|apache\.org\/licenses|gnu\.org\/licenses/i.test(url);
 }
 
 function lexicalRelevance(query: string, text: string) {
@@ -152,7 +154,7 @@ async function searchCrossref(
     `https://api.crossref.org/works?${params.toString()}`,
     {
       headers: {
-        "user-agent": `Evidence-Studio/0.7${mailto ? ` (mailto:${mailto})` : ""}`,
+        "user-agent": `Evidence-Studio/0.8${mailto ? ` (mailto:${mailto})` : ""}`,
         accept: "application/json",
       },
       signal: AbortSignal.timeout(12_000),
@@ -211,42 +213,33 @@ async function searchCrossref(
         (citations > 100 ? 4 : 0)
     );
 
-    return [
-      {
-        id: `crossref-${doi || index}`,
-        provider: "crossref" as const,
-        sourceType:
-          work.type === "report"
-            ? ("report" as const)
-            : ("paper" as const),
-        title,
-        authors,
-        year,
-        publisher: work.publisher,
-        doi,
-        url: landing,
-        downloadUrl: downloadable ? pdfLink : undefined,
-        license,
-        summary: abstract,
-        access: downloadable
-          ? ("open_download" as const)
-          : ("landing_page" as const),
-        relevance,
-        evidenceStrength: strength,
-        visualPotential: abstract ? 68 : 58,
-        reason: downloadable
-          ? "Scholarly source with DOI metadata and an openly licensed full-text link reported by Crossref."
-          : "Scholarly source discovered through Crossref. Review the landing page/full text before using substantive findings.",
-      },
-    ];
+    return [{
+      id: `crossref-${doi || index}`,
+      provider: "crossref" as const,
+      sourceType: work.type === "report" ? ("report" as const) : ("paper" as const),
+      title,
+      authors,
+      year,
+      publisher: work.publisher,
+      doi,
+      url: landing,
+      downloadUrl: downloadable ? pdfLink : undefined,
+      license,
+      summary: abstract,
+      access: downloadable ? ("open_download" as const) : ("landing_page" as const),
+      relevance,
+      evidenceStrength: strength,
+      visualPotential: abstract ? 68 : 58,
+      reason: downloadable
+        ? "Scholarly source with DOI metadata and an openly licensed full-text link reported by Crossref."
+        : "Scholarly source discovered through Crossref. Review the landing page/full text before using substantive findings.",
+    }];
   });
 }
 
 function meaningfulWorldBankTerms(query: string) {
   const preferred = tokenise(query).filter((token) =>
-    /^(flood|flooding|urban|drainage|rainfall|stormwater|climate|population|growth|land|infrastructure|risk|hazard|resilience|waste)$/.test(
-      token
-    )
+    /^(flood|flooding|urban|drainage|rainfall|stormwater|climate|population|growth|land|infrastructure|risk|hazard|resilience|waste)$/.test(token)
   );
 
   const fallback = tokenise(query).filter(
@@ -276,9 +269,7 @@ function extractWorldBankCodes(data: WorldBankSearchResponse) {
 
 async function indicatorMetadata(code: string) {
   const response = await fetch(
-    `https://api.worldbank.org/v2/indicator/${encodeURIComponent(
-      code
-    )}?format=json`,
+    `https://api.worldbank.org/v2/indicator/${encodeURIComponent(code)}?format=json`,
     {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
@@ -304,9 +295,7 @@ async function searchWorldBank(
   const searches = await Promise.allSettled(
     terms.map(async (term) => {
       const response = await fetch(
-        `https://api.worldbank.org/v2/sources/2/search/${encodeURIComponent(
-          term
-        )}?format=json`,
+        `https://api.worldbank.org/v2/sources/2/search/${encodeURIComponent(term)}?format=json`,
         {
           headers: { accept: "application/json" },
           signal: AbortSignal.timeout(10_000),
@@ -367,12 +356,8 @@ async function searchWorldBank(
       sourceType: "dataset",
       title,
       publisher: "World Bank",
-      url: `https://api.worldbank.org/v2/indicator/${encodeURIComponent(
-        code
-      )}?format=json`,
-      downloadUrl: `https://api.worldbank.org/v2/country/all/indicator/${encodeURIComponent(
-        code
-      )}?source=2&downloadformat=csv&dataformat=list`,
+      url: `https://api.worldbank.org/v2/indicator/${encodeURIComponent(code)}?format=json`,
+      downloadUrl: `https://api.worldbank.org/v2/country/all/indicator/${encodeURIComponent(code)}?source=2&downloadformat=csv&dataformat=list`,
       license: "World Bank data terms / CC BY 4.0 where indicated by source metadata",
       summary,
       access: "open_download",
@@ -415,47 +400,63 @@ function existingSources(
       cleanText(item.sourceLabel || item.statement).slice(0, 220) ||
       "Existing source";
 
-    return [
-      {
-        id: `existing-${index}`,
-        provider: "existing" as const,
-        sourceType: item.sourceType || "other",
-        title,
-        year: item.year,
-        url,
-        access: "landing_page" as const,
-        relevance: lexicalRelevance(
-          query,
-          `${title} ${item.statement}`
-        ),
-        evidenceStrength: item.kind === "observed" ? 80 : 64,
-        visualPotential:
-          item.sourceType === "dataset"
-            ? 90
-            : item.sourceType === "field"
-              ? 88
-              : 62,
-        reason:
-          "Already present in the Evidence Studio ledger; retained so the scout can compare new discoveries with existing sources.",
-      },
-    ];
+    return [{
+      id: `existing-${index}`,
+      provider: "existing" as const,
+      sourceType: item.sourceType || "other",
+      title,
+      year: item.year,
+      url,
+      access: "landing_page" as const,
+      relevance: lexicalRelevance(
+        query,
+        `${title} ${item.statement}`
+      ),
+      evidenceStrength: item.kind === "observed" ? 80 : 64,
+      visualPotential:
+        item.sourceType === "dataset"
+          ? 90
+          : item.sourceType === "field"
+            ? 88
+            : 62,
+      reason:
+        "Already present in the Evidence Studio ledger; retained so the scout can compare new discoveries with existing sources.",
+    }];
   });
 }
 
 function dedupeSources(sources: EvidenceScoutSource[]) {
-  const seen = new Set<string>();
+  const byKey = new Map<string, EvidenceScoutSource>();
 
-  return sources.filter((source) => {
+  for (const source of sources) {
     const key = (
       source.doi ||
       source.url ||
       source.title
     ).toLowerCase();
 
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    const existing = byKey.get(key);
+
+    if (!existing) {
+      byKey.set(key, source);
+      continue;
+    }
+
+    // Keep the strongest metadata when the same source is found by multiple queries.
+    byKey.set(key, {
+      ...existing,
+      ...source,
+      relevance: Math.max(existing.relevance, source.relevance),
+      evidenceStrength: Math.max(existing.evidenceStrength, source.evidenceStrength),
+      visualPotential: Math.max(existing.visualPotential, source.visualPotential),
+      downloadUrl: existing.downloadUrl || source.downloadUrl,
+      license: existing.license || source.license,
+      summary: existing.summary || source.summary,
+      reason: `${existing.reason} Found across multiple story-focused searches.`,
+    });
+  }
+
+  return [...byKey.values()];
 }
 
 function coverage(sources: EvidenceScoutSource[]): EvidenceCoverage {
@@ -508,7 +509,15 @@ export async function POST(request: Request) {
       evidence: rawEvidence,
     });
 
-    const lockedQuery =
+    const intent = buildResearchIntent({
+      topic: parsed.data.topic,
+      question: parsed.data.question,
+      evidence,
+    });
+
+    const generatedQueries = buildResearchQueries(intent);
+
+    const fallbackQuery =
       buildLockedSearchQuery({
         topic: parsed.data.topic,
         question: parsed.data.question,
@@ -518,13 +527,19 @@ export async function POST(request: Request) {
         topic: parsed.data.topic,
         question: parsed.data.question,
         evidence,
-      });
-
-    const query =
-      cleanText(parsed.data.searchQuery || "") ||
-      lockedQuery ||
+      }) ||
       cleanText(parsed.data.question || parsed.data.topic) ||
       "evidence research";
+
+    // A manual searchQuery remains a deliberate override. Otherwise use the layered set.
+    const manualQuery = cleanText(parsed.data.searchQuery || "");
+    const queries = manualQuery
+      ? [manualQuery]
+      : generatedQueries.length
+        ? generatedQueries
+        : [fallbackQuery];
+
+    const query = queries.join(" | ");
 
     const discoveredQuestions = discoverQuestions({
       topic: parsed.data.topic,
@@ -541,40 +556,50 @@ export async function POST(request: Request) {
     });
 
     const providerErrors: string[] = [];
-    const perProvider = Math.max(
+    const perQueryLimit = Math.max(
       4,
-      Math.ceil(parsed.data.maxSources / 2)
+      Math.ceil(parsed.data.maxSources / Math.max(2, queries.length))
     );
 
-    const [crossrefResult, worldBankResult] =
-      await Promise.allSettled([
-        searchCrossref(query, perProvider),
-        searchWorldBank(query, perProvider),
-      ]);
+    const crossrefResults = await Promise.allSettled(
+      queries.map((candidateQuery) =>
+        searchCrossref(candidateQuery, perQueryLimit)
+      )
+    );
+
+    const worldBankResults = await Promise.allSettled(
+      queries.slice(0, 2).map((candidateQuery) =>
+        searchWorldBank(candidateQuery, perQueryLimit)
+      )
+    );
 
     const discovered: EvidenceScoutSource[] = [
-      ...existingSources(evidence, query),
+      ...existingSources(evidence, queries[0] || fallbackQuery),
     ];
 
-    if (crossrefResult.status === "fulfilled") {
-      discovered.push(...crossrefResult.value);
-    } else {
-      providerErrors.push(
-        `Crossref: ${
-          crossrefResult.reason?.message || "search failed"
-        }`
-      );
-    }
+    crossrefResults.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        discovered.push(...result.value);
+      } else {
+        providerErrors.push(
+          `Crossref [${queries[index]}]: ${
+            result.reason?.message || "search failed"
+          }`
+        );
+      }
+    });
 
-    if (worldBankResult.status === "fulfilled") {
-      discovered.push(...worldBankResult.value);
-    } else {
-      providerErrors.push(
-        `World Bank: ${
-          worldBankResult.reason?.message || "search failed"
-        }`
-      );
-    }
+    worldBankResults.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        discovered.push(...result.value);
+      } else {
+        providerErrors.push(
+          `World Bank [${queries[index]}]: ${
+            result.reason?.message || "search failed"
+          }`
+        );
+      }
+    });
 
     const sources = filterAndRescoreSources({
       topic: parsed.data.topic,
