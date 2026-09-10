@@ -344,16 +344,16 @@ function MediaBeat({
             <div
               style={{
                 marginTop: 24,
-                fontSize: 31,
-                lineHeight: 1.2,
-                fontWeight: 900,
+                fontSize: 29,
+                lineHeight: 1.25,
+                fontWeight: 820,
                 color:
                   beat.shotRole === "archive"
                     ? "#171512"
                     : white,
               }}
             >
-              {beat.visualAction}
+              {scene.sourceExcerpt || scene.body || scene.headline}
             </div>
           </div>
         </div>
@@ -426,46 +426,57 @@ function DocumentBeat({
               }}
             />
           ) : (
-            <>
+            <div
+              style={{
+                height: "100%",
+                padding: "54px 58px",
+                display: "grid",
+                alignContent: "center",
+                background:
+                  "linear-gradient(160deg, rgba(23,52,91,.34), rgba(9,14,26,.96))",
+              }}
+            >
               <div
                 style={{
-                  height: 86,
-                  background: "#17345b",
-                  marginBottom: 34,
+                  fontSize: 16,
+                  letterSpacing: 3.5,
+                  fontWeight: 900,
+                  color: cyan,
+                  textTransform: "uppercase",
                 }}
-              />
-              {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+              >
+                SOURCE EXCERPT
+              </div>
+
+              <div
+                style={{
+                  marginTop: 24,
+                  fontSize: 31,
+                  lineHeight: 1.32,
+                  fontWeight: 760,
+                  color: white,
+                }}
+              >
+                {scene.sourceExcerpt || scene.body}
+              </div>
+
+              {scene.sourceLabel && (
                 <div
-                  key={n}
                   style={{
-                    height: 15,
-                    width: `${78 - n * 4}%`,
-                    background:
-                      n === 3
-                        ? "rgba(255,111,134,.75)"
-                        : "#aab7ca",
-                    borderRadius: 8,
-                    margin: "22px 52px",
+                    marginTop: 28,
+                    fontSize: 18,
+                    lineHeight: 1.4,
+                    color: muted,
                   }}
-                />
-              ))}
-            </>
+                >
+                  Source · {scene.sourceLabel}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          left: 90,
-          bottom: 72,
-          fontSize: 17,
-          color: muted,
-          maxWidth: 930,
-        }}
-      >
-        {beat.visualAction}
-      </div>
     </FrameChrome>
   );
 }
@@ -906,6 +917,10 @@ export function EditorialBeatScene({
 
   if (beat.shotRole === "chart" && scene.chart) {
     return <DataChartScene scene={scene} />;
+  }
+
+  if (approvedVisualKind === "source_highlight") {
+    return <SourceHighlightScene scene={scene} />;
   }
 
   if (
