@@ -22,22 +22,254 @@ export type StoryIntake = {
   evidence: EvidenceItem[];
 };
 
-const clean = (value: string) => value.replace(/\s+/g, " ").trim();
+const clean = (value: string) =>
+  value.replace(/\s+/g, " ").trim();
 
-function first<T>(items: T[], fallback: T): T {
-  return items.length ? items[0] : fallback;
+const STORY_STOP = new Set([
+  "about",
+  "after",
+  "also",
+  "among",
+  "and",
+  "are",
+  "because",
+  "been",
+  "before",
+  "being",
+  "between",
+  "both",
+  "but",
+  "can",
+  "could",
+  "did",
+  "does",
+  "during",
+  "for",
+  "from",
+  "have",
+  "how",
+  "into",
+  "more",
+  "most",
+  "not",
+  "that",
+  "the",
+  "their",
+  "there",
+  "these",
+  "they",
+  "this",
+  "those",
+  "through",
+  "under",
+  "very",
+  "was",
+  "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "while",
+  "with",
+  "would",
+  "your",
+  "than",
+  "then",
+  "such",
+  "only",
+  "over",
+]);
+
+const FLOOD_MECHANISM =
+  /\b(drainage|stormwater|runoff|riparian|floodplain|encroach(?:ment|ed|ing)?|impervious|permeab(?:le|ility)|infiltrat(?:e|ion)|blocked drains?|waterways?|waste accumulation|garbage|culvert|sewer|channel|river|urban(?:ization|isation| growth)?|land[- ]use|settlement planning|informal settlement|maintenance|rainfall|heavy rain|multi-day rain|flood(?:s|ing|ed)?)\b/i;
+
+const STALE_HAZARD_NOISE =
+  /\b(earthquake|volcano|volcanic|landslide|drought|agricultural income|crop loss|seismic)\b/i;
+
+function normalizeToken(token: string) {
+  let value = token
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "");
+
+  if (/^flood(?:s|ed|ing)?$/.test(value)) return "flood";
+  if (/^drain(?:s|ed|ing|age)?$/.test(value)) return "drain";
+  if (/^rain(?:s|ed|ing|fall)?$/.test(value)) return "rain";
+  if (/^river(?:s)?$/.test(value)) return "river";
+  if (/^urbaniz(?:e|ed|ing|ation)$/.test(value)) return "urban";
+  if (/^urbanis(?:e|ed|ing|ation)$/.test(value)) return "urban";
+
+  if (value.length > 6 && value.endsWith("ing")) {
+    value = value.slice(0, -3);
+  } else if (value.length > 5 && value.endsWith("ed")) {
+    value = value.slice(0, -2);
+  } else if (value.length > 4 && value.endsWith("s")) {
+    value = value.slice(0, -1);
+  }
+
+  return value;
+}
+
+function storyTokens(value: string) {
+  return clean(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .map(normalizeToken)
+    .filter(
+      (token) =>
+        token.length >= 3 &&
+        !STORY_STOP.has(token)
+    );
+}
+
+function overlapScore(a: string, b: string) {
+  const left = new Set(storyTokens(a));
+  const right = new Set(storyTokens(b));
+
+  if (!left.size || !right.size) return 0;
+
+  let overlap = 0;
+
+  left.forEach((token) => {
+    if (right.has(token)) overlap += 1;
+  });
+
+  return overlap / Math.max(1, Math.min(left.size, right.size));
+}
+
+function storyLockedEvidence(
+  intake: StoryIntake
+) {
+  const anchor = clean(
+    `${intake.topic} ${intake.question}`
+  );
+
+  const topicMentionsFlood =
+    /\bflood/i.test(anchor);
+
+  const scored = intake.evidence
+    .filter((item) => clean(item.statement || ""))
+    .map((item, index) => {
+      const statement = clean(item.statement);
+      const sourceText = clean(
+        `${item.sourceLabel || ""} ${item.source || ""}`
+      );
+
+      const lexical = Math.max(
+        overlapScore(anchor, statement),
+        overlapScore(anchor, sourceText)
+      );
+
+      const mechanism =
+        FLOOD_MECHANISM.test(statement) ||
+        FLOOD_MECHANISM.test(sourceText);
+
+      const staleHazard =
+        topicMentionsFlood &&
+        STALE_HAZARD_NOISE.test(statement) &&
+        !/\bflood/i.test(statement);
+
+      let score = lexical * 100;
+
+      if (mechanism) score += 28;
+      if (item.kind === "observed") score += 8;
+      if (item.source || item.sourceLabel) score += 7;
+      if (/\bnairobi\b/i.test(anchor) &&
+          /\bnairobi\b/i.test(
+            `${statement} ${sourceText}`
+          )) {
+        score += 22;
+      }
+
+      if (staleHazard) score -= 90;
+
+      return {
+        item,
+        index,
+        score,
+        staleHazard,
+      };
+    })
+    .filter(
+      (entry) =>
+        !entry.staleHazard &&
+        entry.score >= 34
+    )
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.index - b.index
+    );
+
+  const seen = new Set<string>();
+
+  return scored
+    .map((entry) => entry.item)
+    .filter((item) => {
+      const key = clean(item.statement)
+        .toLowerCase();
+
+      if (!key || seen.has(key)) return false;
+
+      seen.add(key);
+      return true;
+    });
 }
 
 function durationPlan(totalSec: number) {
-  const weights = [0.09, 0.12, 0.14, 0.13, 0.14, 0.13, 0.12, 0.13];
-  return weights.map((weight) => Math.max(6, Math.round(totalSec * weight)));
+  const weights = [
+    0.08,
+    0.12,
+    0.14,
+    0.14,
+    0.15,
+    0.13,
+    0.11,
+    0.13,
+  ];
+
+  return weights.map((weight) =>
+    Math.max(
+      6,
+      Math.round(totalSec * weight)
+    )
+  );
+}
+
+function sourceLabel(item?: EvidenceItem) {
+  if (!item) return "";
+
+  const label = clean(
+    item.sourceLabel ||
+      item.source ||
+      ""
+  );
+
+  if (!label) return "";
+
+  if (label.startsWith("library:")) {
+    return "";
+  }
+
+  return label;
 }
 
 function evidenceText(item?: EvidenceItem) {
-  if (!item) return "No supporting evidence has been added yet.";
+  if (!item) {
+    return "No sufficiently story-grounded supporting evidence has been added yet.";
+  }
+
   const statement = clean(item.statement);
-  if (!statement) return "An evidence item is present but has not been described yet.";
-  return item.source ? `${statement} Source: ${clean(item.source)}.` : statement;
+
+  if (!statement) {
+    return "An evidence item is present but has not been described yet.";
+  }
+
+  const label = sourceLabel(item);
+
+  return label
+    ? `${statement} Source: ${label}.`
+    : statement;
 }
 
 function scene(
@@ -65,41 +297,199 @@ function scene(
 
 function questionTitle(question: string) {
   const value = clean(question);
-  if (!value) return "What Does the Evidence Actually Show?";
-  return value.endsWith("?") ? value : `${value}?`;
+
+  if (!value) {
+    return "What Does the Evidence Actually Show?";
+  }
+
+  return value.endsWith("?")
+    ? value
+    : `${value}?`;
 }
 
-function buildGenericEpisode(intake: StoryIntake): EpisodeProject {
+function bestEvidenceBy(
+  evidence: EvidenceItem[],
+  pattern: RegExp,
+  kinds: EvidenceItem["kind"][] = [
+    "observed",
+    "inference",
+  ]
+) {
+  return evidence.find(
+    (item) =>
+      kinds.includes(item.kind) &&
+      pattern.test(
+        `${item.statement} ${item.sourceLabel || ""}`
+      )
+  );
+}
+
+function uniqueEvidencePick(
+  candidates: Array<
+    EvidenceItem | undefined
+  >
+) {
+  const seen = new Set<string>();
+
+  return candidates.filter(
+    (
+      item
+    ): item is EvidenceItem => {
+      if (!item) return false;
+
+      const key = clean(
+        item.statement
+      ).toLowerCase();
+
+      if (!key || seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    }
+  );
+}
+
+function buildWorldExplainedEpisode(
+  intake: StoryIntake,
+  evidence: EvidenceItem[]
+): EpisodeProject {
   const pack = getStoryPack(intake.mode);
-  const observed = intake.evidence.filter(
-    (item) => item.kind === "observed" && clean(item.statement)
-  );
-  const inferences = intake.evidence.filter(
-    (item) => item.kind === "inference" && clean(item.statement)
-  );
-  const limitations = intake.evidence.filter(
-    (item) => item.kind === "limitation" && clean(item.statement)
+
+  const observed = evidence.filter(
+    (item) =>
+      item.kind === "observed" &&
+      clean(item.statement)
   );
 
-  const primary = observed[0];
-  const secondary = observed[1];
-  const tertiary = observed[2];
-  const inference = inferences[0];
-  const limitation = limitations[0];
+  const inferences = evidence.filter(
+    (item) =>
+      item.kind === "inference" &&
+      clean(item.statement)
+  );
 
-  const totalSec = Math.round(Math.max(1, intake.targetMinutes) * 60);
+  const limitations = evidence.filter(
+    (item) =>
+      item.kind === "limitation" &&
+      clean(item.statement)
+  );
+
+  const trigger = bestEvidenceBy(
+    evidence,
+    /\b(rainfall|heavy rain|multi-day rain|precipitation|storm)\b/i
+  );
+
+  const drainage = bestEvidenceBy(
+    evidence,
+    /\b(drainage|stormwater|blocked drains?|waterways?|culvert|sewer|garbage|waste)\b/i
+  );
+
+  const landSystem = bestEvidenceBy(
+    evidence,
+    /\b(riparian|floodplain|urban(?:ization|isation)?|settlement planning|informal settlement|impervious|permeab|infiltrat|land[- ]use|runoff|river|channel)\b/i
+  );
+
+  const governance = bestEvidenceBy(
+    evidence,
+    /\b(governance|maintenance|response|politic|budget|coordination|planning|county|institution)\b/i
+  );
+
+  const picked = uniqueEvidencePick([
+    trigger,
+    drainage,
+    landSystem,
+    governance,
+    ...observed,
+    ...inferences,
+  ]);
+
+  const primary =
+    picked[0] ||
+    observed[0] ||
+    evidence[0];
+
+  const triggerItem =
+    trigger ||
+    picked[1] ||
+    observed[1] ||
+    primary;
+
+  const drainageItem =
+    drainage ||
+    picked[2] ||
+    observed[2] ||
+    primary;
+
+  const landItem =
+    landSystem ||
+    picked[3] ||
+    inferences[0] ||
+    primary;
+
+  const governanceItem =
+    governance ||
+    picked[4] ||
+    observed[3] ||
+    inferences[1] ||
+    primary;
+
+  const limitation =
+    limitations[0];
+
+  const totalSec = Math.round(
+    Math.max(
+      1,
+      intake.targetMinutes
+    ) * 60
+  );
+
   const d = durationPlan(totalSec);
-  const question = clean(intake.question) || pack.questionPlaceholder;
-  const brief = clean(intake.experiment) || pack.briefPlaceholder;
-  const topic = clean(intake.topic) || pack.label;
 
-  const primaryText = evidenceText(primary);
-  const secondaryText = evidenceText(secondary ?? primary);
-  const tertiaryText = evidenceText(tertiary ?? secondary ?? primary);
-  const inferenceText = evidenceText(inference);
+  const question =
+    clean(intake.question) ||
+    pack.questionPlaceholder;
+
+  const topic =
+    clean(intake.topic) ||
+    pack.label;
+
+  const primaryText =
+    evidenceText(primary);
+
+  const triggerText =
+    evidenceText(triggerItem);
+
+  const drainageText =
+    evidenceText(drainageItem);
+
+  const landText =
+    evidenceText(landItem);
+
+  const governanceText =
+    evidenceText(governanceItem);
+
   const limitationText = limitation
     ? evidenceText(limitation)
-    : "The available evidence has limits. This story should not claim more than the sources and observations can support.";
+    : "The current evidence does not yet establish every link in the causal chain. Missing mechanism evidence should remain visible rather than being filled with assumptions.";
+
+  const evidenceCount =
+    evidence.length;
+
+  const sourceBackedCount =
+    evidence.filter(
+      (item) =>
+        item.source ||
+        item.sourceLabel
+    ).length;
+
+  const weakGrounding =
+    evidenceCount < 3 ||
+    sourceBackedCount < 2;
+
+  const groundingNote = weakGrounding
+    ? "This is a draft evidence map: the current story-grounded evidence is still thin, so unsupported causal links remain questions rather than conclusions."
+    : "The story is built only from evidence that still matches the active topic and question.";
 
   const scenes: Scene[] = [
     scene(
@@ -108,27 +498,387 @@ function buildGenericEpisode(intake: StoryIntake): EpisodeProject {
       pack.accentLabel,
       question,
       primaryText,
-      `Here is the question: ${question} Instead of starting with an answer, start with the strongest thing we can actually observe. ${primaryText} The rest of this story will separate what the evidence shows from what we think it means, and from what it still cannot establish.`,
+      `${question} Start with what is visible and verifiable. ${primaryText} The important question is not whether flooding happens, but what turns rainfall into recurring urban disruption.`,
       primary ? [primary.id] : []
     ),
+
+    scene(
+      "document",
+      d[1],
+      "THE SYSTEM",
+      "Rain is the trigger. What turns it into a disaster?",
+      groundingNote,
+      `Heavy rain can trigger flooding, but the episode will test a deeper systems question: what happens between rainfall, the city's drainage and waterways, the way land is built on, and the institutions responsible for maintaining that system? ${groundingNote}`,
+      [],
+      {
+        visualLabels: [
+          "Rainfall",
+          "Runoff",
+          "Drainage",
+          "Rivers",
+          "Urban form",
+          "Exposure",
+        ],
+      }
+    ),
+
+    scene(
+      "proof_card",
+      d[2],
+      "TRIGGER",
+      "Start with the rain — but do not stop there.",
+      triggerText,
+      `First, the trigger. ${triggerText} This establishes what the evidence says about rainfall or flood conditions. It does not, by itself, explain why the same rainfall becomes damaging in particular parts of the city.`,
+      triggerItem ? [triggerItem.id] : []
+    ),
+
+    scene(
+      "diagram",
+      d[3],
+      "FLOW PATH",
+      "What happens after water hits the city?",
+      drainageText,
+      `Now follow the water. ${drainageText} The causal question is whether drainage capacity, blocked waterways, waste, culverts or maintenance change how quickly water can leave streets and neighbourhoods. Only the links supported by evidence should be drawn as established; the rest stay visually marked as hypotheses.`,
+      drainageItem ? [drainageItem.id] : [],
+      {
+        visualLabels: [
+          "Rain",
+          "Surface runoff",
+          "Drain",
+          "Blockage / capacity",
+          "River",
+          "Flooded street",
+        ],
+      }
+    ),
+
+    scene(
+      "proof_card",
+      d[4],
+      "URBAN FORM",
+      "The city changes where water can go.",
+      landText,
+      `Flooding is also spatial. ${landText} This is where settlement planning, riparian systems, impervious surfaces, infiltration and development in flood-prone areas can become part of the explanation — but only where the source evidence actually supports those mechanisms.`,
+      landItem ? [landItem.id] : []
+    ),
+
+    scene(
+      "timeline",
+      d[5],
+      "MAINTENANCE & RESPONSE",
+      "Infrastructure is a system only if it is maintained.",
+      governanceText,
+      `Physical infrastructure is only one layer. ${governanceText} Maintenance, coordination, planning and response determine whether known risks are reduced before the next storm or handled only after streets are already flooded.`,
+      governanceItem ? [governanceItem.id] : [],
+      {
+        visualLabels: [
+          "Before rain",
+          "Maintenance",
+          "Forecast",
+          "Storm",
+          "Response",
+          "Aftermath",
+        ],
+      }
+    ),
+
+    scene(
+      "quote",
+      d[6],
+      "TRUST BOUNDARY",
+      "What does the evidence still not prove?",
+      limitationText,
+      `This is the trust boundary. ${limitationText} A strong explainer should show uncertainty in the causal map instead of smoothing it away.`,
+      limitation ? [limitation.id] : []
+    ),
+
+    scene(
+      "cta",
+      d[7],
+      "THE TAKEAWAY",
+      "Flooding is an event. Flood risk is a system.",
+      `Current story-grounded evidence: ${evidenceCount} items, ${sourceBackedCount} source-linked.`,
+      `The strongest responsible conclusion is a systems one: rainfall is a trigger, while the scale and location of damage depend on how water moves through the urban system and how exposure and infrastructure are managed. Where the evidence is still incomplete, that gap becomes the next research task—not a sentence invented for the video.`,
+      []
+    ),
+  ];
+
+  const purposes = [
+    "Open on the active question and strongest story-grounded evidence.",
+    "Frame the causal system without narrating the user's production brief.",
+    "Establish rainfall as trigger rather than complete explanation.",
+    "Trace a visible mechanism from rainfall to drainage and flooding.",
+    "Explain how urban form can alter exposure and water movement.",
+    "Add maintenance, governance and response as a separate system layer.",
+    "Keep missing evidence and uncertainty visible.",
+    "Resolve the systems question without overclaiming.",
+  ];
+
+  scenes.forEach(
+    (item, index) => {
+      item.retentionPurpose =
+        purposes[index];
+    }
+  );
+
+  const titles = [
+    questionTitle(question),
+    `The Hidden System Behind ${topic}`,
+    `${topic}: What the Evidence Actually Shows`,
+    `Why Rain Alone Does Not Explain ${topic}`,
+    `${topic}: Follow the Water`,
+  ];
+
+  const thumbnails: ThumbnailConcept[] = [
+    {
+      title: "FOLLOW THE WATER",
+      kicker: "WHY IT FLOODS",
+      visual:
+        "A Nairobi street or mapped drainage path showing rain moving from surface runoff into constrained drainage and river systems.",
+    },
+    {
+      title: "RAIN ISN'T THE WHOLE STORY",
+      kicker: "THE HIDDEN SYSTEM",
+      visual:
+        "Rainfall on one side and a layered city systems diagram on the other: drainage, rivers, built surfaces and settlements.",
+    },
+    {
+      title: "WHY HERE?",
+      kicker: "LOOK AT THE MAP",
+      visual:
+        "A Nairobi map with flood exposure, rivers and built-up areas layered as evidence becomes available.",
+    },
+  ];
+
+  const hook =
+    `${question} The evidence suggests the answer is not one cause but a chain of interacting urban systems.`;
+
+  const shorts = [
+    {
+      title:
+        `Why ${topic} is not just a rainfall story`,
+      hook,
+      script:
+        `${hook} ${triggerText} The next question is what happens to that water after it reaches the city.`,
+    },
+    {
+      title:
+        "Follow the water",
+      hook:
+        "If you want to understand an urban flood, follow the water.",
+      script:
+        `${drainageText} The useful question is where runoff is supposed to go—and what prevents it from getting there.`,
+    },
+    {
+      title:
+        "The missing link matters",
+      hook:
+        "A causal diagram can look convincing even when one arrow has no evidence.",
+      script:
+        `${limitationText} In an evidence-led explainer, unsupported arrows stay labelled as uncertain.`,
+    },
+  ];
+
+  const draft: EpisodeProject = {
+    version: "origin-studio-1",
+    id: crypto.randomUUID(),
+    createdAt:
+      new Date().toISOString(),
+
+    brand: {
+      channelName:
+        intake.channelName ||
+        "Evidence Studio",
+      byline:
+        intake.byline ||
+        "Evidence-led video workflow",
+      accentLabel:
+        pack.accentLabel,
+    },
+
+    episode: {
+      workingTitle:
+        titles[0],
+      question,
+      // Preserve the brief as project metadata, but do not narrate it.
+      experiment:
+        clean(intake.experiment),
+      targetMinutes:
+        intake.targetMinutes,
+      audience:
+        intake.audience,
+      storyMode:
+        intake.mode,
+    },
+
+    evidence,
+    assets: [],
+    scenes,
+    titles,
+    shorts,
+    thumbnails,
+
+    publishing: {
+      description:
+        `${question}\n\nThis episode uses only evidence that remains relevant to the active story. Observations, interpretation and limitations stay separate, and unsupported causal links remain visible as uncertainty.\n\nMode: ${pack.label}.`,
+      pinnedComment:
+        "Which part of this causal chain needs stronger local evidence before the final cut?",
+      linkedinPost:
+        `I am testing a systems-first way to explain ${topic}: start with the trigger, follow the mechanism, show the source, and leave unsupported links visibly uncertain.\n\nQuestion: ${question}`,
+    },
+  };
+
+  draft.retention =
+    analyzeRetention(draft);
+
+  return refreshVisualIntelligence(
+    draft
+  );
+}
+
+function buildGenericEpisode(
+  intake: StoryIntake
+): EpisodeProject {
+  const pack =
+    getStoryPack(intake.mode);
+
+  /*
+   * STEP 05 GROUNDING GATE
+   *
+   * Never send the raw project evidence pool directly into scene selection.
+   * The page can contain evidence from earlier documents and earlier stories.
+   * Filter it again at the scene-builder boundary so excluded archival material
+   * cannot re-enter simply because it remains in React state.
+   */
+  const evidence =
+    storyLockedEvidence(intake);
+
+  if (
+    intake.mode ===
+    "world_explained"
+  ) {
+    return buildWorldExplainedEpisode(
+      intake,
+      evidence
+    );
+  }
+
+  const observed =
+    evidence.filter(
+      (item) =>
+        item.kind === "observed" &&
+        clean(item.statement)
+    );
+
+  const inferences =
+    evidence.filter(
+      (item) =>
+        item.kind === "inference" &&
+        clean(item.statement)
+    );
+
+  const limitations =
+    evidence.filter(
+      (item) =>
+        item.kind === "limitation" &&
+        clean(item.statement)
+    );
+
+  const primary =
+    observed[0];
+
+  const secondary =
+    observed[1];
+
+  const tertiary =
+    observed[2];
+
+  const inference =
+    inferences[0];
+
+  const limitation =
+    limitations[0];
+
+  const totalSec =
+    Math.round(
+      Math.max(
+        1,
+        intake.targetMinutes
+      ) * 60
+    );
+
+  const d =
+    durationPlan(totalSec);
+
+  const question =
+    clean(intake.question) ||
+    pack.questionPlaceholder;
+
+  const topic =
+    clean(intake.topic) ||
+    pack.label;
+
+  const primaryText =
+    evidenceText(primary);
+
+  const secondaryText =
+    evidenceText(
+      secondary ??
+      primary
+    );
+
+  const tertiaryText =
+    evidenceText(
+      tertiary ??
+      secondary ??
+      primary
+    );
+
+  const inferenceText =
+    evidenceText(inference);
+
+  const limitationText =
+    limitation
+      ? evidenceText(
+          limitation
+        )
+      : "The available story-grounded evidence has limits. This story should not claim more than the sources and observations can support.";
+
+  const scenes: Scene[] = [
+    scene(
+      "hook",
+      d[0],
+      pack.accentLabel,
+      question,
+      primaryText,
+      `Here is the question: ${question} Start with the strongest story-grounded observation. ${primaryText} The rest of this story separates what the evidence shows from what we think it means and what it still cannot establish.`,
+      primary
+        ? [primary.id]
+        : []
+    ),
+
     scene(
       "document",
       d[1],
       "THE SETUP",
       topic,
-      brief,
-      `The context matters. ${brief} This is the frame for interpreting the evidence, not proof by itself. The goal is to make the method, source or intervention visible enough that a viewer can understand where the result came from and what comparison is being made.`,
+      `Story frame: ${question}`,
+      `The context matters, but the user's production brief is not evidence and should not be narrated. The story will test ${question} using only evidence that still matches the active topic.`,
       []
     ),
+
     scene(
       "proof_card",
       d[2],
       "OBSERVED EVIDENCE",
       "Start with what can be shown.",
       primaryText,
-      `The first piece of observed evidence is: ${primaryText} This should appear on screen as the real source, screenshot, figure, measurement or record wherever possible. Showing the evidence directly reduces the gap between narration and what the viewer can verify for themselves.`,
-      primary ? [primary.id] : []
+      `The first story-grounded observation is: ${primaryText} Show the real source, figure, measurement or record wherever possible.`,
+      primary
+        ? [primary.id]
+        : []
     ),
+
     scene(
       "diagram",
       d[3],
@@ -136,79 +886,83 @@ function buildGenericEpisode(intake: StoryIntake): EpisodeProject {
       "What does that evidence suggest?",
       inferenceText,
       inference
-        ? `Now move from observation to interpretation. ${inferenceText} This is an inference, not a new fact. Keeping that label visible matters because reasonable people can sometimes interpret the same evidence differently.`
-        : `There is not yet a written inference in the evidence ledger. That is useful information: the video should pause before converting observations into a conclusion that has not been explicitly justified.`,
-      inference ? [inference.id] : [],
-      {
-        visualLabels:
-          intake.mode === "world_explained"
-            ? ["Place", "Pattern", "Drivers", "Consequences"]
-            : ["Observation", "Interpretation", "Context", "Implication"],
-      }
+        ? `Now move from observation to interpretation. ${inferenceText} This remains labelled as interpretation rather than a new fact.`
+        : "There is not yet a story-grounded inference in the evidence ledger. The video should not manufacture one.",
+      inference
+        ? [inference.id]
+        : []
     ),
+
     scene(
       "proof_card",
       d[4],
       "MORE EVIDENCE",
       "Does another observation support or complicate the story?",
       secondaryText,
-      `A strong evidence-led story should not depend on one isolated sentence. The next observation is: ${secondaryText} If this evidence points in a different direction, keep that tension rather than forcing everything into a neat conclusion.`,
-      secondary ? [secondary.id] : primary ? [primary.id] : []
+      `The next relevant observation is: ${secondaryText} Keep tension visible if it complicates the first claim.`,
+      secondary
+        ? [secondary.id]
+        : primary
+          ? [primary.id]
+          : []
     ),
+
     scene(
       "timeline",
       d[5],
       "CONTEXT",
       "Put the result back into the process.",
       tertiaryText,
-      `The result also needs context. ${tertiaryText} Ask what happened before this observation, what changed, what stayed constant and what conditions could have influenced the outcome. That is how a result becomes a useful explanation rather than a disconnected statistic.`,
-      tertiary ? [tertiary.id] : [],
-      {
-        visualLabels:
-          intake.mode === "world_explained"
-            ? ["Baseline", "Pressure", "Change", "Evidence", "What follows"]
-            : ["Baseline", "Method", "Observation", "Context", "Meaning"],
-      }
+      `The result also needs story-relevant context. ${tertiaryText} Ask what happened before it, what changed and what conditions could have influenced the outcome.`,
+      tertiary
+        ? [tertiary.id]
+        : []
     ),
+
     scene(
       "quote",
       d[6],
       "LIMITATION",
       "What does this not prove?",
       limitationText,
-      `This is the trust boundary. ${limitationText} A credible video earns trust by saying where its evidence stops. Limitations should remain in the final edit even when they make the conclusion less dramatic.`,
-      limitation ? [limitation.id] : []
+      `This is the trust boundary. ${limitationText} Keep that boundary visible in the final edit.`,
+      limitation
+        ? [limitation.id]
+        : []
     ),
+
     scene(
       "cta",
       d[7],
       "THE TAKEAWAY",
       "Show the evidence. Label the inference. Keep the limitation.",
-      `The current evidence supports a careful answer to: ${question}`,
-      `So what can we say? Start with the observed evidence, then the interpretation, then the limitation. That is the answer this episode can responsibly support. If another source, dataset, experiment or counter-example could change the conclusion, that becomes the next useful test rather than something to hide.`,
+      `The current story-grounded evidence supports a careful answer to: ${question}`,
+      "The responsible ending follows only from the evidence that survived story locking. Missing support becomes a visible next research task rather than filler narration.",
       []
     ),
   ];
 
   const purposes = [
-    "Stop the scroll with the central question and strongest evidence.",
-    "Give enough setup to make the result interpretable.",
+    "Stop the scroll with the active question and strongest grounded evidence.",
+    "Give setup without narrating the production brief.",
     "Deliver visible proof early.",
     "Separate interpretation from observation.",
     "Add corroborating or complicating evidence.",
-    "Reset attention by showing process or context.",
+    "Reset attention with relevant process or context.",
     "State the limitation before the conclusion overreaches.",
-    "Resolve the question and open the next evidence gap.",
+    "Resolve only what the current story-grounded evidence supports.",
   ];
-  scenes.forEach((item, index) => {
-    item.retentionPurpose = purposes[index];
-  });
+
+  scenes.forEach(
+    (item, index) => {
+      item.retentionPurpose =
+        purposes[index];
+    }
+  );
 
   const titles = [
     questionTitle(question),
-    intake.mode === "world_explained"
-      ? `${topic}: The Pattern Hidden in the Evidence`
-      : `${topic}: What the Evidence Actually Shows`,
+    `${topic}: What the Evidence Actually Shows`,
     `I Looked at the Evidence Behind ${topic}`,
     `${topic}: The Result, the Limitation, and What It Means`,
     `Before You Believe the Claim About ${topic}, Look at This Evidence`,
@@ -216,90 +970,160 @@ function buildGenericEpisode(intake: StoryIntake): EpisodeProject {
 
   const thumbnails: ThumbnailConcept[] = [
     {
-      title: "THE EVIDENCE",
-      kicker: "WHAT IT SHOWS",
-      visual: "The strongest real source or result centered with one highlighted finding.",
+      title:
+        "THE EVIDENCE",
+      kicker:
+        "WHAT IT SHOWS",
+      visual:
+        "The strongest real source or result centered with one highlighted finding.",
     },
     {
-      title: "CLAIM vs PROOF",
-      kicker: "NOT THE SAME",
-      visual: "Claim on one side and the supporting evidence object on the other.",
+      title:
+        "CLAIM vs PROOF",
+      kicker:
+        "NOT THE SAME",
+      visual:
+        "Claim on one side and the supporting evidence object on the other.",
     },
     {
-      title: "WHAT CHANGED?",
-      kicker: "LOOK CLOSER",
-      visual: "Before/after, baseline/result or source/finding comparison depending on the story pack.",
+      title:
+        "WHAT CHANGED?",
+      kicker:
+        "LOOK CLOSER",
+      visual:
+        "Before/after, baseline/result or source/finding comparison depending on the story pack.",
     },
   ];
 
-  const hook = `${question} Here is the strongest evidence I found.`;
+  const hook =
+    `${question} Here is the strongest story-grounded evidence I found.`;
+
   const shorts = [
     {
-      title: `What the evidence says about ${topic}`,
+      title:
+        `What the evidence says about ${topic}`,
       hook,
-      script: `${hook} ${primaryText} The important part is separating that observation from the conclusion we draw from it.`,
+      script:
+        `${hook} ${primaryText} The important part is separating that observation from the conclusion we draw from it.`,
     },
     {
-      title: "Observation is not interpretation",
-      hook: "One of the easiest ways to overstate evidence is to blur what happened with what we think it means.",
-      script: `${primaryText} ${inference ? `The interpretation is: ${inferenceText}` : "The interpretation still needs to be stated and justified."}`,
+      title:
+        "Observation is not interpretation",
+      hook:
+        "One of the easiest ways to overstate evidence is to blur what happened with what we think it means.",
+      script:
+        `${primaryText} ${
+          inference
+            ? `The interpretation is: ${inferenceText}`
+            : "The interpretation still needs to be stated and justified."
+        }`,
     },
     {
-      title: "The limitation matters",
-      hook: "A strong result can still have a boundary.",
-      script: `${limitationText} Good evidence communication keeps that boundary visible instead of editing it out.`,
+      title:
+        "The limitation matters",
+      hook:
+        "A strong result can still have a boundary.",
+      script:
+        `${limitationText} Good evidence communication keeps that boundary visible instead of editing it out.`,
     },
   ];
 
   const draft: EpisodeProject = {
-    version: "origin-studio-1",
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
+    version:
+      "origin-studio-1",
+    id:
+      crypto.randomUUID(),
+    createdAt:
+      new Date().toISOString(),
+
     brand: {
-      channelName: intake.channelName || "Evidence Studio",
-      byline: intake.byline || "Evidence-led video workflow",
-      accentLabel: pack.accentLabel,
+      channelName:
+        intake.channelName ||
+        "Evidence Studio",
+      byline:
+        intake.byline ||
+        "Evidence-led video workflow",
+      accentLabel:
+        pack.accentLabel,
     },
+
     episode: {
-      workingTitle: titles[0],
+      workingTitle:
+        titles[0],
       question,
-      experiment: brief,
-      targetMinutes: intake.targetMinutes,
-      audience: intake.audience,
-      storyMode: intake.mode,
+      experiment:
+        clean(
+          intake.experiment
+        ),
+      targetMinutes:
+        intake.targetMinutes,
+      audience:
+        intake.audience,
+      storyMode:
+        intake.mode,
     },
-    evidence: intake.evidence,
+
+    evidence,
     assets: [],
     scenes,
     titles,
     shorts,
     thumbnails,
+
     publishing: {
-      description: `${question}\n\nThis episode is built from an evidence-led workflow that keeps observations, interpretation and limitations separate while making sources, data and geography visible where the evidence supports them.\n\nMode: ${pack.label}.`,
-      pinnedComment: `What evidence, source or counter-example should be added before the next version of this story?`,
-      linkedinPost: `I am testing a different way to turn evidence into video: start with what can actually be shown, label the interpretation, and keep the limitation visible.\n\nQuestion: ${question}\n\nStrongest observation: ${primaryText}`,
+      description:
+        `${question}\n\nThis episode is built from evidence that survives active-story locking. Observations, interpretation and limitations remain separate while sources, data and geography stay visible where the evidence supports them.\n\nMode: ${pack.label}.`,
+      pinnedComment:
+        "What evidence, source or counter-example should be added before the next version of this story?",
+      linkedinPost:
+        `I am testing a different way to turn evidence into video: start with what can actually be shown, label the interpretation, and keep the limitation visible.\n\nQuestion: ${question}\n\nStrongest observation: ${primaryText}`,
     },
   };
 
-  draft.retention = analyzeRetention(draft);
-  return refreshVisualIntelligence(draft);
+  draft.retention =
+    analyzeRetention(draft);
+
+  return refreshVisualIntelligence(
+    draft
+  );
 }
 
-export function buildStoryEpisode(intake: StoryIntake): EpisodeProject {
-  if (intake.mode === "hps") {
-    const project = buildEpisode({
-      channelName: intake.channelName,
-      byline: intake.byline,
-      topic: intake.topic,
-      question: intake.question,
-      experiment: intake.experiment,
-      audience: intake.audience,
-      targetMinutes: intake.targetMinutes,
-      evidence: intake.evidence,
-    });
-    project.episode.storyMode = "hps";
-    return refreshVisualIntelligence(project);
+export function buildStoryEpisode(
+  intake: StoryIntake
+): EpisodeProject {
+  if (
+    intake.mode ===
+    "hps"
+  ) {
+    const project =
+      buildEpisode({
+        channelName:
+          intake.channelName,
+        byline:
+          intake.byline,
+        topic:
+          intake.topic,
+        question:
+          intake.question,
+        experiment:
+          intake.experiment,
+        audience:
+          intake.audience,
+        targetMinutes:
+          intake.targetMinutes,
+        evidence:
+          intake.evidence,
+      });
+
+    project.episode.storyMode =
+      "hps";
+
+    return refreshVisualIntelligence(
+      project
+    );
   }
 
-  return buildGenericEpisode(intake);
+  return buildGenericEpisode(
+    intake
+  );
 }
