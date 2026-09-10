@@ -23,6 +23,7 @@ import {
   isDatasetAnalysisCurrent,
 } from "@/lib/data-story";
 import { analyzeXlsx } from "@/lib/xlsx-story";
+import { analyzeGeoJson } from "@/lib/geojson-map";
 import {
   buildEvidenceIntelligence,
   type EvidenceIntelligenceReport,
@@ -164,10 +165,18 @@ function looksLikeExcel(file: Pick<File, "name" | "type">) {
   );
 }
 
+
+function looksLikeGeoJson(file: Pick<File, "name" | "type">) {
+  return (
+    file.name.toLowerCase().endsWith(".geojson") ||
+    file.type === "application/geo+json"
+  );
+}
+
 function isStoredDatasetFile(record: EvidenceLibraryRecord) {
   return Boolean(
     record.fileName &&
-      /\.(csv|xlsx|xlsm)$/i.test(record.fileName)
+      /\.(csv|xlsx|xlsm|geojson)$/i.test(record.fileName)
   );
 }
 
@@ -275,6 +284,9 @@ export function EvidenceIntelligenceLab({
         let title = record.title;
         let summary = record.summary;
 
+        const geoJson =
+          lowerName.endsWith(".geojson");
+
         if (excel) {
           const workbook = await analyzeXlsx(
             record.fileBlob,
@@ -290,6 +302,38 @@ export function EvidenceIntelligenceLab({
           } refreshed from ${workbook.sheetNames.length} readable Excel sheet${
             workbook.sheetNames.length === 1 ? "" : "s"
           } using ${DATASET_ANALYSIS_VERSION}.`;
+        } else if (geoJson) {
+          const geoText = await record.fileBlob.text();
+          const map = analyzeGeoJson(
+            geoText,
+            record.fileName
+          );
+          const analysis: DatasetAnalysis = {
+            name: record.fileName,
+            rowCount:
+              map.points.length +
+              (map.layers?.length || 0),
+            columns: [],
+            numericColumns: [],
+            dateColumns: [],
+            recommendedMap: map,
+            insight: `The GeoJSON contains ${map.points.length} mapped points and ${map.layers?.length || 0} vector layers.`,
+            analysisVersion:
+              DATASET_ANALYSIS_VERSION,
+            sourceKind: "geojson",
+            sourceText:
+              geoText.length <= 250_000
+                ? geoText
+                : undefined,
+          };
+
+          parsedDatasets = [analysis];
+          primaryDataset = analysis;
+          extractedText = geoText.slice(0, 120_000);
+          title = record.fileName
+            .replace(/\.geojson$/i, "")
+            .replace(/[_-]+/g, " ");
+          summary = `GeoJSON re-analysed using ${DATASET_ANALYSIS_VERSION}.`;
         } else {
           const csvText = await record.fileBlob.text();
           const analysis = analyzeCsv(
@@ -732,6 +776,43 @@ export function EvidenceIntelligenceLab({
             },
           ];
         }
+      } else if (looksLikeGeoJson(file)) {
+        extractedText = await file.text();
+        const map = analyzeGeoJson(
+          extractedText,
+          file.name
+        );
+
+        dataset = {
+          name: file.name,
+          rowCount:
+            map.points.length +
+            (map.layers?.length || 0),
+          columns: [],
+          numericColumns: [],
+          dateColumns: [],
+          recommendedMap: map,
+          insight: `The GeoJSON contains ${map.points.length} mapped points and ${map.layers?.length || 0} vector layers.`,
+          analysisVersion:
+            DATASET_ANALYSIS_VERSION,
+          sourceKind: "geojson",
+          sourceText:
+            extractedText.length <= 250_000
+              ? extractedText
+              : undefined,
+        };
+        importedDatasets = [dataset];
+
+        newEvidence = [
+          {
+            id: crypto.randomUUID(),
+            kind: "observed",
+            statement: dataset.insight!,
+            source: `library:${id}`,
+            sourceLabel: file.name,
+            sourceType: "dataset",
+          },
+        ];
       } else if (looksLikeExcel(file)) {
         const workbook = await analyzeXlsx(file, file.name);
 
@@ -826,7 +907,9 @@ export function EvidenceIntelligenceLab({
             : []),
           ...(looksLikeExcel(file)
             ? ["spreadsheet", "xlsx"]
-            : []),
+            : looksLikeGeoJson(file)
+              ? ["geojson", "map-layer"]
+              : []),
         ],
         fileName: file.name,
         mimeType:
@@ -1039,14 +1122,14 @@ export function EvidenceIntelligenceLab({
             <strong>
               {localBusy
                 ? "Adding to library…"
-                : "Add local PDF, TXT, Markdown, CSV or Excel to the persistent library"}
+                : "Add local PDF, TXT, Markdown, CSV, Excel or GeoJSON to the persistent library"}
             </strong>
             <span>
               The original file is retained as a browser Blob.
             </span>
             <input
               type="file"
-              accept=".pdf,.txt,.md,.csv,.xlsx,.xlsm,text/plain,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+              accept=".pdf,.txt,.md,.csv,.xlsx,.xlsm,.geojson,text/plain,text/csv,application/pdf,application/geo+json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
               hidden
               onChange={(event) =>
                 importLocalFile(

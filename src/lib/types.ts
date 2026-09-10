@@ -129,12 +129,55 @@ export type MapPoint = {
   note?: string;
 };
 
+export type MapLineLayer = {
+  id: string;
+  kind: "line";
+  label?: string;
+  coordinates: Array<[number, number]>;
+  value?: number;
+  sourceLabel?: string;
+};
+
+export type MapPolygonLayer = {
+  id: string;
+  kind: "polygon";
+  label?: string;
+  coordinates: Array<Array<[number, number]>>;
+  value?: number;
+  sourceLabel?: string;
+};
+
+export type MapPointLayer = {
+  id: string;
+  kind: "point";
+  label?: string;
+  points: MapPoint[];
+  sourceLabel?: string;
+};
+
+export type MapLayerSpec =
+  | MapLineLayer
+  | MapPolygonLayer
+  | MapPointLayer;
+
+export type MapCameraSpec = {
+  centerLatitude?: number;
+  centerLongitude?: number;
+  zoom?: number;
+  overviewZoom?: number;
+};
+
 export type MapSpec = {
   title: string;
   subtitle?: string;
   points: MapPoint[];
   sourceLabel?: string;
   focus?: "world" | "africa" | "custom";
+  basemap?: "openstreetmap" | "none";
+  camera?: MapCameraSpec;
+  layers?: MapLayerSpec[];
+  attribution?: string;
+  pointMode?: "symbols" | "heat";
 };
 
 export type VisualKind =
@@ -244,6 +287,9 @@ export type DatasetAnalysis = {
   recommendedChart?: ChartSpec;
   recommendedMap?: MapSpec;
   insight?: string;
+  analysisVersion?: string;
+  sourceKind?: "csv" | "xlsx" | "geojson" | "legacy";
+  sourceText?: string;
 };
 
 export type DocumentIngestion = {

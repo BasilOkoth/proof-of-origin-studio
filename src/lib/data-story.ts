@@ -17,11 +17,11 @@ type ColumnRoles = {
   categoryColumns: string[];
 };
 
-export const DATASET_ANALYSIS_VERSION = "data-story-2026-09-10-v4";
+export const DATASET_ANALYSIS_VERSION = "data-story-2026-09-10-v5";
 
 type VersionedDatasetAnalysis = DatasetAnalysis & {
   analysisVersion?: string;
-  sourceKind?: "csv" | "xlsx" | "legacy";
+  sourceKind?: "csv" | "xlsx" | "geojson" | "legacy";
   sourceText?: string;
 };
 
@@ -326,25 +326,135 @@ function trimData(data: ChartDatum[], limit = 14) {
     .slice(0, limit);
 }
 
+
+function numericValueCount(rows: CsvRow[], column: string) {
+  return rows.reduce(
+    (count, row) =>
+      count + (asNumber(row[column]) !== undefined ? 1 : 0),
+    0
+  );
+}
+
+function distinctTextCount(rows: CsvRow[], column: string) {
+  return new Set(
+    rows
+      .map((row) => clean(row[column] || ""))
+      .filter(Boolean)
+  ).size;
+}
+
+function distinctTimeCount(rows: CsvRow[], column: string) {
+  return new Set(
+    rows
+      .map((row) => parseTimeValue(row[column] || ""))
+      .filter((value): value is number => value !== undefined)
+      .map(String)
+  ).size;
+}
+
+function bestTimeColumn(
+  rows: CsvRow[],
+  roles: ColumnRoles
+) {
+  return roles.dateColumns
+    .filter((column) => distinctTimeCount(rows, column) >= 2)
+    .sort((a, b) => {
+      const aScore =
+        (/\b(month|date|year|period|season|time)\b/i.test(a)
+          ? 100
+          : 0) +
+        distinctTimeCount(rows, a);
+      const bScore =
+        (/\b(month|date|year|period|season|time)\b/i.test(b)
+          ? 100
+          : 0) +
+        distinctTimeCount(rows, b);
+      return bScore - aScore;
+    })[0];
+}
+
+function bestMeasureColumn(
+  rows: CsvRow[],
+  roles: ColumnRoles
+) {
+  /*
+   * Header semantics are deliberately allowed to rescue a genuine measure
+   * even when summary/blank rows lower its numeric ratio. This is especially
+   * important for spreadsheets that contain ANNUAL or notes rows.
+   */
+  const candidates = Array.from(
+    new Set([
+      ...roles.measureColumns,
+      ...roles.numericColumns,
+    ])
+  )
+    .filter(
+      (column) =>
+        !isCoordinateHeader(column) &&
+        !roles.dateColumns.includes(column) &&
+        !isIdentifierHeader(column) &&
+        numericValueCount(rows, column) >= 2
+    )
+    .sort((a, b) => {
+      const semantic =
+        measureHeaderScore(b) - measureHeaderScore(a);
+      if (semantic !== 0) return semantic;
+      return (
+        numericValueCount(rows, b) -
+        numericValueCount(rows, a)
+      );
+    });
+
+  return candidates[0];
+}
+
+function bestCategoryColumn(
+  rows: CsvRow[],
+  roles: ColumnRoles
+) {
+  return roles.categoryColumns
+    .filter(
+      (column) =>
+        distinctTextCount(rows, column) >= 2 &&
+        !isCoordinateHeader(column) &&
+        !isTimeHeader(column)
+    )
+    .sort((a, b) => {
+      const semantic =
+        categoryHeaderScore(b) -
+        categoryHeaderScore(a);
+      if (semantic !== 0) return semantic;
+      return (
+        distinctTextCount(rows, b) -
+        distinctTextCount(rows, a)
+      );
+    })[0];
+}
+
 function chartFromRows(
   name: string,
   rows: CsvRow[],
   roles: ColumnRoles
 ): ChartSpec | undefined {
-  const dateColumn = roles.dateColumns[0];
-  const measure = roles.measureColumns[0];
+  const timeColumn = bestTimeColumn(rows, roles);
+  const measure = bestMeasureColumn(rows, roles);
 
-  /*
-   * A line chart is only a time series when the time axis actually varies.
-   * Three stations observed on one date are a cross-section, not a trend.
-   */
-  if (dateColumn && measure) {
+  if (timeColumn && measure) {
     const candidates = rows.flatMap((row) => {
       const value = asNumber(row[measure]);
-      const label = clean(row[dateColumn]);
+      const label = clean(row[timeColumn]);
       const x = parseTimeValue(label);
 
-      if (value === undefined || !label || x === undefined) return [];
+      // Summary labels such as ANNUAL are intentionally excluded because
+      // they are not genuine time points.
+      if (
+        value === undefined ||
+        !label ||
+        x === undefined
+      ) {
+        return [];
+      }
+
       return [{ label, value, x }];
     });
 
@@ -352,8 +462,11 @@ function chartFromRows(
       candidates.map((item) => String(item.x))
     );
 
-    if (candidates.length >= 2 && distinctTimes.size >= 2) {
-      const data = [...candidates].sort(
+    if (
+      candidates.length >= 2 &&
+      distinctTimes.size >= 2
+    ) {
+      const series = [...candidates].sort(
         (a, b) => Number(a.x) - Number(b.x)
       );
 
@@ -361,30 +474,42 @@ function chartFromRows(
         type: "line",
         title: `${measure} over time`,
         subtitle: name,
-        xLabel: dateColumn,
+        xLabel: timeColumn,
         yLabel: measure,
-        data: data.slice(0, 30),
+        data: series.slice(0, 36),
         sourceLabel: name,
       };
     }
   }
 
-  const category = roles.categoryColumns[0];
+  const category = bestCategoryColumn(rows, roles);
 
   if (category && measure) {
-    const data: ChartDatum[] = rows.flatMap((row) => {
-      const value = asNumber(row[measure]);
-      const label = clean(row[category]);
+    const values: ChartDatum[] = rows.flatMap(
+      (row) => {
+        const value = asNumber(row[measure]);
+        const label = clean(row[category]);
 
-      if (value === undefined || !label) return [];
-      return [{ label, value }];
-    });
+        if (
+          value === undefined ||
+          !label ||
+          /^(annual|total|summary)$/i.test(label)
+        ) {
+          return [];
+        }
 
-    if (data.length >= 2) {
-      const sorted = [...data].sort((a, b) => b.value - a.value);
+        return [{ label, value }];
+      }
+    );
+
+    if (values.length >= 2) {
+      const sorted = [...values].sort(
+        (a, b) => b.value - a.value
+      );
 
       return {
-        type: data.length > 8 ? "ranking" : "bar",
+        type:
+          values.length > 8 ? "ranking" : "bar",
         title: `${measure} by ${category}`,
         subtitle: name,
         xLabel: category,
@@ -395,36 +520,53 @@ function chartFromRows(
     }
   }
 
-  /*
-   * Scatter fallback is restricted to genuine measures. Geographic
-   * coordinates, dates and identifiers can never become default axes.
-   */
-  if (roles.measureColumns.length >= 2) {
-    const [xColumn, yColumn] = roles.measureColumns;
+  const genuineMeasures = Array.from(
+    new Set([
+      ...roles.measureColumns,
+      ...roles.numericColumns.filter(
+        (column) =>
+          !isCoordinateHeader(column) &&
+          !roles.dateColumns.includes(column) &&
+          !isIdentifierHeader(column) &&
+          measureHeaderScore(column) > 0
+      ),
+    ])
+  ).filter(
+    (column) => numericValueCount(rows, column) >= 3
+  );
 
-    const data: ChartDatum[] = rows.flatMap((row, index) => {
-      const x = asNumber(row[xColumn]);
-      const value = asNumber(row[yColumn]);
+  if (genuineMeasures.length >= 2) {
+    const [xColumn, yColumn] = genuineMeasures;
 
-      if (x === undefined || value === undefined) return [];
+    const scatter: ChartDatum[] = rows.flatMap(
+      (row, index) => {
+        const x = asNumber(row[xColumn]);
+        const value = asNumber(row[yColumn]);
 
-      return [
-        {
-          label: clean(row[category ?? ""]) || String(index + 1),
-          x,
-          value,
-        },
-      ];
-    });
+        if (x === undefined || value === undefined) {
+          return [];
+        }
 
-    if (data.length >= 3) {
+        return [
+          {
+            label:
+              clean(row[category ?? ""]) ||
+              String(index + 1),
+            x,
+            value,
+          },
+        ];
+      }
+    );
+
+    if (scatter.length >= 3) {
       return {
         type: "scatter",
         title: `${yColumn} vs ${xColumn}`,
         subtitle: name,
         xLabel: xColumn,
         yLabel: yColumn,
-        data: trimData(data, 40),
+        data: trimData(scatter, 40),
         sourceLabel: name,
       };
     }
@@ -432,6 +574,7 @@ function chartFromRows(
 
   return undefined;
 }
+
 
 function mapFromRows(
   name: string,
@@ -513,6 +656,8 @@ function mapFromRows(
     points,
     sourceLabel: name,
     focus: africaCount / points.length >= 0.7 ? "africa" : "world",
+    basemap: "openstreetmap",
+    attribution: "© OpenStreetMap contributors",
   };
 }
 

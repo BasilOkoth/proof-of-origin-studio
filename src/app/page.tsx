@@ -33,9 +33,11 @@ import { Player } from "@remotion/player";
 
 import {
   analyzeCsv,
+  DATASET_ANALYSIS_VERSION,
   upgradeLegacyDatasetAnalysis,
 } from "@/lib/data-story";
 import { analyzeXlsx } from "@/lib/xlsx-story";
+import { analyzeGeoJson } from "@/lib/geojson-map";
 import { scoutSourceToEvidence, type EvidenceScoutResponse, type EvidenceScoutSource, type StoryQuestionCandidate } from "@/lib/evidence-scout";
 import { downloadText, projectAsMarkdown } from "@/lib/export";
 import { downloadLocalRenderPackage } from "@/lib/local-render-package";
@@ -675,31 +677,89 @@ export default function StudioPage() {
       lowerName.endsWith(".xlsm") ||
       file.type ===
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-      file.type === "application/vnd.ms-excel.sheet.macroEnabled.12";
+      file.type ===
+        "application/vnd.ms-excel.sheet.macroEnabled.12";
+
+    const isGeoJson =
+      lowerName.endsWith(".geojson") ||
+      file.type === "application/geo+json";
 
     let importedDatasets: DatasetAnalysis[] = [];
     let datasetEvidence: EvidenceItem[] = [];
 
     if (isExcel) {
-      const workbook = await analyzeXlsx(file, file.name);
+      const workbook = await analyzeXlsx(
+        file,
+        file.name
+      );
+
       importedDatasets = workbook.datasets;
 
-      datasetEvidence = workbook.datasets.flatMap((item) =>
-        item.insight
-          ? [
-              {
-                id: crypto.randomUUID(),
-                kind: "observed" as const,
-                statement: item.insight,
-                source: file.name,
-                sourceLabel: `${file.name} · ${item.name}`,
-                sourceType: "dataset" as const,
-              },
-            ]
-          : []
+      datasetEvidence = workbook.datasets.flatMap(
+        (item) =>
+          item.insight
+            ? [
+                {
+                  id: crypto.randomUUID(),
+                  kind: "observed" as const,
+                  statement: item.insight,
+                  source: file.name,
+                  sourceLabel: `${file.name} · ${item.name}`,
+                  sourceType: "dataset" as const,
+                },
+              ]
+            : []
       );
+    } else if (isGeoJson) {
+      const map = analyzeGeoJson(
+        await file.text(),
+        file.name
+      );
+
+      const analysis: DatasetAnalysis = {
+        name: file.name,
+        rowCount:
+          map.points.length +
+          (map.layers?.length || 0),
+        columns: [],
+        numericColumns: [],
+        dateColumns: [],
+        recommendedMap: map,
+        insight: `The GeoJSON contains ${
+          map.points.length
+        } mapped point${
+          map.points.length === 1 ? "" : "s"
+        } and ${map.layers?.length || 0} vector layer${
+          (map.layers?.length || 0) === 1
+            ? ""
+            : "s"
+        }.`,
+        analysisVersion:
+          DATASET_ANALYSIS_VERSION,
+        sourceKind: "geojson",
+        sourceText:
+          (await file.text()).length <= 250_000
+            ? await file.text()
+            : undefined,
+      };
+
+      importedDatasets = [analysis];
+      datasetEvidence = [
+        {
+          id: crypto.randomUUID(),
+          kind: "observed",
+          statement: analysis.insight!,
+          source: file.name,
+          sourceLabel: file.name,
+          sourceType: "dataset",
+        },
+      ];
     } else {
-      const analysis = analyzeCsv(await file.text(), file.name);
+      const analysis = analyzeCsv(
+        await file.text(),
+        file.name
+      );
+
       importedDatasets = [analysis];
 
       if (analysis.insight) {
@@ -1346,11 +1406,11 @@ export default function StudioPage() {
                     fontWeight: 500,
                   }}
                 >
-                  CSV or Excel · detect trends, comparisons, time series and coordinates.
+                  CSV, Excel or GeoJSON · detect trends, comparisons, coordinates and real map layers.
                 </span>
                 <input
                   type="file"
-                  accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+                  accept=".csv,.xlsx,.xlsm,.geojson,text/csv,application/geo+json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
                   hidden
                   onChange={(e: any) => ingestCsv(e.target.files?.[0])}
                 />
