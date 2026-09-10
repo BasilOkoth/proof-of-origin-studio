@@ -405,7 +405,7 @@ async function probePdf(url: string) {
         accept: "application/pdf,*/*;q=0.5",
         range: "bytes=0-11999",
         "user-agent":
-          "Evidence-Studio-Scout/1.3 (+https://github.com/BasilOkoth/proof-of-origin-studio)",
+          "Evidence-Studio-Scout/1.4 (+https://github.com/BasilOkoth/proof-of-origin-studio)",
       },
       signal: AbortSignal.timeout(12_000),
     });
@@ -454,6 +454,233 @@ async function probePdf(url: string) {
   }
 }
 
+
+function safeHttpsUrl(value?: string | null) {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return "";
+
+    const host = url.hostname.toLowerCase();
+    if (
+      !host ||
+      host === "localhost" ||
+      host.endsWith(".localhost") ||
+      host.endsWith(".local") ||
+      host === "127.0.0.1" ||
+      host === "::1"
+    ) {
+      return "";
+    }
+
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function htmlPdfLinks(html: string, baseUrl: string) {
+  const found: string[] = [];
+
+  const hrefRegex = /href\s*=\s*["']([^"'#]+)["']/gi;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = hrefRegex.exec(html))) {
+    const href = match[1]?.trim();
+    if (!href) continue;
+
+    if (
+      !/\.pdf(?:$|[?#])/i.test(href) &&
+      !/\/pdf(?:$|[/?#])/i.test(href) &&
+      !/article\/download/i.test(href) &&
+      !/download[^"'<>]*pdf/i.test(href)
+    ) {
+      continue;
+    }
+
+    try {
+      const url = new URL(href, baseUrl);
+      const safe = safeHttpsUrl(url.toString());
+      if (safe) found.push(safe);
+    } catch {
+      // Ignore malformed links.
+    }
+  }
+
+  const metaRegex =
+    /<meta[^>]+(?:name|property)\s*=\s*["'](?:citation_pdf_url|og:pdf|dc\.identifier)["'][^>]+content\s*=\s*["']([^"']+)["'][^>]*>/gi;
+
+  while ((match = metaRegex.exec(html))) {
+    const raw = match[1]?.trim();
+    if (!raw) continue;
+
+    try {
+      const url = new URL(raw, baseUrl);
+      const safe = safeHttpsUrl(url.toString());
+      if (safe) found.push(safe);
+    } catch {
+      // Ignore malformed metadata URLs.
+    }
+  }
+
+  return uniqueUrls(found);
+}
+
+async function discoverPdfLinksFromLandingPage(url: string) {
+  const safe = safeHttpsUrl(url);
+  if (!safe) return [];
+
+  try {
+    const response = await fetch(safe, {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.3",
+        "user-agent":
+          "Evidence-Studio-Scout/1.4 (+https://github.com/BasilOkoth/proof-of-origin-studio)",
+      },
+      signal: AbortSignal.timeout(12_000),
+    });
+
+    if (!response.ok) return [];
+
+    const contentType = (
+      response.headers.get("content-type") || ""
+    ).toLowerCase();
+
+    if (
+      !contentType.includes("html") &&
+      !contentType.includes("xhtml") &&
+      !contentType.includes("text/")
+    ) {
+      return [];
+    }
+
+    const html = (await response.text()).slice(0, 750_000);
+    return htmlPdfLinks(html, response.url || safe).slice(0, 10);
+  } catch {
+    return [];
+  }
+}
+
+type UnpaywallLocation = {
+  url?: string | null;
+  url_for_pdf?: string | null;
+  url_for_landing_page?: string | null;
+  host_type?: string | null;
+  license?: string | null;
+  version?: string | null;
+};
+
+type UnpaywallResponse = {
+  doi?: string | null;
+  is_oa?: boolean | null;
+  best_oa_location?: UnpaywallLocation | null;
+  first_oa_location?: UnpaywallLocation | null;
+  oa_locations?: UnpaywallLocation[] | null;
+};
+
+async function unpaywallCandidates(doi?: string) {
+  if (!doi) return [];
+
+  const email =
+    process.env.UNPAYWALL_EMAIL?.trim() ||
+    process.env.OPENALEX_MAILTO?.trim() ||
+    process.env.CROSSREF_MAILTO?.trim();
+
+  // Unpaywall requires an email parameter. If none is configured, skip cleanly.
+  if (!email) return [];
+
+  try {
+    const endpoint = new URL(
+      `https://api.unpaywall.org/v2/${encodeURIComponent(doi)}`
+    );
+    endpoint.searchParams.set("email", email);
+
+    const response = await fetch(endpoint, {
+      headers: {
+        accept: "application/json",
+        "user-agent":
+          "Evidence-Studio-Scout/1.4 (+https://github.com/BasilOkoth/proof-of-origin-studio)",
+      },
+      signal: AbortSignal.timeout(12_000),
+    });
+
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as UnpaywallResponse;
+
+    const locations = [
+      data.best_oa_location,
+      data.first_oa_location,
+      ...(data.oa_locations || []),
+    ].filter(Boolean) as UnpaywallLocation[];
+
+    return uniqueUrls(
+      locations.flatMap((location) => [
+        location.url_for_pdf,
+        location.url &&
+        (/\.pdf(?:$|[?#])/i.test(location.url) ||
+          /\/pdf(?:$|[/?#])/i.test(location.url) ||
+          /article\/download/i.test(location.url))
+          ? location.url
+          : undefined,
+      ])
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function expandFullTextCandidates(
+  source: AcquisitionSource
+): Promise<AcquisitionSource> {
+  if (source.sourceType !== "paper") return source;
+
+  const doi = source.doi;
+  const providerCandidates = uniqueUrls([
+    ...(source.downloadCandidates || []),
+    source.downloadUrl,
+  ]);
+
+  const [unpaywall, landingLinks, doiLinks] = await Promise.all([
+    unpaywallCandidates(doi),
+    discoverPdfLinksFromLandingPage(source.url),
+    doi && source.url !== `https://doi.org/${doi}`
+      ? discoverPdfLinksFromLandingPage(`https://doi.org/${doi}`)
+      : Promise.resolve([]),
+  ]);
+
+  const expanded = uniqueUrls([
+    ...providerCandidates,
+    ...unpaywall,
+    ...landingLinks,
+    ...doiLinks,
+  ]);
+
+  if (!expanded.length) {
+    return {
+      ...source,
+      downloadCandidates: [],
+      downloadUrl: undefined,
+      access: "landing_page",
+      reason: `${source.reason} DOI/repository/publisher discovery found no direct PDF endpoint.`,
+    };
+  }
+
+  const extras = expanded.length - providerCandidates.length;
+
+  return {
+    ...source,
+    downloadCandidates: expanded,
+    downloadUrl: expanded[0],
+    access: "open_download",
+    reason: `${source.reason} Full-text acquisition found ${expanded.length} candidate endpoint${
+      expanded.length === 1 ? "" : "s"
+    }${extras > 0 ? `, including ${extras} DOI/repository/publisher fallback${extras === 1 ? "" : "s"}` : ""}.`,
+  };
+}
+
 async function searchOpenAlex(
   query: string,
   limit: number
@@ -476,7 +703,7 @@ async function searchOpenAlex(
       `https://api.openalex.org/works?${params.toString()}`,
       {
         headers: {
-          "user-agent": `Evidence-Studio/1.3${
+          "user-agent": `Evidence-Studio/1.4${
             mailto ? ` (mailto:${mailto})` : ""
           }`,
           accept: "application/json",
@@ -622,7 +849,7 @@ async function searchCrossref(
       `https://api.crossref.org/works?${params.toString()}`,
       {
         headers: {
-          "user-agent": `Evidence-Studio/1.3${
+          "user-agent": `Evidence-Studio/1.4${
             mailto ? ` (mailto:${mailto})` : ""
           }`,
           accept: "application/json",
@@ -1191,8 +1418,46 @@ export async function POST(request: Request) {
      */
     const deduped = dedupeSources(discovered);
 
+    /*
+     * Last-mile scholarly acquisition:
+     * - OpenAlex/Crossref direct candidates
+     * - Unpaywall OA locations when an email is configured
+     * - DOI/publisher landing-page PDF link extraction
+     * - institutional/repository links exposed from those pages
+     *
+     * Discovery does not make a source trusted. Every resulting endpoint is
+     * still required to pass the PDF signature probe below.
+     */
+    const expansionPool = [...deduped]
+      .sort((a, b) => {
+        const aScore =
+          a.relevance * 0.48 +
+          (a.mechanismScore || 0) * 0.34 +
+          a.evidenceStrength * 0.18;
+
+        const bScore =
+          b.relevance * 0.48 +
+          (b.mechanismScore || 0) * 0.34 +
+          b.evidenceStrength * 0.18;
+
+        return bScore - aScore;
+      });
+
+    const expanded: AcquisitionSource[] = [];
+
+    for (let index = 0; index < expansionPool.length; index += 1) {
+      const source = expansionPool[index];
+
+      // Limit network expansion to the strongest scholarly candidates.
+      if (source.sourceType === "paper" && index < 14) {
+        expanded.push(await expandFullTextCandidates(source));
+      } else {
+        expanded.push(source);
+      }
+    }
+
     const verified = await verifyAcquisitionSources(
-      deduped
+      expanded
     );
 
     const relevanceFiltered =
