@@ -7,6 +7,17 @@ function clean(value?: string) {
     .trim();
 }
 
+function spokenUnits(text: string) {
+  return clean(text)
+    .replace(/\b7-day\b/gi, "seven-day")
+    .replace(/\b24h\b/gi, "twenty-four-hour")
+    .replace(/\b24-hour\b/gi, "twenty-four-hour")
+    .replace(/\bmm\b/gi, "millimetres")
+    .replace(/\bkm\b/gi, "kilometres")
+    .replace(/\bkm2\b/gi, "square kilometres")
+    .replace(/\b%\b/g, " percent");
+}
+
 function stripMetaNarration(text: string) {
   return clean(text)
     .replace(
@@ -25,39 +36,160 @@ function stripMetaNarration(text: string) {
       /The map shows where the measured evidence exists and keeps the viewer from treating every part of Nairobi as interchangeable\.?/gi,
       ""
     )
+    .replace(
+      /Where the evidence is still incomplete, that gap becomes the next research task.?not a sentence invented for the video\.?/gi,
+      "Where the evidence is incomplete, that uncertainty stays visible."
+    )
     .replace(/\s{2,}/g, " ")
     .trim();
 }
 
-function polishSystemsIntro(scene: Scene, text: string) {
-  const headline = clean(scene.headline).toLowerCase();
+function isTrustBoundary(scene: Scene) {
+  return (
+    clean(scene.eyebrow).toLowerCase().includes("trust boundary") ||
+    clean(scene.headline).toLowerCase().includes("evidence still not prove")
+  );
+}
 
-  if (
+function isSystemsIntro(scene: Scene) {
+  const headline = clean(scene.headline).toLowerCase();
+  return (
     headline.includes("rain is the trigger") ||
     headline.includes("what turns it into a disaster")
-  ) {
+  );
+}
+
+function isFlowPath(scene: Scene) {
+  const text = `${scene.eyebrow} ${scene.headline}`.toLowerCase();
+  return /flow path|after water hits|drainage capacity/.test(text);
+}
+
+function isUrbanForm(scene: Scene) {
+  const text = `${scene.eyebrow} ${scene.headline}`.toLowerCase();
+  return /urban form|city changes|surface the rain lands/.test(text);
+}
+
+function isMaintenance(scene: Scene) {
+  const text = `${scene.eyebrow} ${scene.headline}`.toLowerCase();
+  return /maintenance|infrastructure is a system|institutional/.test(text);
+}
+
+function isTakeaway(scene: Scene) {
+  const text = `${scene.eyebrow} ${scene.headline}`.toLowerCase();
+  return /takeaway|flooding is an event|flood risk is a system/.test(text);
+}
+
+function polishSystemsIntro(scene: Scene, text: string) {
+  if (!isSystemsIntro(scene)) return text;
+
+  return [
+    "Heavy rain is the trigger.",
+    "But between the rain and the damage sits an urban system: drains, waterways, built surfaces, settlement patterns and the institutions that maintain them.",
+    "The real question is what happens to water as it moves through that system.",
+  ].join(" ");
+}
+
+function polishFlowPath(scene: Scene, text: string) {
+  if (!isFlowPath(scene)) return text;
+
+  const body = clean(scene.body);
+
+  if (/drainage capacity can be exceeded/i.test(body || text)) {
     return [
-      "Heavy rain can trigger flooding.",
-      "But between the rain and the damage sits an urban system: drains, waterways, built surfaces, settlement patterns and the institutions that maintain them.",
-      "The question is what happens to water as it moves through that system.",
+      "Now follow the water.",
+      "Local evidence shows that drainage capacity can be exceeded when incoming flow is greater than the system can carry.",
+      "At that point, a weather event becomes a flow problem: how much water arrives, where it can move, and where capacity or obstruction causes it to back up.",
     ].join(" ");
   }
 
   return text;
 }
 
+function polishUrbanForm(scene: Scene, text: string) {
+  if (!isUrbanForm(scene)) return text;
+
+  return [
+    "The city also changes the surface the rain lands on.",
+    "When infiltration falls, more water stays at the surface, increasing runoff and the volume the drainage network has to carry.",
+    "That does not mean every building or paved surface causes flooding.",
+    "It means urban form changes both how much water remains above ground and where that water can go.",
+  ].join(" ");
+}
+
+function polishMaintenance(scene: Scene, text: string) {
+  if (!isMaintenance(scene)) return text;
+
+  return [
+    "Drainage capacity is not fixed once concrete is poured.",
+    "Maintenance and institutional response are part of the flood system too.",
+    "So flooding is not only an infrastructure problem.",
+    "It is also a management problem: the physical network and the way it is maintained, protected and operated work as one system.",
+  ].join(" ");
+}
+
 function polishTrustBoundary(scene: Scene, text: string) {
-  const trustBoundary =
-    clean(scene.eyebrow).toLowerCase().includes("trust boundary") ||
-    clean(scene.headline).toLowerCase().includes("evidence still not prove");
+  if (!isTrustBoundary(scene)) return text;
 
-  if (!trustBoundary) return text;
+  return [
+    "This is where the evidence becomes narrower.",
+    "The strongest detailed mechanism evidence in this draft comes from a South C case study.",
+    "That makes it valuable local evidence, but it does not prove that the same combination of drivers explains flooding across every part of Nairobi.",
+    "A Nairobi-wide conclusion needs evidence that reaches beyond one neighbourhood and one type of source.",
+  ].join(" ");
+}
 
-  return clean(text)
-    .replace(
-      /^This is where the evidence stops\.\s*/i,
-      "This is where the evidence becomes narrower. "
+function polishTakeaway(scene: Scene, text: string) {
+  if (!isTakeaway(scene)) return text;
+
+  return [
+    "The most responsible conclusion is a systems one.",
+    "Rainfall triggers the event, but the scale and location of damage depend on how water moves through the city, how land is built, how infrastructure is maintained, and where people and assets are exposed.",
+    "Where the evidence is incomplete, that uncertainty stays visible.",
+  ].join(" ");
+}
+
+function chartNarration(scene: Scene, current: string) {
+  const chart = scene.chart;
+  if (!chart) return current;
+
+  const body = spokenUnits(scene.body);
+
+  if (chart.type === "line") {
+    return clean(
+      `Start with the rain. ${body} That gives us the weather signal. It still does not explain why the same rain becomes damaging in some places and not others.`
     );
+  }
+
+  if (chart.type === "bar" || chart.type === "ranking") {
+    return clean(
+      `Now compare the event across the measured locations. ${body} These numbers show the scale of the event. They do not, by themselves, explain the flooding.`
+    );
+  }
+
+  return clean(`Now look at the measured pattern. ${body}`);
+}
+
+function mapNarration(scene: Scene, current: string) {
+  if (!scene.map) return current;
+
+  const body = spokenUnits(scene.body);
+
+  return clean(
+    `Now put those measurements on the city. ${body}`
+  );
+}
+
+function openingNarration(scene: Scene, index: number, current: string) {
+  if (index !== 0) return current;
+
+  return [
+    "Why Nairobi floods looks like one problem.",
+    "But the evidence points to several systems interacting.",
+    "When heavy rain hits the city, the outcome is not the same everywhere.",
+    "Built surfaces can reduce infiltration and increase runoff.",
+    "So the useful question is not simply whether it rained.",
+    "It is what happens to that water after it lands on the city.",
+  ].join(" ");
 }
 
 function removeDuplicateOpening(scene: Scene, text: string) {
@@ -65,25 +197,46 @@ function removeDuplicateOpening(scene: Scene, text: string) {
 
   return clean(text)
     .replace(/^Now look at the data itself\.\s*/i, "")
-    .replace(/^Now compare the event across stations or locations\.\s*/i, "Now compare the measured locations. ")
-    .replace(/^Now put the observations in place\.\s*/i, "Now place the measurements on the city. ");
+    .replace(
+      /^Now compare the event across stations or locations\.\s*/i,
+      "Now compare the measured locations. "
+    )
+    .replace(
+      /^Now put the observations in place\.\s*/i,
+      "Now place the measurements on the city. "
+    );
 }
 
-function approvedSceneNarration(scene: Scene) {
+function approvedSceneNarration(scene: Scene, index: number) {
   let narration = clean(scene.narration);
+
   narration = stripMetaNarration(narration);
+  narration = openingNarration(scene, index, narration);
   narration = polishSystemsIntro(scene, narration);
+  narration = polishFlowPath(scene, narration);
+  narration = polishUrbanForm(scene, narration);
+  narration = polishMaintenance(scene, narration);
   narration = polishTrustBoundary(scene, narration);
+  narration = polishTakeaway(scene, narration);
   narration = removeDuplicateOpening(scene, narration);
 
-  return clean(narration);
+  if (scene.chart) {
+    narration = chartNarration(scene, narration);
+  } else if (scene.map) {
+    narration = mapNarration(scene, narration);
+  }
+
+  return spokenUnits(narration);
 }
 
 function similarityKey(text: string) {
   return clean(text)
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, "")
-    .replace(/\b(the|a|an|this|that|now|shows|show|data|evidence)\b/g, "")
+    .replace(
+      /\b(the|a|an|this|that|now|shows|show|data|evidence)\b/g,
+      ""
+    )
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -91,9 +244,11 @@ function similarityKey(text: string) {
 function jaccard(a: string, b: string) {
   const aa = new Set(similarityKey(a).split(" ").filter(Boolean));
   const bb = new Set(similarityKey(b).split(" ").filter(Boolean));
+
   if (!aa.size || !bb.size) return 0;
 
   let overlap = 0;
+
   for (const token of aa) {
     if (bb.has(token)) overlap += 1;
   }
@@ -107,22 +262,22 @@ export function applyNarrationDirector(
 ): EpisodeProject {
   let previous = "";
 
-  const scenes = project.scenes.map((scene) => {
-    let narration = approvedSceneNarration(scene);
+  const scenes = project.scenes.map((scene, index) => {
+    let narration = approvedSceneNarration(scene, index);
 
     /*
      * Avoid adjacent scenes repeating the same observation.
-     * Keep the later scene's distinct visual job, but remove duplicated
-     * lead-in language rather than silently inventing a new claim.
+     * A later chart/map keeps its distinct visual job, but does not repeat
+     * the previous scene's lead sentence.
      */
     if (previous && jaccard(previous, narration) > 0.72) {
       if (scene.map) {
         narration = clean(
-          `Now place the measurements on the map. ${scene.body}`
+          `Now put those measurements on the city. ${spokenUnits(scene.body)}`
         );
       } else if (scene.chart) {
         narration = clean(
-          `Now compare the measured values directly. ${scene.body}`
+          `Now compare the measured values directly. ${spokenUnits(scene.body)}`
         );
       }
     }
