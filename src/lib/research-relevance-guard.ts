@@ -13,32 +13,22 @@ const STOP = new Set([
   "even","for","from","further","had","has","have","having","how","into","its","more",
   "most","not","our","out","over","same","should","some","such","than","that","the",
   "their","then","there","these","they","this","those","through","under","very","was",
-  "were","what","when","where","which","while","who","why","will","with","would"
+  "were","what","when","where","which","while","who","why","will","with","would",
 ]);
 
-const FRONT_MATTER = /\b(
-  dedication|dedicated\s+to|acknowledg(?:e)?ments?|declaration|approval|copyright|
-  table\s+of\s+contents|list\s+of\s+(?:tables|figures|abbreviations|acronyms)|
-  abstract|foreword|preface|certificate|certification|plagiarism|supervisor|
-  submitted\s+in\s+(?:partial|fulfilment|fulfillment)|degree\s+of|university\s+of|
-  references|bibliography|appendix|appendices|chapter\s+\d+
-)\b/ix;
+const FRONT_MATTER =
+  /\b(dedication|dedicated\s+to|acknowledg(?:e)?ments?|declaration|approval|copyright|table\s+of\s+contents|list\s+of\s+(?:tables|figures|abbreviations|acronyms)|abstract|foreword|preface|certificate|certification|plagiarism|supervisor|submitted\s+in\s+(?:partial|fulfilment|fulfillment)|degree\s+of|university\s+of|references|bibliography|appendix|appendices|chapter\s+\d+)\b/i;
 
-const PERSONAL_FRONT_MATTER = /\b(
-  helped\s+shape\s+my\s+life|my\s+family|my\s+parents|my\s+mother|my\s+father|
-  gratitude|grateful|thank\s+god|almighty|friends?\s+and\s+family|
-  this\s+work\s+is\s+dedicated
-)\b/ix;
+const PERSONAL_FRONT_MATTER =
+  /\b(helped\s+shape\s+my\s+life|my\s+family|my\s+parents|my\s+mother|my\s+father|gratitude|grateful|thank\s+god|almighty|friends?\s+and\s+family|this\s+work\s+is\s+dedicated)\b/i;
 
-const CITATION_NOISE = /\b(
-  doi|issn|isbn|creative\s+commons|all\s+rights\s+reserved|copyright|
-  retrieved\s+from|available\s+at|volume\s+\d+|issue\s+\d+
-)\b/ix;
+const CITATION_NOISE =
+  /\b(doi|issn|isbn|creative\s+commons|all\s+rights\s+reserved|copyright|retrieved\s+from|available\s+at|volume\s+\d+|issue\s+\d+)\b/i;
 
 const GENERIC_BACKGROUND = new Set([
   "urban","flood","flooding","drainage","rainfall","climate","infrastructure",
   "stormwater","watershed","river","rivers","risk","hazard","resilience",
-  "planning","land","use","waste","population","growth","city","cities"
+  "planning","land","use","waste","population","growth","city","cities",
 ]);
 
 function clean(value: string) {
@@ -61,13 +51,12 @@ function unique<T>(values: T[]) {
 function explicitPlaceAnchors(topic: string, question: string) {
   const combined = `${topic} ${question}`;
 
-  // Capture title-cased proper-noun tokens while avoiding sentence-openers.
   const candidates =
     combined.match(/\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})*\b/g) || [];
 
   const banned = new Set([
     "Why","What","How","When","Where","Who","Which","Create","Build","World",
-    "Explained","Evidence","Studio","Research","Report","Impact"
+    "Explained","Evidence","Studio","Research","Report","Impact",
   ]);
 
   return unique(
@@ -84,13 +73,6 @@ function anchorTerms(topic: string, question: string) {
     (token) => GENERIC_BACKGROUND.has(token) || token.length >= 5
   );
   return domain.slice(0, 18);
-}
-
-function overlapScore(anchors: string[], text: string) {
-  if (!anchors.length) return 1;
-  const haystack = new Set(words(text));
-  const hits = anchors.filter((token) => haystack.has(token)).length;
-  return hits / anchors.length;
 }
 
 export function looksLikeFrontMatter(value: string) {
@@ -127,8 +109,6 @@ export function filterEvidenceForStory(input: {
 
     const domainMatches = anchors.filter((token) => tokens.has(token)).length;
 
-    // With an explicit place lock, local evidence is preferred strongly.
-    // General background can survive only when it matches multiple domain terms.
     if (!placeMatch && places.length) {
       return domainMatches >= 3;
     }
@@ -225,13 +205,10 @@ export function filterAndRescoreSources(input: {
       };
     })
     .filter((source) => {
-      // Eliminate obvious irrelevant high-strength datasets such as life expectancy.
       if (source.relevance < 48) return false;
 
       if (!places.length) return source.__guard.anchorHits >= 1;
 
-      // Local sources pass. General sources need several domain matches and
-      // must still concern the actual phenomenon.
       return (
         source.__guard.placeMatch ||
         (source.__guard.anchorHits >= 2 && source.__guard.floodLike)
@@ -323,14 +300,17 @@ export function guardStoryQuestions(input: {
   const output = userQuestion ? [userQuestion, ...filtered] : filtered;
 
   const seen = new Set<string>();
-  return output.filter((candidate) => {
-    const key = candidate.question
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
 
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 6);
+  return output
+    .filter((candidate) => {
+      const key = candidate.question
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 6);
 }
