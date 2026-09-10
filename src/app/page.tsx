@@ -484,6 +484,81 @@ export default function StudioPage() {
     });
   }
 
+
+  function integrateVisualAssets(newAssets: EvidenceAsset[]) {
+    if (!newAssets.length) return;
+
+    setProject((current) => {
+      const byId = new Map<string, EvidenceAsset>();
+      current.assets.forEach((asset) => byId.set(asset.id, asset));
+      newAssets.forEach((asset) => byId.set(asset.id, asset));
+
+      return {
+        ...current,
+        assets: [...byId.values()],
+      };
+    });
+  }
+
+
+  function purgeEvidenceSources(sources: string[]) {
+    if (!sources.length) return;
+
+    const sourceSet = new Set(sources);
+
+    setEvidence((current) =>
+      current.filter(
+        (item) =>
+          !item.source ||
+          !sourceSet.has(item.source)
+      )
+    );
+
+    setProject((current) => {
+      const removedIds = new Set(
+        current.evidence
+          .filter(
+            (item) =>
+              item.source &&
+              sourceSet.has(item.source)
+          )
+          .map((item) => item.id)
+      );
+
+      return {
+        ...current,
+        evidence: current.evidence.filter(
+          (item) =>
+            !item.source ||
+            !sourceSet.has(item.source)
+        ),
+        scenes: current.scenes.map((scene) => ({
+          ...scene,
+          factIds: scene.factIds.filter(
+            (id) => !removedIds.has(id)
+          ),
+        })),
+      };
+    });
+  }
+
+  function updateSceneAsset(
+    sceneId: string,
+    assetId?: string
+  ) {
+    setProject((current) => ({
+      ...current,
+      scenes: current.scenes.map((scene) =>
+        scene.id === sceneId
+          ? {
+              ...scene,
+              assetId: assetId || undefined,
+            }
+          : scene
+      ),
+    }));
+  }
+
   function useIntelligenceAngle(angle: StoryHunterAngle, rebuild: boolean) {
     setQuestion(angle.question);
     if (!rebuild) {
@@ -1937,6 +2012,8 @@ export default function StudioPage() {
           datasets={datasets}
           scout={scout}
           onIntegrate={integrateIntelligence}
+          onIntegrateVisualAssets={integrateVisualAssets}
+          onPurgeEvidenceSources={purgeEvidenceSources}
           onUseAngle={useIntelligenceAngle}
         />
       )}
@@ -1977,6 +2054,38 @@ export default function StudioPage() {
                           <label>Headline<input value={scene.headline} onChange={(e: any) => updateScene(scene.id, "headline", e.target.value)} /></label>
                           <label>Narration<textarea rows={8} value={scene.narration} onChange={(e: any) => updateScene(scene.id, "narration", e.target.value)} /></label>
                           <label>On-screen evidence<textarea rows={4} value={scene.body} onChange={(e: any) => updateScene(scene.id, "body", e.target.value)} /></label>
+                          <label>
+                            Visual evidence
+                            <select
+                              value={scene.assetId || ""}
+                              onChange={(e: any) =>
+                                updateSceneAsset(
+                                  scene.id,
+                                  e.target.value || undefined
+                                )
+                              }
+                            >
+                              <option value="">
+                                No visual evidence assigned
+                              </option>
+                              {project.assets.map((asset) => (
+                                <option
+                                  key={asset.id}
+                                  value={asset.id}
+                                >
+                                  {asset.name}
+                                  {asset.sourceLabel
+                                    ? ` · ${asset.sourceLabel}`
+                                    : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {scene.assetId && (
+                            <p className="muted" style={{ marginTop: 8 }}>
+                              This scene will use the selected uploaded image as real visual evidence.
+                            </p>
+                          )}
                         </>
                       ) : (
                         <><h3>{scene.headline}</h3><p>{scene.narration}</p></>

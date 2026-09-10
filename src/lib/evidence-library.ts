@@ -1,4 +1,4 @@
-import type { DatasetAnalysis, EvidenceItem, EvidenceSourceType } from "./types";
+import type { DatasetAnalysis, EvidenceAsset, EvidenceItem, EvidenceSourceType } from "./types";
 import type { EvidenceScoutSource } from "./evidence-scout";
 
 export type LibraryStatus = "candidate" | "ingested" | "reviewed";
@@ -29,6 +29,7 @@ export type EvidenceLibraryRecord = {
   evidence: EvidenceItem[];
   dataset?: DatasetAnalysis;
   datasets?: DatasetAnalysis[];
+  visualAsset?: EvidenceAsset;
   fileBlob?: Blob;
 };
 
@@ -179,6 +180,7 @@ export function mergeLibraryRecord(
     evidence: patch.evidence ?? existing?.evidence ?? [],
     dataset: patch.dataset ?? existing?.dataset,
     datasets: patch.datasets ?? existing?.datasets,
+    visualAsset: patch.visualAsset ?? existing?.visualAsset,
     fileBlob: patch.fileBlob ?? existing?.fileBlob,
   };
 }

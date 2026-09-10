@@ -25,6 +25,15 @@ import {
 import { analyzeXlsx } from "@/lib/xlsx-story";
 import { analyzeGeoJson } from "@/lib/geojson-map";
 import {
+  cleanVisualTitle,
+  isNativeImageFile,
+  isNativeImageRecord,
+  looksLikeBinaryGarbage,
+  visualAssetFromBlob,
+  visualEvidenceSummary,
+  VISUAL_EVIDENCE_VERSION,
+} from "@/lib/visual-evidence";
+import {
   buildEvidenceIntelligence,
   type EvidenceIntelligenceReport,
   type StoryHunterAngle,
@@ -47,6 +56,7 @@ import {
 import type {
   DatasetAnalysis,
   DocumentIngestion,
+  EvidenceAsset,
   EvidenceItem,
   EvidenceSourceType,
 } from "@/lib/types";
@@ -60,6 +70,12 @@ type Props = {
   onIntegrate: (
     newEvidence: EvidenceItem[],
     newDatasets: DatasetAnalysis[]
+  ) => void;
+  onIntegrateVisualAssets: (
+    newAssets: EvidenceAsset[]
+  ) => void;
+  onPurgeEvidenceSources: (
+    sources: string[]
   ) => void;
   onUseAngle: (angle: StoryHunterAngle, build: boolean) => void;
 };
@@ -214,6 +230,8 @@ export function EvidenceIntelligenceLab({
   datasets,
   scout,
   onIntegrate,
+  onIntegrateVisualAssets,
+  onPurgeEvidenceSources,
   onUseAngle,
 }: Props) {
   const [library, setLibrary] = useState<EvidenceLibraryRecord[]>([]);
@@ -411,6 +429,118 @@ export function EvidenceIntelligenceLab({
     );
   }
 
+
+  async function refreshStoredVisualAssets(
+    records: EvidenceLibraryRecord[]
+  ) {
+    const refreshed: EvidenceLibraryRecord[] = [];
+    const assets: EvidenceAsset[] = [];
+    const purgeSources: string[] = [];
+
+    for (const record of records) {
+      if (
+        !isNativeImageRecord(record) ||
+        !record.fileBlob ||
+        !record.fileName
+      ) {
+        refreshed.push(record);
+        continue;
+      }
+
+      try {
+        const needsRepair =
+          !record.visualAsset ||
+          record.visualAsset.visualEvidenceVersion !==
+            VISUAL_EVIDENCE_VERSION ||
+          Boolean(record.evidence?.length) ||
+          looksLikeBinaryGarbage(record.extractedText) ||
+          looksLikeBinaryGarbage(record.title);
+
+        if (!needsRepair && record.visualAsset) {
+          refreshed.push(record);
+          assets.push(record.visualAsset);
+          continue;
+        }
+
+        const asset = await visualAssetFromBlob({
+          blob: record.fileBlob,
+          fileName: record.fileName,
+          id: record.visualAsset?.id || record.id,
+          sourceLabel: record.fileName,
+          sourceType: "field",
+        });
+
+        if (
+          record.evidence?.length ||
+          looksLikeBinaryGarbage(record.extractedText) ||
+          looksLikeBinaryGarbage(record.title)
+        ) {
+          purgeSources.push(`library:${record.id}`);
+        }
+
+        const updated = mergeLibraryRecord(record, {
+          id: record.id,
+          title: cleanVisualTitle(record.fileName),
+          sourceType: "field",
+          status: "ingested",
+          summary: visualEvidenceSummary(record.fileName),
+          extractedText: "",
+          evidence: [],
+          dataset: undefined,
+          datasets: undefined,
+          visualAsset: asset,
+          tags: Array.from(
+            new Set([
+              ...(record.tags || []).filter(
+                (tag) =>
+                  tag !== "paper" &&
+                  tag !== "report" &&
+                  !tag.startsWith("analysis:")
+              ),
+              "local",
+              "visual-evidence",
+              "image",
+              `visual:${VISUAL_EVIDENCE_VERSION}`,
+              "auto-repaired",
+            ])
+          ),
+        });
+
+        await saveEvidenceLibraryRecord(updated);
+        refreshed.push(updated);
+        assets.push(asset);
+      } catch (visualError) {
+        console.warn(
+          `Unable to refresh stored image ${record.fileName}:`,
+          visualError
+        );
+        refreshed.push(record);
+      }
+    }
+
+    if (assets.length) {
+      onIntegrateVisualAssets(assets);
+    }
+
+    if (purgeSources.length) {
+      onPurgeEvidenceSources(
+        Array.from(new Set(purgeSources))
+      );
+    }
+
+    return refreshed.sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt)
+    );
+  }
+
+  async function refreshLibraryAssets(
+    records: EvidenceLibraryRecord[]
+  ) {
+    const datasetRefreshed =
+      await refreshStoredDatasets(records);
+    return refreshStoredVisualAssets(datasetRefreshed);
+  }
+
   function reanalyze(nextLibrary = library) {
     const next = buildEvidenceIntelligence({
       topic,
@@ -433,7 +563,7 @@ export function EvidenceIntelligenceLab({
 
     try {
       const listed = await listEvidenceLibrary();
-      const records = await refreshStoredDatasets(listed);
+      const records = await refreshLibraryAssets(listed);
       setLibrary(records);
 
       setRebuildStatus(
@@ -482,7 +612,7 @@ export function EvidenceIntelligenceLab({
     void (async () => {
       try {
         const listed = await listEvidenceLibrary();
-        const records = await refreshStoredDatasets(listed);
+        const records = await refreshLibraryAssets(listed);
         if (!live) return;
 
         setLibrary(records);
@@ -758,8 +888,25 @@ export function EvidenceIntelligenceLab({
       const isCsv =
         file.name.toLowerCase().endsWith(".csv") ||
         file.type === "text/csv";
+      const isImage = isNativeImageFile(file);
+      let visualAsset: EvidenceAsset | undefined;
 
-      if (isCsv) {
+      if (isImage) {
+        visualAsset = await visualAssetFromBlob({
+          blob: file,
+          fileName: file.name,
+          id,
+          sourceLabel: file.name,
+          sourceType: "field",
+        });
+
+        title = cleanVisualTitle(file.name);
+        extractedText = "";
+        summary = visualEvidenceSummary(file.name);
+        newEvidence = [];
+        dataset = undefined;
+        importedDatasets = [];
+      } else if (isCsv) {
         extractedText = await file.text();
         dataset = analyzeCsv(extractedText, file.name);
         importedDatasets = [dataset];
@@ -892,16 +1039,26 @@ export function EvidenceIntelligenceLab({
         updatedAt: now,
         title,
         sourceType:
-          dataset || importedDatasets.length
-            ? "dataset"
-            : localType,
+          visualAsset
+            ? "field"
+            : dataset || importedDatasets.length
+              ? "dataset"
+              : localType,
         status: "ingested",
         origin: "upload",
         tags: [
           "local",
-          dataset || importedDatasets.length
-            ? "dataset"
-            : localType,
+          visualAsset
+            ? "visual-evidence"
+            : dataset || importedDatasets.length
+              ? "dataset"
+              : localType,
+          ...(visualAsset
+            ? [
+                "image",
+                `visual:${VISUAL_EVIDENCE_VERSION}`,
+              ]
+            : []),
           ...(dataset || importedDatasets.length
             ? [`analysis:${DATASET_ANALYSIS_VERSION}`]
             : []),
@@ -929,6 +1086,7 @@ export function EvidenceIntelligenceLab({
           : dataset
             ? [dataset]
             : undefined,
+        visualAsset,
         fileBlob: file,
       };
 
@@ -942,6 +1100,10 @@ export function EvidenceIntelligenceLab({
             ? [dataset]
             : []
       );
+
+      if (visualAsset) {
+        onIntegrateVisualAssets([visualAsset]);
+      }
 
       const records = await refreshLibrary();
       reanalyze(records);
@@ -1122,14 +1284,14 @@ export function EvidenceIntelligenceLab({
             <strong>
               {localBusy
                 ? "Adding to library…"
-                : "Add local PDF, TXT, Markdown, CSV, Excel or GeoJSON to the persistent library"}
+                : "Add local PDF, TXT, Markdown, CSV, Excel, GeoJSON or image evidence to the persistent library"}
             </strong>
             <span>
               The original file is retained as a browser Blob.
             </span>
             <input
               type="file"
-              accept=".pdf,.txt,.md,.csv,.xlsx,.xlsm,.geojson,text/plain,text/csv,application/pdf,application/geo+json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+              accept=".pdf,.txt,.md,.csv,.xlsx,.xlsm,.geojson,.jpg,.jpeg,.png,.webp,.gif,text/plain,text/csv,image/jpeg,image/png,image/webp,image/gif,application/pdf,application/geo+json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
               hidden
               onChange={(event) =>
                 importLocalFile(

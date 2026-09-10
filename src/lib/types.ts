@@ -41,6 +41,9 @@ export type EvidenceAsset = {
   name: string;
   mimeType: string;
   dataUrl: string;
+  sourceLabel?: string;
+  sourceType?: EvidenceSourceType;
+  visualEvidenceVersion?: string;
 };
 
 export type NarrationWord = {
