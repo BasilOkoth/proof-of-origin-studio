@@ -17,7 +17,7 @@ type ColumnRoles = {
   categoryColumns: string[];
 };
 
-export const DATASET_ANALYSIS_VERSION = "data-story-2026-09-10-v5";
+export const DATASET_ANALYSIS_VERSION = "data-story-2026-09-10-v6";
 
 type VersionedDatasetAnalysis = DatasetAnalysis & {
   analysisVersion?: string;
@@ -103,24 +103,85 @@ function parseTimeValue(value: string): number | undefined {
   const trimmed = clean(value);
   if (!trimmed) return undefined;
 
-  const parsed = Date.parse(trimmed);
-  if (Number.isFinite(parsed)) return parsed;
+  /*
+   * NEVER pass arbitrary numeric strings to Date.parse().
+   * JavaScript will happily interpret values such as "202", "61.7"
+   * or "223.4" as calendar dates. That previously caused rainfall
+   * columns to be misclassified as time dimensions.
+   */
 
-  const year = asYear(trimmed);
-  if (year !== undefined && /^\s*(19\d{2}|20\d{2}|21\d{2})\s*$/.test(trimmed)) {
-    return Date.UTC(year, 0, 1);
+  const yearOnly = trimmed.match(/^(19\d{2}|20\d{2}|21\d{2})$/);
+  if (yearOnly) {
+    return Date.UTC(Number(yearOnly[1]), 0, 1);
   }
 
-  const monthMatch = trimmed.match(
+  const iso = trimmed.match(
+    /^(19\d{2}|20\d{2}|21\d{2})[-/](\d{1,2})[-/](\d{1,2})$/
+  );
+  if (iso) {
+    const year = Number(iso[1]);
+    const month = Number(iso[2]);
+    const day = Number(iso[3]);
+    if (
+      month >= 1 &&
+      month <= 12 &&
+      day >= 1 &&
+      day <= 31
+    ) {
+      return Date.UTC(year, month - 1, day);
+    }
+  }
+
+  const monthYear = trimmed.match(
     /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(19\d{2}|20\d{2}|21\d{2})$/i
   );
-  if (monthMatch) {
+  if (monthYear) {
     const monthNames = [
       "jan", "feb", "mar", "apr", "may", "jun",
       "jul", "aug", "sep", "oct", "nov", "dec",
     ];
-    const month = monthNames.indexOf(monthMatch[1].slice(0, 3).toLowerCase());
-    return Date.UTC(Number(monthMatch[2]), month, 1);
+    const month = monthNames.indexOf(
+      monthYear[1].slice(0, 3).toLowerCase()
+    );
+    return Date.UTC(Number(monthYear[2]), month, 1);
+  }
+
+  const dayMonthYear = trimmed.match(
+    /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(19\d{2}|20\d{2}|21\d{2})$/i
+  );
+  if (dayMonthYear) {
+    const monthNames = [
+      "jan", "feb", "mar", "apr", "may", "jun",
+      "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    const day = Number(dayMonthYear[1]);
+    const month = monthNames.indexOf(
+      dayMonthYear[2].slice(0, 3).toLowerCase()
+    );
+    const year = Number(dayMonthYear[3]);
+
+    if (day >= 1 && day <= 31 && month >= 0) {
+      return Date.UTC(year, month, day);
+    }
+  }
+
+  const monthDayYear = trimmed.match(
+    /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2}),?\s+(19\d{2}|20\d{2}|21\d{2})$/i
+  );
+  if (monthDayYear) {
+    const monthNames = [
+      "jan", "feb", "mar", "apr", "may", "jun",
+      "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    const month = monthNames.indexOf(
+      monthDayYear[1].slice(0, 3).toLowerCase()
+    );
+    const day = Number(monthDayYear[2]);
+    const year = Number(monthDayYear[3]);
+
+    if (day >= 1 && day <= 31 && month >= 0) {
+      return Date.UTC(year, month, day);
+    }
   }
 
   return undefined;
@@ -185,9 +246,39 @@ function isCoordinateHeader(column: string) {
 }
 
 function isTimeHeader(column: string) {
-  return /\b(date|year|month|quarter|week|day|time|period|season)\b/i.test(
-    clean(column)
-  );
+  const value = clean(column).toLowerCase();
+
+  /*
+   * "7-day rainfall total (mm)" is a MEASURE, not a time dimension.
+   * "24h extreme (mm)" is also a MEASURE.
+   *
+   * Date-bearing headers remain time dimensions:
+   * - Month
+   * - Date
+   * - Extreme date
+   * - Year
+   * - Quarter
+   */
+  if (/\bdate\b/i.test(value)) return true;
+
+  if (
+    /^(year|month|quarter|week|day|time|period|season)\b/i.test(
+      value
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(year|month|quarter|season)\b/i.test(value) &&
+    !/\b(rainfall|precipitation|total|amount|value|count|rate|depth|flow|discharge|temperature|extreme|max|min|mm)\b/i.test(
+      value
+    )
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function isIdentifierHeader(column: string) {
