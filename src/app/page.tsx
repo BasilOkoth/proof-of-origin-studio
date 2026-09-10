@@ -72,6 +72,8 @@ type PersistedWorkspace = {
   activeTab: Tab;
   sourceKind: "research" | "report" | "text";
   scoutQuery: string;
+  voiceId: string;
+  modelId: string;
   manualScriptEdits: boolean;
   project: EpisodeProject;
 };
@@ -813,6 +815,17 @@ export default function StudioPage() {
           setScoutQuery(saved.scoutQuery);
         }
 
+        if (typeof saved.voiceId === "string") {
+          setVoiceId(saved.voiceId);
+        }
+
+        if (
+          typeof saved.modelId === "string" &&
+          saved.modelId.trim()
+        ) {
+          setModelId(saved.modelId);
+        }
+
         if (typeof saved.manualScriptEdits === "boolean") {
           setManualScriptEdits(saved.manualScriptEdits);
         }
@@ -851,6 +864,8 @@ export default function StudioPage() {
           activeTab,
           sourceKind,
           scoutQuery,
+          voiceId,
+          modelId,
           manualScriptEdits,
           project: projectForWorkspaceStorage(project),
         };
@@ -884,6 +899,8 @@ export default function StudioPage() {
     activeTab,
     sourceKind,
     scoutQuery,
+    voiceId,
+    modelId,
     manualScriptEdits,
     project,
   ]);
