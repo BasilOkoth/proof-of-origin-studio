@@ -686,7 +686,7 @@ export function applyVisualIntelligence(
 export function refreshVisualIntelligence(
   project: EpisodeProject
 ): EpisodeProject {
-  let scenes =
+  let scenes: Scene[] =
     project.scenes.map(
       (scene) => ({
         ...scene,
