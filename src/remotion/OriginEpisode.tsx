@@ -30,12 +30,13 @@ function captionPlacementFor(
   shotRole: string | undefined
 ): CaptionPlacement {
   if (!scene) {
-    return "bottom_center";
+    return "lower_center";
   }
 
   /*
-   * Hooks, B-roll and headline-led scenes commonly place their editorial
-   * headline on the left. Keep captions away from that block.
+   * Premium default: narration lives in a centred lower-third rail.
+   * Do not push subtitles into distant corners merely because the scene
+   * contains a left-aligned headline.
    */
   if (
     scene.kind === "hook" ||
@@ -43,12 +44,13 @@ function captionPlacementFor(
     shotRole === "archive" ||
     shotRole === "headline"
   ) {
-    return "bottom_right";
+    return "lower_center";
   }
 
   /*
-   * Maps and charts often use labels, axes or legends near the bottom.
-   * A compact top-right caption is less likely to cover the evidence.
+   * Maps and charts often reserve their lower edge for axes, labels or legends.
+   * Move captions upward, but keep them centred so they still feel connected
+   * to the narration rather than becoming a corner badge.
    */
   if (
     scene.map ||
@@ -56,12 +58,13 @@ function captionPlacementFor(
     shotRole === "map" ||
     shotRole === "chart"
   ) {
-    return "top_right";
+    return "upper_center";
   }
 
   /*
-   * Documents frequently place the source object on the right-hand side,
-   * so keep captions on the opposite lower corner.
+   * Documents and source-highlight scenes can be visually dense in the lower
+   * third. Use a centred mid-frame subtitle position rather than left/right
+   * corner placement.
    */
   if (
     scene.kind === "document" ||
@@ -69,14 +72,14 @@ function captionPlacementFor(
     scene.kind === "proof_card" ||
     shotRole === "document"
   ) {
-    return "bottom_left";
+    return "center";
   }
 
   /*
-   * Diagrams and explanatory scenes usually reserve the middle of the frame
-   * for nodes/arrows. Keep captions in a consistent bottom safe rail.
+   * Diagrams and explanatory scenes remain lower-centred. The caption is
+   * compact enough not to read as a second headline.
    */
-  return "bottom_center";
+  return "lower_center";
 }
 
 function CaptionDirector({
@@ -118,7 +121,7 @@ function CaptionDirector({
     return (
       <AnimatedCaptions
         track={project.narration}
-        placement="bottom_center"
+        placement="lower_center"
       />
     );
   }
@@ -131,8 +134,8 @@ function CaptionDirector({
     );
 
   /*
-   * The branded outro already carries substantial authored text.
-   * Do not place kinetic narration text over it.
+   * The branded outro already contains authored text and should not have
+   * kinetic narration sitting on top of it.
    */
   if (
     activeScene?.kind ===
@@ -198,12 +201,6 @@ function shouldExecuteIllustration(
         ?.kind || ""
     );
 
-  /*
-   * Evidence-first precedence:
-   * maps, charts and explicit source highlights retain their evidence-native
-   * renderers. But an approved systems_diagram visual plan must override a
-   * stale source/document scene kind from an earlier story build.
-   */
   if (
     scene.map ||
     scene.chart

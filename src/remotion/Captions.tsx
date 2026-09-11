@@ -13,10 +13,9 @@ import type {
 } from "@/lib/types";
 
 export type CaptionPlacement =
-  | "bottom_center"
-  | "bottom_right"
-  | "bottom_left"
-  | "top_right";
+  | "lower_center"
+  | "center"
+  | "upper_center";
 
 function activeSentence(
   track: NarrationTrack,
@@ -64,62 +63,47 @@ function placementStyle(
   placement: CaptionPlacement
 ): React.CSSProperties {
   switch (placement) {
-    case "bottom_right":
+    case "center":
       return {
-        left: "auto",
-        right: 64,
-        bottom: 54,
-        justifyContent: "flex-end",
-      };
-
-    case "bottom_left":
-      return {
-        left: 64,
-        right: "auto",
-        bottom: 54,
-        justifyContent: "flex-start",
-      };
-
-    case "top_right":
-      return {
-        left: "auto",
-        right: 64,
-        top: 64,
+        left: "50%",
+        top: "58%",
         bottom: "auto",
-        justifyContent: "flex-end",
+        transform:
+          "translate(-50%, -50%)",
+      };
+
+    case "upper_center":
+      return {
+        left: "50%",
+        top: "18%",
+        bottom: "auto",
+        transform:
+          "translateX(-50%)",
       };
 
     default:
       return {
-        left: 64,
-        right: 64,
-        bottom: 54,
-        justifyContent: "center",
+        left: "50%",
+        bottom: "8%",
+        top: "auto",
+        transform:
+          "translateX(-50%)",
       };
   }
 }
 
-function captionWidth(
+function maxCaptionWidth(
   placement: CaptionPlacement
 ) {
-  if (
-    placement ===
-      "bottom_right" ||
-    placement ===
-      "bottom_left" ||
-    placement ===
-      "top_right"
-  ) {
-    return 760;
-  }
-
-  return 980;
+  return placement === "center"
+    ? 900
+    : 1040;
 }
 
 export function AnimatedCaptions({
   track,
   placement =
-    "bottom_center",
+    "lower_center",
   reduced = false,
 }: {
   track?: NarrationTrack;
@@ -188,8 +172,8 @@ export function AnimatedCaptions({
   }
 
   /*
-   * Shorter word groups improve readability and stop captions from becoming
-   * a second headline. Four words is a good documentary rhythm at 1080p.
+   * Keep narration captions compact enough to read as subtitles rather
+   * than a second headline.
    */
   const groupSize = 4;
 
@@ -224,7 +208,24 @@ export function AnimatedCaptions({
     );
 
   const baseFontSize =
-    reduced ? 27 : 31;
+    reduced ? 27 : 32;
+
+  const placementCss =
+    placementStyle(
+      placement
+    );
+
+  const entranceY =
+    interpolate(
+      sentenceEnter,
+      [0, 1],
+      [10, 0]
+    );
+
+  const transform =
+    placementCss.transform
+      ? `${placementCss.transform} translateY(${entranceY}px)`
+      : `translateY(${entranceY}px)`;
 
   return (
     <div
@@ -234,6 +235,10 @@ export function AnimatedCaptions({
         zIndex: 100,
         display:
           "flex",
+        justifyContent:
+          "center",
+        alignItems:
+          "center",
         pointerEvents:
           "none",
         opacity:
@@ -241,15 +246,12 @@ export function AnimatedCaptions({
           (reduced
             ? 0.72
             : 1),
-        transform:
-          `translateY(${interpolate(
-            sentenceEnter,
-            [0, 1],
-            [12, 0]
-          )}px)`,
-        ...placementStyle(
-          placement
-        ),
+        width:
+          "max-content",
+        maxWidth:
+          "calc(100% - 120px)",
+        ...placementCss,
+        transform,
       }}
     >
       <div
@@ -257,27 +259,27 @@ export function AnimatedCaptions({
           width:
             "fit-content",
           maxWidth:
-            captionWidth(
+            maxCaptionWidth(
               placement
             ),
           minHeight:
             reduced
-              ? 50
-              : 56,
+              ? 48
+              : 54,
           padding:
             reduced
-              ? "10px 16px 11px"
-              : "12px 18px 13px",
+              ? "9px 15px 10px"
+              : "11px 18px 12px",
           borderRadius:
-            15,
+            14,
           background:
             reduced
-              ? "rgba(4,7,15,.70)"
-              : "rgba(4,7,15,.88)",
+              ? "rgba(4,7,15,.68)"
+              : "rgba(4,7,15,.86)",
           border:
-            "1px solid rgba(255,255,255,.11)",
+            "1px solid rgba(255,255,255,.10)",
           boxShadow:
-            "0 12px 38px rgba(0,0,0,.34)",
+            "0 10px 34px rgba(0,0,0,.34)",
           backdropFilter:
             "blur(12px)",
           fontFamily:
@@ -285,15 +287,7 @@ export function AnimatedCaptions({
           display:
             "flex",
           justifyContent:
-            placement ===
-              "bottom_left"
-              ? "flex-start"
-              : placement ===
-                  "bottom_right" ||
-                placement ===
-                  "top_right"
-                ? "flex-end"
-                : "center",
+            "center",
           alignItems:
             "center",
           flexWrap:
@@ -301,15 +295,7 @@ export function AnimatedCaptions({
           gap:
             "4px 8px",
           textAlign:
-            placement ===
-              "bottom_left"
-              ? "left"
-              : placement ===
-                  "bottom_right" ||
-                placement ===
-                  "top_right"
-                ? "right"
-                : "center",
+            "center",
         }}
       >
         {visibleWords.map(
@@ -379,7 +365,7 @@ export function AnimatedCaptions({
                       ? 900
                       : 760,
                   letterSpacing:
-                    -0.45,
+                    -0.4,
                   transform:
                     `scale(${
                       active
@@ -387,15 +373,15 @@ export function AnimatedCaptions({
                             pop,
                             [0, 1],
                             [
-                              0.95,
-                              1.025,
+                              0.96,
+                              1.02,
                             ]
                           )
                         : 1
                     })`,
                   textShadow:
                     active
-                      ? "0 0 18px rgba(85,216,255,.18)"
+                      ? "0 0 16px rgba(85,216,255,.17)"
                       : "0 2px 8px rgba(0,0,0,.3)",
                 }}
               >
