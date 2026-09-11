@@ -39,6 +39,22 @@ const LONG_FORM_MODES = new Set([
 const INTERNAL_METADATA =
   /current story-grounded evidence|story-grounded evidence|evidence items?|current story|this draft|draft contains|scene \d+|visual intelligence|retention score|source count|dataset count/i;
 
+const RAW_SOURCE_PATTERNS = [
+  /\b\d+\.\d+(?:\.\d+)?\b/,
+  /\bworld meteorological organization\b/i,
+  /\bresearch conducted overtime\b/i,
+  /\bconducted over time based on disasters\b/i,
+  /\bcauses of rising cases\b/i,
+  /\bsummarized a number of climatological changes\b/i,
+  /\bhowever adequate attention has not been given\b/i,
+  /\burban flooding is significantly differs\b/i,
+  /\bthis has built up by the fact that\b/i,
+  /\banother form of .* identified takes place when\b/i,
+  /\bapart from the rising of\b/i,
+  /\bon top of the storm\b/i,
+  /\bsecondly,\s*flooding has been seen over time as either\b/i,
+];
+
 const PRODUCTION_LANGUAGE =
   /a strong explanation has to|observed\s*≠\s*inferred|evidence before aesthetics|the story is built only from evidence|the analytical value of this scene|the point of the chart is not decoration|location is not decoration|source-backed observation|current interpretation/i;
 
@@ -121,12 +137,8 @@ function semanticSimilarity(a: string, b: string) {
   return union ? overlap / union : 0;
 }
 
-function numericFingerprint(value: string) {
-  return Array.from(
-    new Set(clean(value).match(/\b\d+(?:\.\d+)?\b/g) || [])
-  )
-    .sort()
-    .join("|");
+function numbers(value: string) {
+  return clean(value).match(/\b\d+(?:\.\d+)?\b/g) || [];
 }
 
 function conceptKey(value: string) {
@@ -175,16 +187,38 @@ function conceptKey(value: string) {
   return "";
 }
 
-function extractWhyClause(value: string) {
+function extractCanonicalFloodQuestion(value: string) {
   const text = clean(value);
-  const index = text.toLowerCase().lastIndexOf("why ");
-  if (index < 0) return "";
-  return text.slice(index).replace(/[?.!]+$/, "");
+
+  /*
+   * Search anywhere in a stylised title/question, but stop at "flood/floods".
+   * This deliberately ignores trailing generated text such as
+   * "interact to produce the outcome we see".
+   */
+  const match = text.match(/\bwhy\s+(.+?)\s+floods?\b/i);
+  if (!match) return "";
+
+  let subject = clean(match[1]);
+
+  subject = subject
+    .replace(/^(?:the hidden system behind|the system behind)\s+/i, "")
+    .replace(/^(?:does|do)\s+/i, "")
+    .trim();
+
+  if (!subject) return "";
+
+  return `Why does ${subject} flood so often?`;
 }
 
 export function resolvedNarrationQuestion(project: EpisodeProject) {
   const original = clean(project.episode.question);
   const title = clean(project.episode.workingTitle);
+
+  const canonical =
+    extractCanonicalFloodQuestion(original) ||
+    extractCanonicalFloodQuestion(title);
+
+  if (canonical) return canonical;
 
   const malformed =
     /forces behind\s+why\b/i.test(original) ||
@@ -196,29 +230,19 @@ export function resolvedNarrationQuestion(project: EpisodeProject) {
     return original.replace(/[?.!]+$/, "") + "?";
   }
 
-  const whyClause =
-    extractWhyClause(original) ||
-    extractWhyClause(title);
-
-  if (whyClause) {
-    const pluralFloods = whyClause.match(/^why\s+(.+?)\s+floods$/i);
-    if (pluralFloods) {
-      return `Why does ${pluralFloods[1]} flood so often?`;
-    }
-
-    const singularFlood = whyClause.match(/^why\s+(.+?)\s+flood$/i);
-    if (singularFlood) {
-      return `Why does ${singularFlood[1]} flood so often?`;
-    }
-
-    return whyClause + "?";
-  }
-
   if (original) {
-    return original.replace(/[?.!]+$/, "") + "?";
+    const embeddedWhy = original.match(/\bwhy\s+(.+)/i)?.[0];
+    if (embeddedWhy) {
+      return embeddedWhy.replace(/[?.!]+$/, "") + "?";
+    }
   }
 
   if (title) {
+    const embeddedWhy = title.match(/\bwhy\s+(.+)/i)?.[0];
+    if (embeddedWhy) {
+      return embeddedWhy.replace(/[?.!]+$/, "") + "?";
+    }
+
     return `What is really driving ${title.replace(/[?.!]+$/, "")}?`;
   }
 
@@ -248,27 +272,30 @@ function stripProductionLanguage(value: string) {
     .trim();
 }
 
+function sourceLooksLikeCaption(value: string) {
+  const text = clean(value);
+
+  return (
+    /^(?:drainage systems?|culvert|trench|waste|floods?|motorists?|vehicle|road|map|plate|figure)\b/i.test(
+      text
+    ) &&
+    !/[.!?].+[A-Za-z]/.test(text)
+  );
+}
+
 function looksLikeRawSource(value: string) {
   const text = clean(value);
 
   if (!text) return true;
   if (INTERNAL_METADATA.test(text)) return true;
   if (PRODUCTION_LANGUAGE.test(text)) return true;
+  if (RAW_SOURCE_PATTERNS.some((pattern) => pattern.test(text))) return true;
   if (/^\s*[a-z]\)\s+/i.test(text)) return true;
   if (/^(?:figure|plate|table|map)\s+\d/i.test(text)) return true;
   if (/\bsource:\b/i.test(text)) return true;
-  if (wordCount(text) > 42) return true;
+  if (wordCount(text) > 34) return true;
 
-  const awkward = [
-    /this has built up by the fact that/i,
-    /urban flooding is significantly differs/i,
-    /another form of .* identified takes place when/i,
-    /apart from the rising of/i,
-    /on top of the storm/i,
-    /secondly,\s*flooding has been seen over time as either/i,
-  ];
-
-  return awkward.some((pattern) => pattern.test(text));
+  return false;
 }
 
 function sameAsSceneLabel(scene: Scene, value: string) {
@@ -297,7 +324,8 @@ function readableSourceExcerpt(scene: Scene) {
   if (
     !text ||
     looksLikeRawSource(text) ||
-    sameAsSceneLabel(scene, text)
+    sameAsSceneLabel(scene, text) ||
+    sourceLooksLikeCaption(text)
   ) {
     return "";
   }
@@ -309,18 +337,50 @@ function evidenceForScene(project: EpisodeProject, scene: Scene) {
   return project.evidence.filter((item) => ids.has(item.id));
 }
 
+function transformCaptionEvidence(value: string) {
+  const text = clean(value);
+
+  if (/waste.+drainage/i.test(text)) {
+    return "The source documents poorly disposed waste in the drainage system, a condition that can obstruct the movement of stormwater.";
+  }
+
+  const clearing = text.match(
+    /drainage systems?\s+being cleared by\s+(.+?)[.!?]?$/i
+  );
+  if (clearing) {
+    return `The source documents drainage clearing by ${clean(
+      clearing[1]
+    )}, showing that maintenance is part of the local response.`;
+  }
+
+  const culvert = text.match(
+    /culvert(?:\s+and\s+trench)?\s+constructed by\s+(.+?)[.!?]?$/i
+  );
+  if (culvert) {
+    return `The source documents culvert and trench construction by ${clean(
+      culvert[1]
+    )}, showing a local infrastructure response to drainage pressure.`;
+  }
+
+  return "";
+}
+
 function readableEvidenceStatement(item: EvidenceItem) {
-  const text = stripProductionLanguage(item.statement);
+  const raw = stripProductionLanguage(item.statement);
+  const transformed = transformCaptionEvidence(raw);
+
+  if (transformed) return transformed;
 
   if (
-    !text ||
-    text.length < 20 ||
-    looksLikeRawSource(text)
+    !raw ||
+    raw.length < 20 ||
+    looksLikeRawSource(raw) ||
+    sourceLooksLikeCaption(raw)
   ) {
     return "";
   }
 
-  return text;
+  return raw;
 }
 
 function relatedEvidenceForScene(
@@ -347,7 +407,7 @@ function relatedEvidenceForScene(
         item,
         priority: overlapScore(sceneText, item.statement) * 100,
       }))
-      .filter((row) => row.priority >= 24),
+      .filter((row) => row.priority >= 30),
   ]
     .filter(({ item }) =>
       kind === "limitation"
@@ -387,22 +447,11 @@ export function roleForScene(
   if (index === 0) return "hook";
   if (scene.kind === "cta") return "closure";
 
-  if (
-    scene.chart ||
-    scene.kind === "data_chart"
-  ) {
+  if (scene.chart || scene.kind === "data_chart") {
     return "data";
   }
 
-  /*
-   * Geography should be evidence-native. Do not classify a sentence like
-   * "The city changes where water can go" as geography merely because it
-   * contains the word "where".
-   */
-  if (
-    scene.map ||
-    scene.kind === "map_story"
-  ) {
+  if (scene.map || scene.kind === "map_story") {
     return "geography";
   }
 
@@ -450,13 +499,13 @@ export function roleForScene(
 
 function roleWeight(role: DocumentarySceneRole) {
   const weights: Record<DocumentarySceneRole, number> = {
-    hook: 0.95,
+    hook: 1.0,
     frame: 0.9,
     data: 1.0,
     geography: 0.9,
-    mechanism: 1.25,
+    mechanism: 1.3,
     consequence: 1.0,
-    governance: 1.1,
+    governance: 1.15,
     trust_boundary: 0.85,
     synthesis: 1.05,
     closure: 0.45,
@@ -511,19 +560,19 @@ export function buildLongFormPlan(
       row.role === "closure"
         ? 35
         : row.role === "trust_boundary"
-          ? 65
-          : 80;
+          ? 80
+          : 90;
 
     const max =
       row.role === "hook"
-        ? 125
+        ? 135
         : row.role === "mechanism"
-          ? 180
+          ? 190
           : row.role === "governance"
-            ? 165
+            ? 175
             : row.role === "closure"
               ? 75
-              : 150;
+              : 160;
 
     return {
       sceneId: row.sceneId,
@@ -563,42 +612,34 @@ function chartFacts(scene: Scene) {
     const peak = ranked[0];
     const second = ranked[1];
 
-    const intro =
-      data.length >= 4
-        ? "Across the plotted period, the pattern is uneven rather than a simple rise or fall."
-        : "The measurements vary across the plotted period.";
-
-    const detail = second
-      ? `${peak.label} records the highest value at ${formatValue(
-          peak.value
-        )}${suffix}, followed by ${second.label} at ${formatValue(
-          second.value
-        )}${suffix}.`
-      : `${peak.label} records the highest value at ${formatValue(
-          peak.value
-        )}${suffix}.`;
-
-    return [intro, detail];
+    return [
+      "Across the plotted period, the pattern is uneven rather than a simple rise or fall.",
+      second
+        ? `${peak.label} records the highest value at ${formatValue(
+            peak.value
+          )}${suffix}, followed by ${second.label} at ${formatValue(
+            second.value
+          )}${suffix}.`
+        : `${peak.label} records the highest value at ${formatValue(
+            peak.value
+          )}${suffix}.`,
+    ];
   }
 
   const ranked = [...data].sort((a, b) => b.value - a.value);
   const first = ranked[0];
   const second = ranked[1];
 
-  if (!second) {
-    return [
-      `${first.label} records the highest plotted value at ${formatValue(
-        first.value
-      )}${suffix}.`,
-    ];
-  }
-
   return [
-    `${first.label} records the highest plotted value at ${formatValue(
-      first.value
-    )}${suffix}, followed by ${second.label} at ${formatValue(
-      second.value
-    )}${suffix}.`,
+    second
+      ? `${first.label} records the highest plotted value at ${formatValue(
+          first.value
+        )}${suffix}, followed by ${second.label} at ${formatValue(
+          second.value
+        )}${suffix}.`
+      : `${first.label} records the highest plotted value at ${formatValue(
+          first.value
+        )}${suffix}.`,
   ];
 }
 
@@ -612,13 +653,13 @@ function mapFacts(scene: Scene) {
 
   const count = scene.map.points.length;
 
-  const placed = labels.length
-    ? `The dataset places ${count} observations on the map, including ${labels.join(
-        ", "
-      )}.`
-    : `The dataset places ${count} observations on the map.`;
-
-  return [placed];
+  return [
+    labels.length
+      ? `The dataset places ${count} observations on the map, including ${labels.join(
+          ", "
+        )}.`
+      : `The dataset places ${count} observations on the map.`,
+  ];
 }
 
 function purposeSentence(
@@ -667,22 +708,32 @@ function purposeSentence(
 
 function analysisSentences(role: DocumentarySceneRole) {
   switch (role) {
+    case "hook":
+      return [
+        "A flood is a visible event, but the causes sit upstream of what the viewer finally sees.",
+        "The useful question is therefore not simply whether it rained, but how rainfall moved through the city and what conditions amplified it.",
+        "That means separating the trigger from the pathway, and the pathway from the final damage.",
+      ];
+
     case "data":
       return [
-        "The numbers establish magnitude and timing.",
-        "They do not, by themselves, explain the mechanism that turns an event into damage.",
+        "These measurements establish the intensity of the event at the locations that were actually observed.",
+        "They tell us when and where rainfall was large enough to matter, but they do not tell us how much water reached each street or how drainage performed at every location.",
+        "Rainfall is therefore necessary context, not a complete explanation.",
       ];
 
     case "geography":
       return [
         "Geography matters because measurements only describe the places where observations actually exist.",
+        "Three points can reveal a spatial pattern in the observations, but they are not a continuous flood-risk surface for the whole city.",
         "A mapped point is evidence of an observation location, not proof that the same conditions apply everywhere around it.",
       ];
 
     case "mechanism":
       return [
-        "The key is the pathway: conditions along the route can absorb, redirect, constrain or amplify the original trigger.",
-        "That is why the same trigger can produce different outcomes across different parts of a city or landscape.",
+        "A trigger does not act in isolation. The outcome depends on what the system can absorb, move, store or release after that trigger arrives.",
+        "Where movement remains open and capacity is sufficient, pressure can dissipate. Where pathways are constrained, water can accumulate and the same rainfall can produce a very different result.",
+        "The mechanism therefore sits between the weather event and the visible flood.",
       ];
 
     case "consequence":
@@ -694,19 +745,22 @@ function analysisSentences(role: DocumentarySceneRole) {
     case "governance":
       return [
         "Capacity on paper and capacity in practice are not the same thing.",
-        "Maintenance, blockage, enforcement and coordination can change how infrastructure performs when pressure rises.",
+        "A drain can exist and still perform poorly if maintenance, blockage, connectivity or surrounding development changes how water reaches it.",
+        "Management therefore affects the effective capacity of infrastructure over time, not just whether infrastructure is present.",
       ];
 
     case "trust_boundary":
       return [
         "That limit does not weaken the explanation; it defines how far the conclusion can responsibly travel.",
-        "Local evidence can be strong without automatically becoming evidence for every other place.",
+        "A detailed local case can reveal a mechanism without proving that the same combination of factors operates everywhere else.",
+        "The responsible conclusion is therefore narrower than the strongest possible claim.",
       ];
 
     case "synthesis":
       return [
         "The strongest explanation connects the trigger, the pathway, the conditions that amplify it and the places exposed to the result.",
-        "The visible event is therefore the end of a chain, not the whole explanation.",
+        "Rainfall starts the sequence, but surfaces, waterways, drainage, maintenance and exposure shape what happens next.",
+        "The visible flood is therefore the end of a chain, not the whole explanation.",
       ];
 
     default:
@@ -723,22 +777,23 @@ function paraphraseEvidence(
 
   if (!statement) return "";
 
+  if (
+    /^the source documents\b/i.test(statement) ||
+    /^the source shows\b/i.test(statement)
+  ) {
+    return `${statement}.`;
+  }
+
   if (role === "trust_boundary") {
     return index === 0
       ? `One important boundary is that ${lowerFirst(statement)}.`
       : `A second limitation is that ${lowerFirst(statement)}.`;
   }
 
-  if (role === "data") {
-    return index === 0
-      ? `The supporting evidence also shows that ${lowerFirst(statement)}.`
-      : `Another measured observation is that ${lowerFirst(statement)}.`;
-  }
-
   if (role === "mechanism") {
     return index === 0
       ? `At this point in the pathway, the evidence indicates that ${lowerFirst(statement)}.`
-      : `A related mechanism is that ${lowerFirst(statement)}.`;
+      : `A related observation is that ${lowerFirst(statement)}.`;
   }
 
   if (role === "governance") {
@@ -757,7 +812,7 @@ function selectUnique(
   scene: Scene,
   globalSentences: string[],
   globalConcepts: Set<string>,
-  globalNumbers: Set<string>
+  usedNumbers: Set<string>
 ) {
   const accepted: string[] = [];
 
@@ -785,14 +840,21 @@ function selectUnique(
           wordCount(text)
         );
 
-        return score >= (shorter <= 12 ? 0.42 : 0.52);
+        return score >= (shorter <= 12 ? 0.46 : 0.56);
       }
     );
 
     if (duplicate) continue;
 
-    const numeric = numericFingerprint(text);
-    if (numeric && globalNumbers.has(numeric)) {
+    const candidateNumbers = numbers(text);
+    if (
+      candidateNumbers.length > 0 &&
+      candidateNumbers.every((value) => usedNumbers.has(value))
+    ) {
+      /*
+       * Do not restate an already-spoken number in a second sentence unless
+       * the sentence introduces a genuinely new measured value.
+       */
       continue;
     }
 
@@ -802,9 +864,7 @@ function selectUnique(
       globalConcepts.add(concept);
     }
 
-    if (numeric) {
-      globalNumbers.add(numeric);
-    }
+    candidateNumbers.forEach((value) => usedNumbers.add(value));
   }
 
   globalSentences.push(...accepted);
@@ -846,7 +906,7 @@ function composeScene(
   usedEvidence: Set<string>,
   globalSentences: string[],
   globalConcepts: Set<string>,
-  globalNumbers: Set<string>
+  usedNumbers: Set<string>
 ) {
   const body = readableBody(scene);
   const excerpt = readableSourceExcerpt(scene);
@@ -856,20 +916,30 @@ function composeScene(
       ? "limitation"
       : "observation";
 
+  /*
+   * Quantitative scenes should be narrated from their actual chart/map,
+   * not from loosely related dataset evidence that can repeat or confuse
+   * the numbers already on screen.
+   */
   const evidenceLimit =
-    role === "mechanism" || role === "governance"
-      ? 5
-      : role === "trust_boundary"
+    role === "data" || role === "geography"
+      ? 0
+      : role === "mechanism" || role === "governance"
         ? 4
-        : 3;
+        : role === "trust_boundary"
+          ? 3
+          : 2;
 
-  const evidence = relatedEvidenceForScene(
-    project,
-    scene,
-    usedEvidence,
-    evidenceKind,
-    evidenceLimit
-  );
+  const evidence =
+    evidenceLimit > 0
+      ? relatedEvidenceForScene(
+          project,
+          scene,
+          usedEvidence,
+          evidenceKind,
+          evidenceLimit
+        )
+      : [];
 
   const evidenceSentences = evidence.map((item, index) =>
     paraphraseEvidence(item, role, index)
@@ -880,24 +950,21 @@ function composeScene(
   if (role === "hook") {
     candidates = [
       purposeSentence(project, scene, role),
-      "The better question is what happens between the trigger and the visible outcome.",
+      ...analysisSentences(role),
       body,
       excerpt,
       ...evidenceSentences,
-      "To answer that, the story has to move through measurements, place, physical pathways, infrastructure and the limits of the available evidence.",
     ];
   } else if (role === "data") {
     candidates = [
       purposeSentence(project, scene, role),
       ...chartFacts(scene),
-      ...evidenceSentences,
       ...analysisSentences(role),
     ];
   } else if (role === "geography") {
     candidates = [
       purposeSentence(project, scene, role),
       ...mapFacts(scene),
-      ...evidenceSentences,
       ...analysisSentences(role),
     ];
   } else if (role === "trust_boundary") {
@@ -925,95 +992,13 @@ function composeScene(
     scene,
     globalSentences,
     globalConcepts,
-    globalNumbers
+    usedNumbers
   );
 
   return trimToWords(
     selected.join(" "),
-    Math.max(55, Math.round(targetWords * 1.08))
+    Math.max(65, Math.round(targetWords * 1.08))
   );
-}
-
-function currentWordCount(scenes: Scene[]) {
-  return scenes.reduce(
-    (sum, scene) => sum + wordCount(scene.narration),
-    0
-  );
-}
-
-function unusedEvidenceExpansion(
-  project: EpisodeProject,
-  scenes: Scene[],
-  plan: LongFormPlan,
-  usedEvidence: Set<string>,
-  globalSentences: string[],
-  globalConcepts: Set<string>,
-  globalNumbers: Set<string>
-) {
-  const targetById = new Map(
-    plan.sceneTargets.map((row) => [row.sceneId, row])
-  );
-
-  const next = scenes.map((scene) => ({ ...scene }));
-  let total = currentWordCount(next);
-
-  if (total >= plan.targetWords * 0.9) {
-    return next;
-  }
-
-  for (let index = 0; index < next.length; index += 1) {
-    if (total >= plan.targetWords * 0.95) break;
-
-    const scene = next[index];
-    const target = targetById.get(scene.id);
-
-    if (!target || target.role === "closure") continue;
-
-    const deficit =
-      target.targetWords - wordCount(scene.narration);
-
-    if (deficit < 18) continue;
-
-    const kind =
-      target.role === "trust_boundary"
-        ? "limitation"
-        : "observation";
-
-    const extraEvidence = relatedEvidenceForScene(
-      project,
-      scene,
-      usedEvidence,
-      kind,
-      4
-    );
-
-    const extras = selectUnique(
-      extraEvidence.map((item, evidenceIndex) =>
-        paraphraseEvidence(item, target.role, evidenceIndex + 3)
-      ),
-      scene,
-      globalSentences,
-      globalConcepts,
-      globalNumbers
-    );
-
-    if (!extras.length) continue;
-
-    const extraText = trimToWords(
-      extras.join(" "),
-      Math.min(85, Math.max(25, deficit))
-    );
-
-    if (!extraText) continue;
-
-    scene.narration = clean(
-      `${scene.narration} ${extraText}`
-    );
-
-    total = currentWordCount(next);
-  }
-
-  return next;
 }
 
 export function buildGenericLongFormNarration(
@@ -1048,9 +1033,9 @@ export function buildGenericLongFormNarration(
   const usedEvidence = new Set<string>();
   const globalSentences: string[] = [];
   const globalConcepts = new Set<string>();
-  const globalNumbers = new Set<string>();
+  const usedNumbers = new Set<string>();
 
-  const firstPass = project.scenes.map((scene) => {
+  return project.scenes.map((scene) => {
     const target = targetById.get(scene.id);
 
     if (!target) {
@@ -1060,30 +1045,18 @@ export function buildGenericLongFormNarration(
       };
     }
 
-    const narration = composeScene(
-      project,
-      scene,
-      target.role,
-      target.targetWords,
-      usedEvidence,
-      globalSentences,
-      globalConcepts,
-      globalNumbers
-    );
-
     return {
       ...scene,
-      narration,
+      narration: composeScene(
+        project,
+        scene,
+        target.role,
+        target.targetWords,
+        usedEvidence,
+        globalSentences,
+        globalConcepts,
+        usedNumbers
+      ),
     };
   });
-
-  return unusedEvidenceExpansion(
-    project,
-    firstPass,
-    plan,
-    usedEvidence,
-    globalSentences,
-    globalConcepts,
-    globalNumbers
-  );
 }

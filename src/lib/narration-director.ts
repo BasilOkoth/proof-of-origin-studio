@@ -104,12 +104,6 @@ function conceptualKey(value: string) {
     return "boundary";
   }
 
-  if (
-    /single cause|rather than one cause|rather than a single cause/.test(text)
-  ) {
-    return "synthesis";
-  }
-
   return "";
 }
 
@@ -149,7 +143,7 @@ function storyLevelDeduplication(
       .filter((sentence) => {
         if (
           exactSceneLabel(scene, sentence) ||
-          /current story-grounded evidence|story-grounded evidence|evidence items?|this draft|current story/i.test(
+          /current story-grounded evidence|story-grounded evidence|evidence items?|this draft|current story|world meteorological organization|research conducted overtime|however adequate attention has not been given/i.test(
             sentence
           )
         ) {
@@ -171,7 +165,7 @@ function storyLevelDeduplication(
           const short =
             Math.min(words(existing).length, words(sentence).length) <= 10;
 
-          return score >= (short ? 0.6 : 0.7);
+          return score >= (short ? 0.64 : 0.74);
         });
 
         if (duplicate) {
@@ -227,11 +221,13 @@ export function applyNarrationDirector(
   const plan = buildLongFormPlan(project);
   const actualWords = narrationWordCount(finalScenes);
 
-  /*
-   * Keep the original requested duration. The narration route reports
-   * coverage separately, but the director must never silently rewrite
-   * episode.targetMinutes to match a short script.
-   */
+  const coverage =
+    Math.round(
+      (actualWords /
+        Math.max(1, plan.targetWords)) *
+        100
+    );
+
   return {
     ...project,
     episode: {
@@ -240,26 +236,19 @@ export function applyNarrationDirector(
         project.episode.targetMinutes,
     },
     scenes: finalScenes,
-    titles: project.titles,
-    publishing: project.publishing,
-    ...(actualWords < plan.targetWords * 0.72
+    retention: project.retention
       ? {
-          retention: project.retention
-            ? {
-                ...project.retention,
-                warnings: Array.from(
+          ...project.retention,
+          warnings:
+            coverage < 72
+              ? Array.from(
                   new Set([
                     ...(project.retention.warnings || []),
-                    `Narration coverage is only ${Math.round(
-                      (actualWords /
-                        Math.max(1, plan.targetWords)) *
-                        100
-                    )}% of the requested ${project.episode.targetMinutes}-minute episode. Add more source-backed evidence rather than padding with generic filler.`,
+                    `Narration coverage is ${coverage}% of the requested ${project.episode.targetMinutes}-minute episode. Add more usable source-backed material if a longer cut is required.`,
                   ])
-                ),
-              }
-            : project.retention,
+                )
+              : project.retention.warnings,
         }
-      : {}),
+      : project.retention,
   };
 }
