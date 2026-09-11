@@ -1,7 +1,6 @@
 import type {
   DatasetAnalysis,
   EpisodeProject,
-  EvidenceItem,
   Scene,
 } from "./types";
 
@@ -36,6 +35,22 @@ const LONG_FORM_MODES = new Set([
   "report",
 ]);
 
+const META_PATTERNS = [
+  /the story is built only from evidence.*?(?:\.|$)/gi,
+  /the evidence card remains visible.*?(?:\.|$)/gi,
+  /the point of the chart is not decoration.*?(?:\.|$)/gi,
+  /the analytical value of this scene.*?(?:\.|$)/gi,
+  /a mechanism is convincing only when the arrows.*?(?:\.|$)/gi,
+  /location is not decoration here.*?(?:\.|$)/gi,
+  /numbers are most useful when they change the question.*?(?:\.|$)/gi,
+  /the chart makes the comparison visible.*?(?:\.|$)/gi,
+  /the chart establishes the measured pattern.*?(?:\.|$)/gi,
+  /the comparison establishes the pattern in the measured data.*?(?:\.|$)/gi,
+  /the map should therefore show where the evidence exists.*?(?:\.|$)/gi,
+  /geography matters because evidence from one place.*?(?:\.|$)/gi,
+  /geography matters because the same process.*?(?:\.|$)/gi,
+];
+
 function clean(value?: string) {
   return (value || "")
     .replace(/\s+/g, " ")
@@ -43,30 +58,125 @@ function clean(value?: string) {
     .trim();
 }
 
-function words(text: string) {
-  return clean(text)
+function wordCount(value: string) {
+  return clean(value)
     .split(/\s+/)
-    .filter(Boolean);
+    .filter(Boolean).length;
 }
 
-function wordCount(text: string) {
-  return words(text).length;
-}
-
-function sentenceList(text: string) {
-  return clean(text)
+function sentences(value: string) {
+  return clean(value)
     .split(/(?<=[.!?])\s+/)
     .map(clean)
     .filter(Boolean);
 }
 
-function firstSentence(text: string) {
-  return sentenceList(text)[0] || clean(text);
+function normaliseSentence(value: string) {
+  return clean(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s.%-]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function lastSentence(text: string) {
-  const parts = sentenceList(text);
-  return parts[parts.length - 1] || clean(text);
+function sentenceTokens(value: string) {
+  const stop = new Set([
+    "the", "a", "an", "and", "or", "of", "to", "in", "on",
+    "for", "with", "from", "that", "this", "these", "those",
+    "is", "are", "was", "were", "be", "been", "being", "it",
+    "its", "as", "at", "by", "into", "than", "then", "now",
+    "evidence", "data", "scene", "story", "shows", "show",
+  ]);
+
+  return normaliseSentence(value)
+    .split(/\s+/)
+    .filter((token) => token.length >= 3 && !stop.has(token));
+}
+
+function similarity(a: string, b: string) {
+  const aa = new Set(sentenceTokens(a));
+  const bb = new Set(sentenceTokens(b));
+
+  if (!aa.size || !bb.size) return 0;
+
+  let overlap = 0;
+  aa.forEach((token) => {
+    if (bb.has(token)) overlap += 1;
+  });
+
+  const union = new Set([...aa, ...bb]).size;
+  return union ? overlap / union : 0;
+}
+
+function numericFingerprint(value: string) {
+  return Array.from(
+    new Set(
+      clean(value)
+        .match(/\b\d+(?:\.\d+)?\b/g) || []
+    )
+  )
+    .sort()
+    .join("|");
+}
+
+function stripProductionLanguage(value: string) {
+  let next = clean(value);
+
+  META_PATTERNS.forEach((pattern) => {
+    next = next.replace(pattern, " ");
+  });
+
+  next = next
+    .replace(
+      /\b(?:the source is|source:)\s+[^.]+\.?/gi,
+      " "
+    )
+    .replace(
+      /\bthe source-backed observation is:\s*/gi,
+      ""
+    )
+    .replace(
+      /\bthe current interpretation is:\s*/gi,
+      ""
+    )
+    .replace(
+      /\bone limitation is explicit:\s*/gi,
+      ""
+    )
+    .replace(
+      /^\s*[a-z]\)\s+/i,
+      ""
+    )
+    .replace(
+      /\b(?:figure|plate|table|map)\s+\d+(?:[-.:]\d+)*:\s*/gi,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return next;
+}
+
+function readableEvidenceStatement(value: string) {
+  return stripProductionLanguage(value)
+    .replace(
+      /^this has built up by the fact that\s+/i,
+      ""
+    )
+    .replace(
+      /^on top of the storm,\s*/i,
+      ""
+    )
+    .replace(
+      /^urban flooding is significantly differs from rural flooding as\s+/i,
+      ""
+    )
+    .replace(
+      /^apart from\s+/i,
+      ""
+    )
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function evidenceForScene(
@@ -74,91 +184,7 @@ function evidenceForScene(
   scene: Scene
 ) {
   const ids = new Set(scene.factIds || []);
-  return project.evidence.filter((item) =>
-    ids.has(item.id)
-  );
-}
-
-function sourceLabel(item?: EvidenceItem) {
-  return clean(
-    item?.sourceLabel ||
-    item?.source ||
-    ""
-  );
-}
-
-function safeEvidenceStatements(
-  project: EpisodeProject,
-  scene: Scene
-) {
-  return evidenceForScene(project, scene)
-    .map((item) => ({
-      item,
-      statement: clean(item.statement),
-    }))
-    .filter(
-      ({ statement }) =>
-        statement.length >= 30 &&
-        !/^(?:plate|figure|map|chart|table)\s+\d/i.test(
-          statement
-        )
-    )
-    .slice(0, 3);
-}
-
-function storyAnchor(project: EpisodeProject) {
-  return clean(
-    `${project.episode.workingTitle}. ${project.episode.question}`
-  );
-}
-
-function isLongForm(project: EpisodeProject) {
-  return (
-    project.episode.targetMinutes >= 7 &&
-    LONG_FORM_MODES.has(
-      project.episode.storyMode || ""
-    )
-  );
-}
-
-export function documentaryWordsPerMinute(
-  project: EpisodeProject
-) {
-  if (!isLongForm(project)) {
-    return 155;
-  }
-
-  if (
-    project.episode.targetMinutes >= 10
-  ) {
-    return 142;
-  }
-
-  return 145;
-}
-
-function targetWordCount(
-  project: EpisodeProject
-) {
-  const wpm =
-    documentaryWordsPerMinute(
-      project
-    );
-
-  const raw =
-    project.episode.targetMinutes *
-    wpm;
-
-  /*
-   * Give an 8–9 minute documentary enough editorial breathing room without
-   * forcing the script into an artificial exact count.
-   */
-  return Math.round(
-    Math.max(
-      980,
-      Math.min(1800, raw)
-    )
-  );
+  return project.evidence.filter((item) => ids.has(item.id));
 }
 
 function roleForScene(
@@ -166,23 +192,15 @@ function roleForScene(
   scene: Scene,
   index: number
 ): DocumentarySceneRole {
-  const text =
-    `${scene.eyebrow} ${scene.headline} ${scene.body}`.toLowerCase();
+  const text = `${scene.eyebrow} ${scene.headline} ${scene.body}`.toLowerCase();
 
-  if (index === 0) {
-    return "hook";
-  }
-
-  if (scene.kind === "cta") {
-    return "closure";
-  }
+  if (index === 0) return "hook";
+  if (scene.kind === "cta") return "closure";
 
   if (
     scene.chart ||
     scene.kind === "data_chart" ||
-    /data story|trend|pattern|measured|comparison|rate|total|percent|million|billion/.test(
-      text
-    )
+    /data story|trend|pattern|measured|comparison|rate|total|percent|million|billion/.test(text)
   ) {
     return "data";
   }
@@ -190,632 +208,491 @@ function roleForScene(
   if (
     scene.map ||
     scene.kind === "map_story" ||
-    /geograph|location|where|spatial|region|county|city|basin|route|terrain/.test(
-      text
-    )
+    /geograph|location|where|spatial|region|county|city|basin|route|terrain/.test(text)
   ) {
     return "geography";
   }
 
   if (
-    /trust boundary|limitation|uncertain|does not prove|not establish|evidence stops|scope/.test(
-      text
-    ) ||
+    /trust boundary|limitation|uncertain|does not prove|not establish|evidence stops|scope/.test(text) ||
     scene.kind === "quote"
   ) {
     return "trust_boundary";
   }
 
   if (
-    /governance|policy|maintenance|institution|response|management|planning|enforcement|regulation/.test(
-      text
-    )
+    /governance|policy|maintenance|institution|response|management|planning|enforcement|regulation/.test(text)
   ) {
     return "governance";
   }
 
   if (
-    /impact|consequence|people|community|household|worker|farmer|health|livelihood|loss|damage|exposure/.test(
-      text
-    )
+    /impact|consequence|people|community|household|worker|farmer|health|livelihood|loss|damage|exposure/.test(text)
   ) {
     return "consequence";
   }
 
   if (
-    /system|mechanism|flow|path|process|driver|cause|chain|interaction|network|cycle/.test(
-      text
-    ) ||
+    /system|mechanism|flow|path|process|driver|cause|chain|interaction|network|cycle/.test(text) ||
     scene.kind === "diagram" ||
     scene.kind === "timeline"
   ) {
     return "mechanism";
   }
 
-  if (
-    index >=
-    Math.floor(
-      project.scenes.length * 0.72
-    )
-  ) {
+  if (index >= Math.floor(project.scenes.length * 0.72)) {
     return "synthesis";
   }
 
   return "frame";
 }
 
-function roleWeight(
-  role: DocumentarySceneRole
-) {
-  const weights: Record<
-    DocumentarySceneRole,
-    number
-  > = {
-    hook: 1.0,
-    frame: 0.95,
-    data: 1.12,
-    geography: 1.03,
-    mechanism: 1.12,
+function roleWeight(role: DocumentarySceneRole) {
+  const weights: Record<DocumentarySceneRole, number> = {
+    hook: 1.05,
+    frame: 0.9,
+    data: 1.0,
+    geography: 0.9,
+    mechanism: 1.15,
     consequence: 1.0,
     governance: 1.0,
-    trust_boundary: 0.88,
-    synthesis: 1.04,
-    closure: 0.7,
+    trust_boundary: 0.85,
+    synthesis: 1.05,
+    closure: 0.65,
   };
 
   return weights[role];
 }
 
+export function documentaryWordsPerMinute(project: EpisodeProject) {
+  if (
+    project.episode.targetMinutes < 7 ||
+    !LONG_FORM_MODES.has(project.episode.storyMode || "")
+  ) {
+    return 155;
+  }
+
+  return project.episode.targetMinutes >= 10 ? 142 : 145;
+}
+
+function targetWordCount(project: EpisodeProject) {
+  const target = Math.round(
+    project.episode.targetMinutes *
+      documentaryWordsPerMinute(project)
+  );
+
+  return Math.max(850, Math.min(1800, target));
+}
+
 export function buildLongFormPlan(
   project: EpisodeProject
 ): LongFormPlan {
-  const targetWords =
-    targetWordCount(project);
+  const targetWords = targetWordCount(project);
+  const wordsPerMinute = documentaryWordsPerMinute(project);
 
-  const wpm =
-    documentaryWordsPerMinute(
-      project
-    );
+  const rows = project.scenes.map((scene, index) => ({
+    sceneId: scene.id,
+    role: roleForScene(project, scene, index),
+  }));
 
-  const rows =
-    project.scenes.map(
-      (scene, index) => {
-        const role =
-          roleForScene(
-            project,
-            scene,
-            index
-          );
-
-        const durationWeight =
-          Math.max(
-            0.45,
-            scene.durationSec
-          );
-
-        return {
-          sceneId: scene.id,
-          role,
-          raw:
-            durationWeight *
-            roleWeight(role),
-        };
-      }
-    );
-
-  const rawTotal =
+  const weightTotal =
     rows.reduce(
-      (sum, row) =>
-        sum + row.raw,
+      (sum, row) => sum + roleWeight(row.role),
       0
     ) || 1;
 
-  const sceneTargets =
-    rows.map((row) => ({
-      sceneId: row.sceneId,
-      role: row.role,
-      targetWords:
-        Math.max(
-          55,
-          Math.round(
-            targetWords *
-              (row.raw /
-                rawTotal)
-          )
-        ),
-    }));
-
-  const current =
-    sceneTargets.reduce(
-      (sum, row) =>
-        sum + row.targetWords,
-      0
+  const sceneTargets = rows.map((row) => {
+    const raw = Math.round(
+      targetWords *
+        (roleWeight(row.role) / weightTotal)
     );
 
-  const delta =
-    targetWords - current;
+    const minimum =
+      row.role === "closure" ? 45 :
+      row.role === "trust_boundary" ? 65 :
+      70;
 
-  if (
-    sceneTargets.length &&
-    delta
-  ) {
-    const lastNarrative =
-      [...sceneTargets]
-        .reverse()
-        .find(
-          (row) =>
-            row.role !==
-            "closure"
-        ) ||
-      sceneTargets[
-        sceneTargets.length - 1
-      ];
+    const maximum =
+      row.role === "hook" ? 125 :
+      row.role === "mechanism" ? 155 :
+      row.role === "closure" ? 95 :
+      140;
 
-    lastNarrative.targetWords =
-      Math.max(
-        55,
-        lastNarrative.targetWords +
-          delta
-      );
-  }
+    return {
+      sceneId: row.sceneId,
+      role: row.role,
+      targetWords: Math.max(
+        minimum,
+        Math.min(maximum, raw)
+      ),
+    };
+  });
 
   return {
     targetWords,
-    wordsPerMinute: wpm,
+    wordsPerMinute,
     sceneTargets,
   };
 }
 
-function datasetContext(
+function chartSentence(scene: Scene) {
+  const chart = scene.chart;
+  if (!chart) return "";
+
+  const ranked = [...chart.data]
+    .filter((item) => Number.isFinite(item.value))
+    .sort((a, b) => b.value - a.value);
+
+  const first = ranked[0];
+  const second = ranked[1];
+
+  if (!first) return "";
+
+  const unit = clean(chart.unit || chart.yLabel || "");
+
+  if (second) {
+    return clean(
+      `${first.label} records the highest plotted value at ${first.value.toLocaleString(
+        undefined,
+        { maximumFractionDigits: 1 }
+      )}${unit ? ` ${unit}` : ""}, followed by ${second.label} at ${second.value.toLocaleString(
+        undefined,
+        { maximumFractionDigits: 1 }
+      )}${unit ? ` ${unit}` : ""}.`
+    );
+  }
+
+  return clean(
+    `${first.label} records the highest plotted value at ${first.value.toLocaleString(
+      undefined,
+      { maximumFractionDigits: 1 }
+    )}${unit ? ` ${unit}` : ""}.`
+  );
+}
+
+function mapSentence(scene: Scene) {
+  if (!scene.map) return "";
+
+  const labels = scene.map.points
+    .slice(0, 4)
+    .map((point) => clean(point.label))
+    .filter(Boolean);
+
+  if (!labels.length) return "";
+
+  return `The mapped observations are ${labels.join(", ")}.`;
+}
+
+function evidenceSentence(
   project: EpisodeProject,
   scene: Scene,
-  datasetsOverride?: DatasetAnalysis[]
+  usedEvidence: Set<string>
 ) {
-  if (!scene.chart) {
-    return "";
-  }
+  const candidates = evidenceForScene(project, scene)
+    .filter((item) => item.kind !== "limitation")
+    .map((item) => ({
+      item,
+      text: readableEvidenceStatement(item.statement),
+    }))
+    .filter(({ text }) => text.length >= 35);
 
-  const chart = scene.chart;
-  const values = [...chart.data]
-    .filter((item) =>
-      Number.isFinite(
-        item.value
-      )
-    )
-    .sort(
-      (a, b) =>
-        b.value - a.value
-    );
+  for (const candidate of candidates) {
+    const key = normaliseSentence(candidate.text);
 
-  const first =
-    values[0];
-  const second =
-    values[1];
+    if (usedEvidence.has(key)) continue;
 
-  if (
-    first &&
-    second
-  ) {
-    const unit =
-      clean(chart.unit) ||
-      clean(chart.yLabel) ||
-      "units";
+    usedEvidence.add(key);
+
+    const text = candidate.text
+      .replace(/\bSource\b.*$/i, "")
+      .trim();
+
+    if (!text) continue;
 
     return clean(
-      `The chart makes the comparison visible. ${first.label} is the highest plotted value at ${first.value.toLocaleString(undefined, {
-        maximumFractionDigits: 1,
-      })} ${unit}, followed by ${second.label} at ${second.value.toLocaleString(undefined, {
-        maximumFractionDigits: 1,
-      })} ${unit}. The comparison establishes the pattern in the measured data, but the chart should not be asked to prove a mechanism that it does not measure.`
+      `The evidence indicates that ${text.charAt(0).toLowerCase()}${text.slice(1)}`
     );
   }
 
-  return clean(
-    `The chart turns the available measurements into a visible pattern. It is useful for showing magnitude, sequence or contrast, while the causal explanation still has to come from evidence that directly addresses the mechanism.`
-  );
+  return "";
 }
 
-function mapContext(
-  scene: Scene
-) {
-  if (!scene.map) {
-    return "";
-  }
-
-  const labels =
-    scene.map.points
-      .slice(0, 5)
-      .map((point) =>
-        clean(point.label)
-      )
-      .filter(Boolean);
-
-  const placeText =
-    labels.length
-      ? `The mapped observations include ${labels.join(
-          ", "
-        )}.`
-      : `The map locates the available observations in space.`;
-
-  return clean(
-    `${placeText} Geography matters because the same process can produce different outcomes across different places. The map should therefore show where the evidence exists, where it does not, and what spatial conclusion the current data can actually support.`
-  );
-}
-
-function evidenceParagraph(
+function limitationSentence(
   project: EpisodeProject,
-  scene: Scene
+  scene: Scene,
+  usedEvidence: Set<string>
 ) {
-  const evidence =
-    safeEvidenceStatements(
-      project,
-      scene
-    );
+  const limitation = evidenceForScene(project, scene)
+    .filter((item) => item.kind === "limitation")
+    .map((item) => readableEvidenceStatement(item.statement))
+    .find((text) => {
+      const key = normaliseSentence(text);
+      if (!text || usedEvidence.has(key)) return false;
+      usedEvidence.add(key);
+      return true;
+    });
 
-  if (!evidence.length) {
-    return "";
-  }
-
-  const parts =
-    evidence.map(
-      ({ item, statement }) => {
-        const label =
-          sourceLabel(item);
-
-        if (
-          item.kind ===
-          "limitation"
-        ) {
-          return `One limitation is explicit: ${statement}${
-            label
-              ? ` The source is ${label}.`
-              : ""
-          }`;
-        }
-
-        if (
-          item.kind ===
-          "inference"
-        ) {
-          return `The current interpretation is: ${statement}${
-            label
-              ? ` It is grounded in ${label}, but it remains interpretation rather than a new observation.`
-              : " It remains interpretation rather than a new observation."
-          }`;
-        }
-
-        return `The source-backed observation is: ${statement}${
-          label
-            ? ` The source is ${label}.`
-            : ""
-        }`;
-      }
-    );
-
-  return clean(
-    parts.join(" ")
-  );
+  return limitation
+    ? clean(`The limit is important: ${limitation}`)
+    : "";
 }
 
-function roleBridge(
+function safeExistingNarration(scene: Scene) {
+  const text = stripProductionLanguage(scene.narration);
+
+  return sentences(text)
+    .filter((sentence) => {
+      if (/^(?:source|the source)\b/i.test(sentence)) return false;
+      if (/^(?:plate|figure|table|map)\s+\d/i.test(sentence)) return false;
+      if (/^the story is built/i.test(sentence)) return false;
+      return sentence.length >= 18;
+    })
+    .join(" ");
+}
+
+function sceneBodySentence(scene: Scene) {
+  const body = stripProductionLanguage(scene.body);
+
+  if (!body) return "";
+
+  return sentences(body)
+    .filter((sentence) => sentence.length >= 20)
+    .slice(0, 2)
+    .join(" ");
+}
+
+function editorialBridge(
   project: EpisodeProject,
   scene: Scene,
   role: DocumentarySceneRole
 ) {
-  const question =
-    clean(
-      project.episode.question
-    );
-
-  const headline =
-    clean(scene.headline);
+  const question = clean(project.episode.question);
 
   switch (role) {
     case "hook":
-      return clean(
-        `${question ? `The story begins with a deceptively simple question: ${question}` : `The story begins with a question that looks simpler than it is.`} The first answer is rarely the whole answer. A strong explanation has to move from the visible event to the system underneath it, while keeping observation, interpretation and uncertainty separate.`
-      );
-
-    case "frame":
-      return clean(
-        `This is where the frame of the story matters. ${headline ? `${headline}.` : ""} Instead of treating the issue as one isolated event, the useful question is which parts of the system interact, which links are directly observed, and which links still require stronger evidence.`
-      );
+      return question
+        ? `The question is simple to ask: ${question} The answer is not.`
+        : "The visible event is simple to describe. The system behind it is not.";
 
     case "data":
-      return clean(
-        `Now move from description to measurement. Numbers are most useful when they change the question: they can reveal magnitude, timing, contrast or an outlier that narration alone would hide.`
-      );
+      return "Start with what can be measured.";
 
     case "geography":
-      return clean(
-        `Now put the evidence back into place. Location is not decoration here; it changes what can be inferred about exposure, movement, concentration and the limits of generalising from one site to another.`
-      );
+      return "Then put those measurements back on the map.";
 
     case "mechanism":
-      return clean(
-        `The next step is to follow the mechanism rather than jump from cause to outcome. What enters the system, what changes along the way, where capacity or constraints appear, and what finally produces the observed result?`
-      );
+      return "The next question is what happens between the trigger and the outcome.";
 
     case "consequence":
-      return clean(
-        `The system becomes consequential when it reaches people, livelihoods, infrastructure or ecosystems. The important distinction is between a measured consequence and a plausible consequence that still needs direct evidence.`
-      );
+      return "That process matters because its effects are experienced on the ground.";
 
     case "governance":
-      return clean(
-        `Physical processes do not operate outside institutions. Policy, maintenance, enforcement, investment and coordination can change how the same underlying pressure is translated into risk or resilience.`
-      );
+      return "But the physical system is only part of the story.";
 
     case "trust_boundary":
-      return clean(
-        `This is the point where the story has to become more precise, not more confident. The evidence has a boundary, and that boundary belongs in the final explanation.`
-      );
+      return "This is where the evidence becomes narrower.";
 
     case "synthesis":
-      return clean(
-        `By this point the evidence is more useful as a system than as a list of separate facts. The strongest conclusion should connect the observed pieces without pretending that one driver explains everything.`
-      );
+      return "Taken together, the evidence points to a system rather than a single cause.";
 
     case "closure":
-      return clean(
-        `A strong ending should not introduce a new claim. It should resolve the opening question, state what the evidence supports, and leave the remaining uncertainty visible.`
-      );
-  }
-}
-
-function analysisLayer(
-  scene: Scene,
-  role: DocumentarySceneRole
-) {
-  const body =
-    clean(scene.body);
-
-  if (!body) {
-    return "";
-  }
-
-  if (
-    role === "trust_boundary"
-  ) {
-    return clean(
-      `${body} That limitation changes the strength of the conclusion. It does not make the evidence useless; it tells us the scale at which the evidence is reliable and what additional evidence would be needed for a broader claim.`
-    );
-  }
-
-  if (
-    role === "mechanism"
-  ) {
-    return clean(
-      `${body} The analytical value of this scene is the relationship between steps, not the labels themselves. A mechanism is convincing only when the arrows are supported as carefully as the individual nodes.`
-    );
-  }
-
-  if (
-    role === "governance"
-  ) {
-    return clean(
-      `${body} This creates an important trade-off: a technical intervention can fail if institutions cannot maintain it, while governance reform can remain abstract if the physical system itself lacks capacity.`
-    );
-  }
-
-  if (
-    role === "consequence"
-  ) {
-    return clean(
-      `${body} Consequences are rarely distributed evenly. Who is exposed, where they are located, what alternatives they have, and how quickly they can recover all affect what the same event means in practice.`
-    );
-  }
-
-  return clean(body);
-}
-
-function genericDepthParagraph(
-  project: EpisodeProject,
-  role: DocumentarySceneRole
-) {
-  const topic =
-    clean(
-      project.episode
-        .workingTitle
-    );
-
-  switch (role) {
-    case "hook":
-      return clean(
-        `That distinction matters because visible crises often compress several different processes into one image. The documentary should slow that compression down: first identify the trigger, then follow the pathway, then ask why the outcome appears where it does.`
-      );
-
-    case "data":
-      return clean(
-        `A single high value can be important without being sufficient. The pattern becomes more informative when it is compared across time, place or category and then connected to evidence that explains what changed in the system.`
-      );
-
-    case "geography":
-      return clean(
-        `A map also reveals absence. Areas without measurements should not silently inherit the values of measured locations. That gap is itself part of the evidence story and should remain visible.`
-      );
-
-    case "mechanism":
-      return clean(
-        `This is also where trade-offs appear. Strengthening one part of a system may shift pressure elsewhere, and solving a bottleneck is not the same as removing the underlying driver. The visual explanation should therefore reveal the sequence progressively rather than presenting a finished diagram as if every connection were equally certain.`
-      );
-
-    case "consequence":
-      return clean(
-        `This is why aggregate statistics can hide important differences. The same average can contain very different experiences across households, workers, neighbourhoods, firms or ecosystems.`
-      );
-
-    case "governance":
-      return clean(
-        `The practical question is therefore not simply whether a policy or intervention exists. It is whether responsibilities are clear, resources are available, implementation reaches the relevant places, and performance can be verified over time.`
-      );
-
-    case "trust_boundary":
-      return clean(
-        `Keeping that boundary visible is not a weakness in the story. It is what separates an evidence-led documentary from a confident narrative built on assumptions.`
-      );
-
-    case "synthesis":
-      return clean(
-        `The result is a more useful explanation of ${topic || "the issue"}: one that can distinguish immediate triggers from deeper drivers, local evidence from wider claims, and interventions that treat symptoms from interventions that change the system.`
-      );
+      return "";
 
     default:
       return "";
   }
 }
 
-function dedupeSentences(
-  parts: string[]
+function uniqueSentences(
+  candidates: string[],
+  globalSentences: string[],
+  globalNumbers: Set<string>
 ) {
-  const seen =
-    new Set<string>();
+  const accepted: string[] = [];
 
-  const result:
-    string[] = [];
+  for (const candidate of candidates.flatMap(sentences)) {
+    const cleanCandidate = clean(candidate);
+    if (!cleanCandidate) continue;
 
-  parts
-    .flatMap(sentenceList)
-    .forEach((sentence) => {
-      const key =
-        sentence
-          .toLowerCase()
-          .replace(
-            /[^a-z0-9\s]/g,
-            ""
-          )
-          .replace(
-            /\s+/g,
-            " "
-          )
-          .trim();
+    const numberKey = numericFingerprint(cleanCandidate);
 
-      if (
-        !key ||
-        seen.has(key)
-      ) {
-        return;
-      }
-
-      seen.add(key);
-      result.push(sentence);
-    });
-
-  return clean(
-    result.join(" ")
-  );
-}
-
-function fitToTarget(
-  baseParts: string[],
-  project: EpisodeProject,
-  role: DocumentarySceneRole,
-  targetWords: number
-) {
-  let text =
-    dedupeSentences(
-      baseParts
+    const duplicate = [...globalSentences, ...accepted].some(
+      (existing) =>
+        similarity(existing, cleanCandidate) >= 0.68
     );
 
-  const depth =
-    genericDepthParagraph(
-      project,
-      role
-    );
+    if (duplicate) continue;
 
-  if (
-    wordCount(text) <
-      targetWords * 0.88 &&
-    depth
-  ) {
-    text =
-      dedupeSentences(
-        [text, depth]
-      );
+    if (
+      numberKey &&
+      globalNumbers.has(numberKey) &&
+      /\d/.test(cleanCandidate)
+    ) {
+      continue;
+    }
+
+    accepted.push(cleanCandidate);
+
+    if (numberKey) {
+      globalNumbers.add(numberKey);
+    }
   }
 
-  /*
-   * Do not manufacture facts merely to hit a word target. If the source-backed
-   * material is still shorter than the target after one analytical depth layer,
-   * leave it shorter. The duration checker can then flag the remaining gap.
-   */
-  return text;
+  globalSentences.push(...accepted);
+  return accepted;
+}
+
+function trimToWords(
+  value: string,
+  maxWords: number
+) {
+  const parts = sentences(value);
+  const kept: string[] = [];
+  let count = 0;
+
+  for (const sentence of parts) {
+    const length = wordCount(sentence);
+
+    if (
+      kept.length &&
+      count + length > maxWords
+    ) {
+      break;
+    }
+
+    if (
+      !kept.length &&
+      length > maxWords
+    ) {
+      return words(sentence)
+        .slice(0, maxWords)
+        .join(" ")
+        .replace(/[,;:]?$/, ".")
+        .trim();
+    }
+
+    kept.push(sentence);
+    count += length;
+  }
+
+  return clean(kept.join(" "));
+}
+
+function composeScene(
+  project: EpisodeProject,
+  scene: Scene,
+  role: DocumentarySceneRole,
+  targetWords: number,
+  usedEvidence: Set<string>,
+  globalSentences: string[],
+  globalNumbers: Set<string>
+) {
+  const existing = safeExistingNarration(scene);
+  const body = sceneBodySentence(scene);
+
+  let candidates: string[] = [];
+
+  if (role === "data") {
+    candidates = [
+      editorialBridge(project, scene, role),
+      chartSentence(scene),
+      body,
+      existing,
+      "Those measurements establish the pattern, but they do not by themselves explain the mechanism.",
+    ];
+  } else if (role === "geography") {
+    candidates = [
+      editorialBridge(project, scene, role),
+      mapSentence(scene),
+      body,
+      existing,
+      "The map shows where the current observations exist; it should not be read as evidence for places the dataset does not cover.",
+    ];
+  } else if (role === "trust_boundary") {
+    candidates = [
+      editorialBridge(project, scene, role),
+      limitationSentence(project, scene, usedEvidence),
+      body,
+      existing,
+      "That boundary does not weaken the story. It defines how far the conclusion can responsibly travel.",
+    ];
+  } else if (role === "closure") {
+    candidates = [
+      existing,
+      body,
+    ];
+  } else {
+    candidates = [
+      editorialBridge(project, scene, role),
+      existing,
+      body,
+      evidenceSentence(project, scene, usedEvidence),
+    ];
+  }
+
+  const unique = uniqueSentences(
+    candidates.filter(Boolean),
+    globalSentences,
+    globalNumbers
+  );
+
+  const composed = clean(unique.join(" "));
+  return trimToWords(
+    composed,
+    Math.max(45, Math.round(targetWords * 1.08))
+  );
 }
 
 export function buildGenericLongFormNarration(
   project: EpisodeProject,
-  datasetsOverride?: DatasetAnalysis[]
+  _datasetsOverride?: DatasetAnalysis[]
 ) {
-  if (!isLongForm(project)) {
-    return project.scenes;
+  const isLongForm =
+    project.episode.targetMinutes >= 7 &&
+    LONG_FORM_MODES.has(project.episode.storyMode || "");
+
+  if (!isLongForm) {
+    return project.scenes.map((scene) => ({
+      ...scene,
+      narration: stripProductionLanguage(scene.narration),
+    }));
   }
 
-  const plan =
-    buildLongFormPlan(
-      project
-    );
+  const plan = buildLongFormPlan(project);
+  const targetById = new Map(
+    plan.sceneTargets.map((row) => [row.sceneId, row])
+  );
 
-  const targetById =
-    new Map(
-      plan.sceneTargets.map(
-        (row) => [
-          row.sceneId,
-          row,
-        ]
-      )
-    );
+  const usedEvidence = new Set<string>();
+  const globalSentences: string[] = [];
+  const globalNumbers = new Set<string>();
 
-  return project.scenes.map(
-    (scene) => {
-      const target =
-        targetById.get(
-          scene.id
-        );
+  return project.scenes.map((scene, index) => {
+    const target = targetById.get(scene.id);
 
-      if (!target) {
-        return scene;
-      }
-
-      const existing =
-        clean(
-          scene.narration
-        );
-
-      const parts = [
-        roleBridge(
-          project,
-          scene,
-          target.role
-        ),
-        existing,
-        datasetContext(
-          project,
-          scene,
-          datasetsOverride
-        ),
-        mapContext(scene),
-        evidenceParagraph(
-          project,
-          scene
-        ),
-        analysisLayer(
-          scene,
-          target.role
-        ),
-      ].filter(Boolean);
-
-      const narration =
-        fitToTarget(
-          parts,
-          project,
-          target.role,
-          target.targetWords
-        );
-
+    if (!target) {
       return {
         ...scene,
-        narration,
+        narration: stripProductionLanguage(scene.narration),
       };
     }
-  );
+
+    const narration = composeScene(
+      project,
+      scene,
+      target.role,
+      target.targetWords,
+      usedEvidence,
+      globalSentences,
+      globalNumbers
+    );
+
+    return {
+      ...scene,
+      narration:
+        narration ||
+        stripProductionLanguage(scene.narration) ||
+        stripProductionLanguage(scene.body),
+    };
+  });
 }
