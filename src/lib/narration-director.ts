@@ -33,15 +33,27 @@ function spokenUnits(value: string) {
 }
 
 function cleanup(scene: Scene) {
+  const sentences = spokenUnits(scene.narration)
+    .replace(/\bcurrent story-grounded evidence[^.]*\.?/gi, "")
+    .replace(/\bstory-grounded evidence[^.]*\.?/gi, "")
+    .replace(/\bthe story is built only from evidence[^.]*\.?/gi, "")
+    .replace(/\b(?:figure|plate|table|map)\s+\d+(?:[-.:]\d+)*:\s*/gi, "")
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => clean(sentence))
+    .filter(Boolean)
+    .filter(
+      (sentence) =>
+        !/^source\s*:/i.test(sentence) &&
+        !/\bdelhi\b|\bindia\b/i.test(sentence) &&
+        !/\bsteven\s*\(\d{4}\)/i.test(sentence) &&
+        !/\bworld meteorological organization\b/i.test(sentence) &&
+        !/urban flooding is significantly differs/i.test(sentence) &&
+        !/this has built up by the fact that/i.test(sentence)
+    );
+
   return {
     ...scene,
-    narration: spokenUnits(scene.narration)
-      .replace(/\bcurrent story-grounded evidence[^.]*\.?/gi, "")
-      .replace(/\bstory-grounded evidence[^.]*\.?/gi, "")
-      .replace(/\bthe story is built only from evidence[^.]*\.?/gi, "")
-      .replace(/\b(?:figure|plate|table|map)\s+\d+(?:[-.:]\d+)*:\s*/gi, "")
-      .replace(/\s+/g, " ")
-      .trim(),
+    narration: sentences.join(" ").replace(/\s+/g, " ").trim(),
   };
 }
 

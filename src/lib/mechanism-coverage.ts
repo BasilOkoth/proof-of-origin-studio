@@ -71,6 +71,49 @@ function isRawAcademic(value: string) {
   );
 }
 
+function looksLikeForeignCase(value: string) {
+  const text = normalise(value);
+
+  const foreignPlaces = [
+    "delhi",
+    "india",
+    "mumbai",
+    "chennai",
+    "bangladesh",
+    "pakistan",
+    "china",
+    "beijing",
+    "london",
+    "new york",
+    "jakarta",
+    "manila",
+  ];
+
+  const hasForeignPlace = foreignPlaces.some((place) =>
+    text.includes(place)
+  );
+
+  const hasLocalAnchor =
+    /\bnairobi\b|\bsouth c\b|\bkenya\b|\bdagoretti\b|\bwilson airport\b|\bmoi air base\b/.test(
+      text
+    );
+
+  return hasForeignPlace && !hasLocalAnchor;
+}
+
+function localNarrationEligibility(item: EvidenceItem) {
+  const statement = clean(item.statement);
+
+  if (!statement) return false;
+  if (looksLikeForeignCase(statement)) return false;
+
+  /*
+   * Foreign literature may remain useful as background research, but it must
+   * not be narrated as if it were Nairobi evidence.
+   */
+  return true;
+}
+
 function layerScore(layer: CoverageLayer, value: string) {
   const text = normalise(value);
 
@@ -124,6 +167,9 @@ function transformEvidence(
     .trim();
 
   if (!text || isInternal(text)) return "";
+  if (/^source\s*:/i.test(text)) return "";
+  if (/managing flooding in residential areas of nairobi/i.test(text) && wordCount(text) < 18) return "";
+  if (looksLikeForeignCase(text)) return "";
 
   if (/^clogged drainage systems?$/i.test(text)) {
     return "The local case documents clogged drainage, showing that obstruction can reduce the usable capacity of the network.";
@@ -174,6 +220,24 @@ function transformEvidence(
     )
   ) {
     return "The local evidence describes natural drainage routes being altered or obstructed by development, reducing the pathways available for water to move.";
+  }
+
+  if (
+    layer === "flow_path" &&
+    /natural drainage courses.+changed|natural drainage.+changed|reduced capacity for excess water/i.test(
+      text
+    )
+  ) {
+    return "The local study describes natural drainage routes being changed by urban development, leaving less capacity for excess water to move safely through the city.";
+  }
+
+  if (
+    layer === "surface_response" &&
+    /urban flooding.+rural flooding|coverage of large parts of the ground|roofs.+roads.+pavements|water absorption rate.+low/i.test(
+      text
+    )
+  ) {
+    return "The study explains that as open ground is replaced by roofs, roads and paving, less rainfall can soak into the soil and more becomes surface runoff.";
   }
 
   if (
@@ -304,7 +368,8 @@ export function buildMechanismCoveragePlan(
   const evidence = project.evidence.filter(
     (item) =>
       item.kind !== "limitation" &&
-      !isInternal(item.statement)
+      !isInternal(item.statement) &&
+      localNarrationEligibility(item)
   );
 
   const layers: CoverageLayer[] = [

@@ -342,7 +342,13 @@ function cleanBody(scene: Scene) {
     !text ||
     /current story-grounded evidence|the story is built only from evidence|this draft/i.test(
       text
-    )
+    ) ||
+    /^source\s*:/i.test(text) ||
+    /managing flooding in residential areas of nairobi/i.test(text) ||
+    /\bsteven\s*\(\d{4}\)/i.test(text) ||
+    /\bworld meteorological organization\b/i.test(text) ||
+    /urban flooding is significantly differs/i.test(text) ||
+    /this has built up by the fact that/i.test(text)
   ) {
     return "";
   }
@@ -472,7 +478,19 @@ function composeScene(
       ),
     ];
   } else if (role === "trust_boundary") {
+    const requiredBeforeBoundary = ([
+      "blockage",
+      "exposure",
+    ] as CoverageLayer[]).filter(
+      (layer) => !usedLayers.has(layer)
+    );
+
     candidates = [
+      ...coverageNarration(
+        coverage,
+        requiredBeforeBoundary,
+        usedLayers
+      ),
       "This is where the evidence becomes narrower.",
       ...roleAnalysis(role),
     ];
