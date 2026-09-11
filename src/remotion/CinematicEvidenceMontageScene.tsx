@@ -394,8 +394,8 @@ function OpeningRhythmScene({
           left: 84,
           top: 70,
           color: CYAN,
-          fontSize: 15,
-          letterSpacing: 3.4,
+          fontSize: 19,
+          letterSpacing: 3.8,
           fontWeight: 900,
           textTransform:
             "uppercase",
@@ -409,16 +409,16 @@ function OpeningRhythmScene({
           position: "absolute",
           left: 84,
           bottom: 120,
-          width: 1040,
+          width: 1320,
           opacity:
             titleOpacity,
         }}
       >
         <div
           style={{
-            fontSize: 78,
-            lineHeight: 0.96,
-            letterSpacing: -3.6,
+            fontSize: 106,
+            lineHeight: 0.93,
+            letterSpacing: -5.2,
             fontWeight: 1000,
           }}
         >
@@ -430,12 +430,12 @@ function OpeningRhythmScene({
 
         <div
           style={{
-            marginTop: 22,
-            fontSize: 25,
-            lineHeight: 1.35,
+            marginTop: 28,
+            fontSize: 34,
+            lineHeight: 1.28,
             color:
               "#d8deed",
-            maxWidth: 900,
+            maxWidth: 1120,
           }}
         >
           Heavy rain is part of the answer. The city determines what happens next.
@@ -448,8 +448,8 @@ function OpeningRhythmScene({
           right: 72,
           bottom: 46,
           color: MUTED,
-          fontSize: 14,
-          letterSpacing: 0.3,
+          fontSize: 16,
+          letterSpacing: 0.35,
           background:
             "rgba(5,9,20,.55)",
           padding:
@@ -601,7 +601,7 @@ export function CinematicEvidenceMontageScene({
           <div
             style={{
               marginTop: 26,
-              maxWidth: 900,
+              maxWidth: 1120,
               fontSize: 25,
               lineHeight: 1.42,
               color: "#d0d7e8",
