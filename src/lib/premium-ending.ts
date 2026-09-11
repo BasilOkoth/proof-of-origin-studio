@@ -34,14 +34,14 @@ export function premiumEndingNarration(
 
   const resolution =
     existing ||
-    "The evidence points to a system rather than one simple cause.";
+    "The evidence points to a chain of conditions rather than one simple cause.";
 
   const callback = question
-    ? `We started with a question: ${question} The answer is clearer now, and so are the limits of what the current evidence can establish.`
-    : "The answer is clearer now, and so are the limits of what the current evidence can establish.";
+    ? `We started with a simple question: ${question} The answer is clearer now, but the limits of the current evidence still matter.`
+    : "The answer is clearer now, but the limits of the current evidence still matter.";
 
   return clean(
-    `${resolution} ${callback} Follow the evidence with Evidence Studio. The sources stay with the story, the uncertainty stays visible, and the next episode starts with the next question worth explaining.`
+    `${resolution} ${callback} Follow the evidence with Evidence Studio.`
   );
 }
 
@@ -84,13 +84,12 @@ export function applyPremiumEnding(
           scene
         ),
       retentionPurpose:
-        "Premium closure: resolve the opening question, leave one memorable final idea, then invite the viewer into the next evidence-led story.",
+        "Resolve the opening question, preserve the evidence boundary, and leave one memorable final idea.",
       visualLabels: [
         "Question",
         "Evidence",
         "System",
         "What remains uncertain",
-        "Next question",
       ],
     };
   });
