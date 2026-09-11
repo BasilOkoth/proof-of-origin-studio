@@ -1,7 +1,6 @@
 import {
   buildGenericLongFormNarration,
   buildLongFormPlan,
-  roleForScene,
 } from "./long-form-documentary";
 import {
   applyPremiumEnding,
@@ -34,164 +33,21 @@ function cleanup(scene: Scene) {
   return {
     ...scene,
     narration: spokenUnits(scene.narration)
-      .replace(/\b(?:the source is|source:)\s+[^.]+\.?/gi, " ")
-      .replace(/\bthe source-backed observation is:\s*/gi, "")
-      .replace(/\bthe story is built only from evidence[^.]*\.?/gi, "")
-      .replace(/\bthe analytical value of this scene[^.]*\.?/gi, "")
-      .replace(/\ba mechanism is convincing only when the arrows[^.]*\.?/gi, "")
-      .replace(/\ba strong explanation has to move from the visible event[^.]*\.?/gi, "")
       .replace(/\bcurrent story-grounded evidence[^.]*\.?/gi, "")
       .replace(/\bstory-grounded evidence[^.]*\.?/gi, "")
       .replace(/\b(?:figure|plate|table|map)\s+\d+(?:[-.:]\d+)*:\s*/gi, "")
-      .replace(/^\s*[a-z]\)\s+/i, "")
       .replace(/\s+/g, " ")
       .trim(),
   };
 }
 
-function words(value: string) {
-  return clean(value)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter((word) => word.length >= 3);
+function wordCount(value: string) {
+  return clean(value).match(/\S+/g)?.length || 0;
 }
 
-function semanticSimilarity(a: string, b: string) {
-  const aa = new Set(words(a));
-  const bb = new Set(words(b));
-
-  if (!aa.size || !bb.size) return 0;
-
-  let overlap = 0;
-  aa.forEach((word) => {
-    if (bb.has(word)) overlap += 1;
-  });
-
-  return overlap / Math.max(1, Math.min(aa.size, bb.size));
-}
-
-function conceptualKey(value: string) {
-  const text = clean(value).toLowerCase();
-
-  if (
-    /follow .*(trigger|cause).*(outcome|damage)|follow .*mechanism|pathway/.test(
-      text
-    )
-  ) {
-    return "pathway";
-  }
-
-  if (
-    /put .*measurements .*map|put .*evidence .*place|mapped observations/.test(
-      text
-    )
-  ) {
-    return "map";
-  }
-
-  if (
-    /start .*measure|what can be measured|measure the trigger/.test(text)
-  ) {
-    return "measure";
-  }
-
-  if (
-    /does not prove|cannot establish|limitation|boundary|should not be read as evidence/.test(
-      text
-    )
-  ) {
-    return "boundary";
-  }
-
-  return "";
-}
-
-function exactSceneLabel(scene: Scene, sentence: string) {
-  const key = (value: string) =>
-    clean(value)
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-  const candidate = key(sentence);
-
-  return (
-    candidate &&
-    (
-      candidate === key(scene.headline) ||
-      candidate === key(scene.eyebrow)
-    )
-  );
-}
-
-function storyLevelDeduplication(
-  project: EpisodeProject,
-  scenes: Scene[]
-) {
-  const seenSentences: string[] = [];
-  const seenConcepts = new Set<string>();
-
-  return scenes.map((scene, index) => {
-    const role = roleForScene(project, scene, index);
-
-    const kept = clean(scene.narration)
-      .split(/(?<=[.!?])\s+/)
-      .map(clean)
-      .filter(Boolean)
-      .filter((sentence) => {
-        if (
-          exactSceneLabel(scene, sentence) ||
-          /current story-grounded evidence|story-grounded evidence|evidence items?|this draft|current story|world meteorological organization|research conducted overtime|however adequate attention has not been given/i.test(
-            sentence
-          )
-        ) {
-          return false;
-        }
-
-        const concept = conceptualKey(sentence);
-
-        if (
-          concept &&
-          seenConcepts.has(concept) &&
-          role !== "closure"
-        ) {
-          return false;
-        }
-
-        const duplicate = seenSentences.some((existing) => {
-          const score = semanticSimilarity(existing, sentence);
-          const short =
-            Math.min(words(existing).length, words(sentence).length) <= 10;
-
-          return score >= (short ? 0.64 : 0.74);
-        });
-
-        if (duplicate) {
-          return false;
-        }
-
-        if (concept) {
-          seenConcepts.add(concept);
-        }
-
-        seenSentences.push(sentence);
-        return true;
-      });
-
-    return {
-      ...scene,
-      narration: clean(kept.join(" ")),
-    };
-  });
-}
-
-function narrationWordCount(scenes: Scene[]) {
+function totalWords(scenes: Scene[]) {
   return scenes.reduce(
-    (sum, scene) =>
-      sum +
-      (clean(scene.narration).match(/\S+/g)?.length || 0),
+    (sum, scene) => sum + wordCount(scene.narration),
     0
   );
 }
@@ -206,34 +62,23 @@ export function applyNarrationDirector(
       datasetsOverride
     ).map(cleanup);
 
-  const deduped =
-    storyLevelDeduplication(
+  const finalScenes =
+    applyPremiumEnding(
       project,
       composed
     );
 
-  const finalScenes =
-    applyPremiumEnding(
-      project,
-      deduped
-    );
-
   const plan = buildLongFormPlan(project);
-  const actualWords = narrationWordCount(finalScenes);
-
-  const coverage =
-    Math.round(
-      (actualWords /
-        Math.max(1, plan.targetWords)) *
-        100
-    );
+  const actualWords = totalWords(finalScenes);
+  const coverage = Math.round(
+    (actualWords / Math.max(1, plan.targetWords)) * 100
+  );
 
   return {
     ...project,
     episode: {
       ...project.episode,
-      targetMinutes:
-        project.episode.targetMinutes,
+      targetMinutes: project.episode.targetMinutes,
     },
     scenes: finalScenes,
     retention: project.retention
@@ -244,7 +89,7 @@ export function applyNarrationDirector(
               ? Array.from(
                   new Set([
                     ...(project.retention.warnings || []),
-                    `Narration coverage is ${coverage}% of the requested ${project.episode.targetMinutes}-minute episode. Add more usable source-backed material if a longer cut is required.`,
+                    `Narration coverage is ${coverage}% of the requested ${project.episode.targetMinutes}-minute episode. The director has expanded mechanism depth without inventing unsupported facts; additional usable evidence may still be required for the full target duration.`,
                   ])
                 )
               : project.retention.warnings,

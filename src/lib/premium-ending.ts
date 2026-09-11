@@ -12,18 +12,6 @@ function clean(value?: string) {
     .trim();
 }
 
-function stripWeakCta(text: string) {
-  return clean(text)
-    .replace(
-      /\b(?:like|share|subscribe)\b[^.?!]*[.?!]?/gi,
-      ""
-    )
-    .replace(/current story-grounded evidence[^.?!]*[.?!]?/gi, "")
-    .replace(/story-grounded evidence[^.?!]*[.?!]?/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
 export function premiumEndingNarration(
   project: EpisodeProject,
   scene: Scene
@@ -32,7 +20,9 @@ export function premiumEndingNarration(
     resolvedNarrationQuestion(project);
 
   const existing =
-    stripWeakCta(scene.narration);
+    clean(scene.narration)
+      .replace(/\b(?:like|share|subscribe)\b[^.?!]*[.?!]?/gi, "")
+      .trim();
 
   const resolution =
     existing ||
@@ -52,24 +42,16 @@ export function applyPremiumEnding(
   scenes: Scene[] = project.scenes
 ): Scene[] {
   const lastCtaIndex = scenes
-    .map((scene, index) => ({
-      scene,
-      index,
-    }))
+    .map((scene, index) => ({ scene, index }))
     .reverse()
-    .find(
-      ({ scene }) =>
-        scene.kind === "cta"
-    )?.index;
+    .find(({ scene }) => scene.kind === "cta")?.index;
 
   if (lastCtaIndex === undefined) {
     return scenes;
   }
 
   return scenes.map((scene, index) => {
-    if (index !== lastCtaIndex) {
-      return scene;
-    }
+    if (index !== lastCtaIndex) return scene;
 
     return {
       ...scene,
@@ -81,10 +63,7 @@ export function applyPremiumEnding(
         clean(scene.body) ||
         "Follow the evidence. Keep the uncertainty visible.",
       narration:
-        premiumEndingNarration(
-          project,
-          scene
-        ),
+        premiumEndingNarration(project, scene),
       retentionPurpose:
         "Resolve the opening question, preserve the evidence boundary, and leave one memorable final idea.",
       visualLabels: [
