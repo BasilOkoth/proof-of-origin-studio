@@ -10,7 +10,6 @@ import type {
   EvidenceItem,
   Scene,
   VisualIntelligenceScore,
-  VisualKind,
   VisualPlan,
 } from "./types";
 
@@ -54,6 +53,58 @@ function firstSource(
   );
 }
 
+function isTrustBoundary(text: string) {
+  return /trust boundary|limitation|uncertain|does not prove|doesn't prove|not establish|evidence still not prove|scope|boundary of the evidence/i.test(
+    text
+  );
+}
+
+function isMechanism(text: string) {
+  return /what happens after|what turns it into|system|flow|runoff|pathway|path way|cycle|cause|driver|mechanism|process|interact|relationship|after water hits|moves through|where water can go/i.test(
+    text
+  );
+}
+
+function isSynthesis(
+  project: EpisodeProject,
+  scene: Scene
+) {
+  const index =
+    project.scenes.findIndex(
+      (item) =>
+        item.id === scene.id
+    );
+
+  const text =
+    `${scene.eyebrow} ${scene.headline} ${scene.body}`;
+
+  return (
+    /risk is a system|taken together|what does this mean|final synthesis|the system underneath|not one cause|system rather than a single cause/i.test(
+      text
+    ) ||
+    (
+      index >=
+      Math.floor(
+        project.scenes.length *
+          0.78
+      ) &&
+      scene.kind !== "cta"
+    )
+  );
+}
+
+function isUrbanForm(text: string) {
+  return /built surface|urban form|pavement|paved|building|built-up|infiltration|land use|development|surface the rain lands on/i.test(
+    text
+  );
+}
+
+function isMaintenance(text: string) {
+  return /maintenance|clearing|drainage capacity|blocked drain|blockage|waste|debris|culvert|institutional response|management/i.test(
+    text
+  );
+}
+
 function chooseVisual(
   project: EpisodeProject,
   scene: Scene
@@ -64,15 +115,21 @@ function chooseVisual(
       scene
     );
 
+  const source =
+    firstSource(evidence);
+
   const text =
     `${scene.eyebrow} ${scene.headline} ${scene.body}`;
 
+  /*
+   * Evidence-native structures keep absolute precedence.
+   */
   if (scene.chart) {
     return {
       kind:
         "data_chart",
       reason:
-        "The scene contains structured quantitative data, so the evidence should be seen as a chart rather than narrated as a list of numbers.",
+        "Production treatment: animated data reveal. The scene contains structured quantitative data, so the pattern should be revealed in narration order rather than treated as a generic evidence card.",
       evidenceIds:
         scene.factIds,
       confidence: 99,
@@ -84,39 +141,68 @@ function chooseVisual(
       kind:
         "map_story",
       reason:
-        "The evidence has explicit geographic coordinates, so location is part of the explanation rather than decoration.",
+        "Production treatment: animated map story. Geography is part of the evidence, so the camera and labels should reveal the spatial pattern progressively.",
       evidenceIds:
         scene.factIds,
       confidence: 99,
     };
   }
 
-  if (scene.assetId) {
+  /*
+   * Editorial purpose now outranks the simple existence of an image asset.
+   * Previously every scene with an asset immediately became field_evidence,
+   * which flattened the whole film into one visual grammar.
+   */
+  if (
+    isTrustBoundary(text)
+  ) {
     return {
       kind:
-        "field_evidence",
+        "source_highlight",
       reason:
-        "A real uploaded evidence asset exists for this scene; show the source material before adding abstraction.",
+        "Production treatment: evidence-boundary/source visual. This scene is about what the evidence cannot establish, so show the source, local map or explicit evidence boundary rather than another generic photo.",
       evidenceIds:
         scene.factIds,
-      confidence: 96,
+      confidence: source
+        ? 94
+        : 86,
     };
   }
 
   if (
-    firstSource(evidence) &&
-    /research|report|study|source|evidence|finding/i.test(
-      text
+    isSynthesis(
+      project,
+      scene
     )
   ) {
     return {
       kind:
-        "source_highlight" as const,
+        "systems_diagram",
       reason:
-        "This claim is source-backed; make the citation or source excerpt part of the visual story instead of hiding it in the description.",
+        "Production treatment: cinematic callback plus systems payoff. Reuse real evidence imagery where available, then progressively reconnect the causal system instead of ending on another field-evidence card.",
       evidenceIds:
         scene.factIds,
-      confidence: 91,
+      confidence: 93,
+    };
+  }
+
+  if (
+    isMechanism(text) ||
+    scene.kind ===
+      "diagram"
+  ) {
+    return {
+      kind:
+        "systems_diagram",
+      reason:
+        /water|runoff|flow|path/i.test(
+          text
+        )
+          ? "Production treatment: animated flow-path/mechanism. Follow movement through the system step by step; use real imagery as texture or callback, not as the whole explanation."
+          : "Production treatment: animated systems diagram. Reveal relationships progressively and keep observed, interpreted and uncertain links visually distinct.",
+      evidenceIds:
+        scene.factIds,
+      confidence: 92,
     };
   }
 
@@ -129,26 +215,27 @@ function chooseVisual(
       kind:
         "comparison",
       reason:
-        "The narration contains a meaningful comparison or change; a side-by-side visual makes the causal or temporal difference legible.",
+        "Production treatment: comparison reveal. A side-by-side or before/after treatment makes the change legible without turning the scene into another document card.",
       evidenceIds:
         scene.factIds,
-      confidence: 86,
+      confidence: 88,
     };
   }
 
   if (
-    /where|location|region|country|city|basin|river|lake|route|spatial|geograph/i.test(
+    /where|location|region|country|city|basin|river|lake|route|spatial|geograph|terrain/i.test(
       text
-    )
+    ) &&
+    !scene.assetId
   ) {
     return {
       kind:
         "map_story",
       reason:
-        "Geography is part of the claim. Use a map when coordinates or a mapped dataset are available; otherwise retain a geographic placeholder for manual sourcing.",
+        "Production treatment: geographic story. Use a mapped treatment when spatial evidence is available; otherwise keep the scene flagged for a stronger map rather than substituting a generic photo.",
       evidenceIds:
         scene.factIds,
-      confidence: 68,
+      confidence: 72,
     };
   }
 
@@ -163,39 +250,88 @@ function chooseVisual(
       kind:
         "timeline",
       reason:
-        "The explanation depends on sequence or change through time, so the viewer should see the progression rather than only hear it.",
+        "Production treatment: timeline/progression. Reveal change through time rather than presenting all evidence at once.",
       evidenceIds:
         scene.factIds,
-      confidence: 84,
+      confidence: 86,
     };
   }
 
+  /*
+   * Real-world images remain valuable, but their treatment is differentiated
+   * by editorial purpose.
+   */
   if (
-    /system|flow|cycle|cause|driver|mechanism|process|why|interact|relationship/i.test(
-      text
-    ) ||
-    scene.kind ===
-      "diagram"
+    scene.assetId &&
+    isUrbanForm(text)
   ) {
     return {
       kind:
-        "systems_diagram",
+        "field_evidence",
       reason:
-        "The scene explains relationships or mechanisms. A systems diagram can make the logic visible and reduce abstract narration.",
+        "Production treatment: documentary photo with explanatory overlay. Keep the real urban-form image full-screen or near full-screen and add only the minimum annotation needed to explain infiltration/runoff.",
       evidenceIds:
         scene.factIds,
-      confidence: 82,
+      confidence: 96,
+    };
+  }
+
+  if (
+    scene.assetId &&
+    isMaintenance(text)
+  ) {
+    return {
+      kind:
+        "field_evidence",
+      reason:
+        "Production treatment: documentary maintenance/source visual. Show the real drainage, blockage, culvert or clearing image with restrained provenance and subtle camera movement.",
+      evidenceIds:
+        scene.factIds,
+      confidence: 96,
+    };
+  }
+
+  if (
+    scene.assetId
+  ) {
+    return {
+      kind:
+        "field_evidence",
+      reason:
+        scene.kind === "hook"
+          ? "Production treatment: cinematic full-screen documentary image. Use the strongest real visual as the opening anchor with subtle camera movement and minimal typography."
+          : "Production treatment: full-screen documentary evidence. Let the real image carry the scene and avoid enclosing it in a presentation-style card.",
+      evidenceIds:
+        scene.factIds,
+      confidence: 96,
+    };
+  }
+
+  if (
+    source &&
+    /research|report|study|source|evidence|finding/i.test(
+      text
+    )
+  ) {
+    return {
+      kind:
+        "source_highlight",
+      reason:
+        "Production treatment: source crop/highlight. Make the relevant figure, sentence or source object part of the frame rather than hiding it behind narration.",
+      evidenceIds:
+        scene.factIds,
+      confidence: 91,
     };
   }
 
   if (
     scene.kind ===
-    "quote"
+      "quote"
   ) {
     return {
       kind: "quote",
       reason:
-        "The scene is a principle, limitation or direct takeaway that benefits from visual breathing room.",
+        "Production treatment: quiet visual hold. Use one strong image or restrained typography and give the viewer a deliberate visual breath.",
       evidenceIds:
         scene.factIds,
       confidence: 88,
@@ -207,17 +343,17 @@ function chooseVisual(
       kind:
         "evidence_card",
       reason:
-        "The scene has linked evidence. Put the actual observation on screen rather than relying on generic illustration.",
+        "Production treatment: evidence object. No stronger visual treatment is currently supported; show the observation clearly and flag the scene for a more cinematic asset if it remains visually repetitive.",
       evidenceIds:
         scene.factIds,
-      confidence: 80,
+      confidence: 78,
     };
   }
 
   return {
     kind: "minimal",
     reason:
-      "No stronger evidence-specific visual is available yet. Keep the scene visually restrained and flag it for sourcing rather than inventing proof.",
+      "Production treatment: restrained placeholder. No stronger evidence-specific visual is available; flag the scene for sourcing rather than inventing proof.",
     evidenceIds: [],
     confidence: 55,
   };
@@ -391,6 +527,68 @@ function promoteSourceScene(
   );
 }
 
+function dominantPlanWarning(
+  scenes: Scene[],
+  plans: VisualPlan[]
+) {
+  const counts =
+    new Map<string, number>();
+
+  plans.forEach((plan) => {
+    counts.set(
+      plan.kind,
+      (counts.get(
+        plan.kind
+      ) || 0) + 1
+    );
+  });
+
+  const dominant =
+    [...counts.entries()]
+      .sort(
+        (a, b) =>
+          b[1] - a[1]
+      )[0];
+
+  if (
+    !dominant ||
+    dominant[1] < 4
+  ) {
+    return "";
+  }
+
+  const [kind, count] =
+    dominant;
+
+  const candidates =
+    scenes
+      .map(
+        (scene, index) => ({
+          scene,
+          index,
+        })
+      )
+      .filter(
+        ({ scene }) =>
+          scene.visualPlan?.kind ===
+          kind
+      )
+      .slice(0, 6)
+      .map(
+        ({ scene, index }) =>
+          `Scene ${String(
+            index + 1
+          ).padStart(
+            2,
+            "0"
+          )} "${scene.headline}"`
+      );
+
+  return `Visual treatment is still concentrated: ${count} scenes use ${kind}. ${candidates.join(
+    "; "
+  )}. Convert mechanism scenes to systems/flow diagrams, limitation scenes to evidence-boundary/source visuals, synthesis scenes to cinematic callbacks, and keep real photographs for scenes where the physical world is the strongest treatment.`;
+}
+
 function visualScore(
   project: EpisodeProject
 ): VisualIntelligenceScore {
@@ -458,9 +656,14 @@ function visualScore(
         100
     );
 
+  /*
+   * Score actual scene grammar diversity, not merely whether an evidence
+   * asset exists. Five distinct treatments in a nine-scene documentary is
+   * already strong; seven or more is exceptional.
+   */
   const visualVariation =
     clamp(
-      (unique.size / 7) *
+      (unique.size / 6) *
         100
     );
 
@@ -504,11 +707,23 @@ function visualScore(
   const warnings: string[] =
     [];
 
+  const dominantWarning =
+    dominantPlanWarning(
+      scenes,
+      plans
+    );
+
   if (
-    visualVariation < 55
+    dominantWarning
   ) {
     warnings.push(
-      "Visual grammar is repetitive. Add a map, chart, source highlight or real evidence asset before final rendering."
+      dominantWarning
+    );
+  } else if (
+    visualVariation < 65
+  ) {
+    warnings.push(
+      "Evidence coverage is strong, but the scene grammar still needs more variety. Prefer a mechanism diagram, evidence-boundary/source visual, comparison, timeline or cinematic callback before adding another generic field-evidence scene."
     );
   }
 
