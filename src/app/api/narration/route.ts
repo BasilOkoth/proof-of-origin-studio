@@ -9,6 +9,9 @@ import {
   buildLongFormPlan,
   documentaryWordsPerMinute,
 } from "@/lib/long-form-documentary";
+import {
+  applyNarrationDirector,
+} from "@/lib/narration-director";
 import type {
   EpisodeProject,
   NarrationTrack,
@@ -172,11 +175,11 @@ export async function POST(
         await request.json()
       );
 
-    const project =
+    const incomingProject =
       body.project as EpisodeProject;
 
     if (
-      !project?.scenes
+      !incomingProject?.scenes
         ?.length
     ) {
       return Response.json(
@@ -189,6 +192,23 @@ export async function POST(
         }
       );
     }
+
+    /*
+     * SERVER-AUTHORITATIVE NARRATION
+     *
+     * Do not trust the browser to have the newest narration director loaded.
+     * A stale client bundle can otherwise keep sending old scene narration
+     * even after the repository has been updated.
+     *
+     * Rebuild the approved script on the server on every timing/TTS request.
+     * The current narration director ignores legacy scene narration and
+     * composes from scene purpose + evidence + chart/map facts + boundaries.
+     */
+    const project =
+      applyNarrationDirector(
+        incomingProject,
+        incomingProject.datasets
+      );
 
     if (
       body.provider ===
@@ -228,6 +248,8 @@ export async function POST(
               60
           ),
           wordsPerMinute,
+          serverAuthoritative:
+            true,
         },
       });
     }
@@ -427,6 +449,8 @@ export async function POST(
               2
             )
           ),
+        serverAuthoritative:
+          true,
       },
     });
   } catch (
