@@ -293,7 +293,7 @@ function OpeningRhythmScene({
     interpolate(
       localFrame,
       [0, 8],
-      [0.28, 1],
+      [0.35, 1],
       {
         extrapolateLeft:
           "clamp",
@@ -316,31 +316,23 @@ function OpeningRhythmScene({
     );
 
   const scale =
-    1.03 +
-    localProgress * 0.06;
-
-  const titleOpacity =
-    interpolate(
-      frame,
-      [
-        0,
-        Math.round(fps * 0.4),
-        Math.round(fps * 7.2),
-        Math.round(fps * 8.4),
-      ],
-      [0, 1, 1, 0],
-      {
-        extrapolateLeft:
-          "clamp",
-        extrapolateRight:
-          "clamp",
-      }
-    );
+    1.025 +
+    localProgress * 0.055;
 
   const isVideo =
     asset.mimeType.startsWith(
       "video/"
     );
+
+  const titleEnter =
+    spring({
+      frame,
+      fps,
+      config: {
+        damping: 18,
+        stiffness: 92,
+      },
+    });
 
   return (
     <AbsoluteFill
@@ -384,21 +376,23 @@ function OpeningRhythmScene({
       <AbsoluteFill
         style={{
           background:
-            "linear-gradient(90deg, rgba(4,7,15,.80) 0%, rgba(4,7,15,.36) 48%, rgba(4,7,15,.10) 76%), linear-gradient(0deg, rgba(4,7,15,.70), transparent 46%)",
+            "linear-gradient(90deg, rgba(4,7,15,.84) 0%, rgba(4,7,15,.48) 45%, rgba(4,7,15,.10) 76%), linear-gradient(0deg, rgba(4,7,15,.72), transparent 52%)",
         }}
       />
 
       <div
         style={{
           position: "absolute",
-          left: 84,
-          top: 70,
+          left: 86,
+          top: 72,
           color: CYAN,
-          fontSize: 19,
-          letterSpacing: 3.8,
-          fontWeight: 900,
+          fontSize: 20,
+          letterSpacing: 4.4,
+          fontWeight: 950,
           textTransform:
             "uppercase",
+          textShadow:
+            "0 2px 18px rgba(0,0,0,.55)",
         }}
       >
         THE WORLD EXPLAINED THROUGH EVIDENCE
@@ -407,19 +401,28 @@ function OpeningRhythmScene({
       <div
         style={{
           position: "absolute",
-          left: 84,
-          bottom: 120,
-          width: 1320,
+          left: 86,
+          top: 185,
+          width: 1230,
           opacity:
-            titleOpacity,
+            titleEnter,
+          transform:
+            `translateY(${interpolate(
+              titleEnter,
+              [0, 1],
+              [26, 0]
+            )}px)`,
         }}
       >
         <div
           style={{
-            fontSize: 106,
-            lineHeight: 0.93,
-            letterSpacing: -5.2,
+            fontSize: 112,
+            lineHeight: 0.92,
+            letterSpacing: -5.5,
             fontWeight: 1000,
+            color: WHITE,
+            textShadow:
+              "0 8px 36px rgba(0,0,0,.58)",
           }}
         >
           {openingHeadline(
@@ -430,12 +433,15 @@ function OpeningRhythmScene({
 
         <div
           style={{
-            marginTop: 28,
-            fontSize: 34,
-            lineHeight: 1.28,
+            marginTop: 26,
+            fontSize: 35,
+            lineHeight: 1.26,
             color:
-              "#d8deed",
-            maxWidth: 1120,
+              "#dfe7f7",
+            maxWidth: 980,
+            fontWeight: 650,
+            textShadow:
+              "0 4px 20px rgba(0,0,0,.55)",
           }}
         >
           Heavy rain is part of the answer. The city determines what happens next.
@@ -446,17 +452,19 @@ function OpeningRhythmScene({
         style={{
           position: "absolute",
           right: 72,
-          bottom: 46,
-          color: MUTED,
-          fontSize: 16,
-          letterSpacing: 0.35,
+          top: 72,
+          color: CYAN,
+          fontSize: 15,
+          letterSpacing: 0.3,
           background:
-            "rgba(5,9,20,.55)",
+            "rgba(5,9,20,.56)",
           padding:
-            "8px 12px",
+            "9px 13px",
           borderRadius: 999,
           border:
-            "1px solid rgba(255,255,255,.10)",
+            "1px solid rgba(85,216,255,.22)",
+          backdropFilter:
+            "blur(8px)",
         }}
       >
         Visual evidence ·{" "}
@@ -601,7 +609,7 @@ export function CinematicEvidenceMontageScene({
           <div
             style={{
               marginTop: 26,
-              maxWidth: 1120,
+              maxWidth: 900,
               fontSize: 25,
               lineHeight: 1.42,
               color: "#d0d7e8",
