@@ -3,6 +3,9 @@ import {
   buildLongFormPlan,
 } from "./long-form-documentary";
 import {
+  buildMechanismCoveragePlan,
+} from "./mechanism-coverage";
+import {
   applyPremiumEnding,
 } from "./premium-ending";
 import type {
@@ -35,6 +38,7 @@ function cleanup(scene: Scene) {
     narration: spokenUnits(scene.narration)
       .replace(/\bcurrent story-grounded evidence[^.]*\.?/gi, "")
       .replace(/\bstory-grounded evidence[^.]*\.?/gi, "")
+      .replace(/\bthe story is built only from evidence[^.]*\.?/gi, "")
       .replace(/\b(?:figure|plate|table|map)\s+\d+(?:[-.:]\d+)*:\s*/gi, "")
       .replace(/\s+/g, " ")
       .trim(),
@@ -69,10 +73,26 @@ export function applyNarrationDirector(
     );
 
   const plan = buildLongFormPlan(project);
+  const coveragePlan = buildMechanismCoveragePlan(
+    project,
+    datasetsOverride
+  );
+
   const actualWords = totalWords(finalScenes);
   const coverage = Math.round(
     (actualWords / Math.max(1, plan.targetWords)) * 100
   );
+
+  const directorWarnings = [
+    ...(project.retention?.warnings || []),
+    ...coveragePlan.warnings,
+  ];
+
+  if (coverage < 78) {
+    directorWarnings.push(
+      `Narration coverage is ${coverage}% of the requested ${project.episode.targetMinutes}-minute episode. The mechanism coverage plan has been exhausted; additional usable evidence or additional story scenes may be required to reach the full duration without filler.`
+    );
+  }
 
   return {
     ...project,
@@ -84,15 +104,9 @@ export function applyNarrationDirector(
     retention: project.retention
       ? {
           ...project.retention,
-          warnings:
-            coverage < 72
-              ? Array.from(
-                  new Set([
-                    ...(project.retention.warnings || []),
-                    `Narration coverage is ${coverage}% of the requested ${project.episode.targetMinutes}-minute episode. The director has expanded mechanism depth without inventing unsupported facts; additional usable evidence may still be required for the full target duration.`,
-                  ])
-                )
-              : project.retention.warnings,
+          warnings: Array.from(
+            new Set(directorWarnings)
+          ),
         }
       : project.retention,
   };
