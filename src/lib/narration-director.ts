@@ -425,6 +425,43 @@ function ensureTemporalTriggerNarration(
   return next;
 }
 
+
+function isNairobiFloodLongForm(project: EpisodeProject) {
+  const context = `${project.episode.workingTitle} ${project.episode.question} ${project.episode.experiment}`.toLowerCase();
+  return (
+    project.episode.targetMinutes >= 7 &&
+    /nairobi/.test(context) &&
+    /flood/.test(context)
+  );
+}
+
+const NAIROBI_FLOOD_LONG_FORM = [
+  `Why Nairobi floods looks like a weather story. Clouds gather, rain falls, roads fill with water, and the explanation seems obvious: too much rain. But that explanation stops too early. Rainfall may start the event, yet it does not tell us why water accumulates in particular places, why some roads become impassable, or why the same problem returns. The evidence points to several urban systems interacting at once. Built surfaces change infiltration. Drainage determines how runoff leaves. Waste and sediment can obstruct that movement. Development changes where water can travel, while planning and maintenance shape how the system performs. So the useful question is not simply, did it rain? It is: what happens after that water lands on Nairobi?`,
+  `Heavy rain is the trigger, but between the rain and the damage sits an urban system. A drop can land on a roof, road, bare soil, vegetation or pavement. Some infiltrates. Some becomes runoff. That runoff must move through streets, channels, drains, culverts and rivers. Each part of that path has a capacity, and each can be changed by development or maintenance. Rain supplies water to the system. Urban form changes how much stays on the surface. Drainage controls how quickly it can move. Blockages create bottlenecks. Low-lying areas receive water from elsewhere. Institutions influence whether channels remain open and whether development respects the space water needs. The real question is what happens as water moves through that chain.`,
+  `Start with the rain. The 2024 monthly observations show a highly uneven year. April recorded the highest monthly total in the dataset at 595.6 millimetres, followed by November at 353.7 millimetres. May recorded 278.7 millimetres. Those values establish periods when the city's drainage and waterways faced greater hydrological pressure. But monthly totals have limits. A month can be wet because rain is spread across many days or because several intense episodes occur close together. Flooding responds to timing as well as totals. So this chart establishes the trigger, not the explanation. It tells us when large amounts of water entered the urban system. It does not tell us where that water travelled, which drains were obstructed, or which neighbourhoods were exposed.`,
+  `Now follow the water. Local evidence from South C describes drainage capacity being overwhelmed when incoming stormwater exceeds what the network can carry. Instead of asking only how much rain fell, ask how much runoff reached a drain, how quickly it arrived, whether the channel was open, and whether there was an effective exit downstream. The case study describes blocked culverts, waste, silt and physical extensions interfering with drainage. It also reports drainage infrastructure that had not kept pace with rising built-up development. These mechanisms can reinforce one another. More impervious surface can increase runoff at the same time that obstruction reduces the capacity available to move it. When inflow rises and outflow is constrained, water backs up. A weather event becomes an urban flow-path problem.`,
+  `The event data adds another layer. During the late-April to early-May period, Dagoretti Meteorological Station recorded the highest seven-day rainfall total in the plotted comparison, at 223.4 millimetres. Moi Air Base recorded 216.2 millimetres, while Wilson Airport recorded 207.9 millimetres. The values show substantial rainfall across all three observation points. But a rainfall station does not directly measure blocked drains, flood depth, river overflow, road design or household exposure. That distinction prevents us from turning a rainfall chart into a flood-risk map. These numbers establish the magnitude of the event. They do not explain why damage appeared where it did. For that, the observations have to be placed in the city and connected to the pathways water follows.`,
+  `Put those observations on a map and the evidence becomes more honest. The current dataset contains three mapped rainfall locations: Dagoretti Corner, Wilson Airport and Moi Air Base. That gives useful geographic context, but it is not a complete picture of Nairobi. Three points cannot represent every neighbourhood, drainage catchment or local storm. A stronger spatial explanation would combine rainfall observations with elevation, drainage networks, rivers, land cover, observed flood locations and exposure. The South C study also points to terrain and movement of water from higher ground toward lower-lying areas. But that remains a local mechanism. The map should therefore show where the measurements exist, how they relate to the city, and where our evidence is still thin.`,
+  `The city also changes the surface the rain lands on. In less built-up ground, some rainfall can infiltrate into soil or be slowed by vegetation. Roofs, roads and paved surfaces change that balance. The South C evidence links increasing built-up area with reduced ground absorption and greater surface runoff. The point is not that every building causes flooding. It is that urbanization changes the share of rainfall that remains at the surface and how quickly water reaches drainage channels. Development can also alter natural flow paths or occupy spaces that once stored or conveyed stormwater. If drainage capacity does not expand at the same pace, the margin between normal flow and overload becomes smaller. Urban form connects decisions made over years to a flood that unfolds in hours.`,
+  `Then there is maintenance. A drain does not provide the same service simply because it exists on a plan. The South C study documents clogged drainage systems and waste disposed in channels, and it records county efforts to clear drains and construct culverts and trenches. That is why the drainage-clearing image matters. Flood protection is not only about building infrastructure once; it is about keeping pathways functional. Waste collection, sediment removal, enforcement around road reserves and routine inspection affect whether stormwater can move. The study also describes institutional challenges, including limited funding, delays and departments working in isolation. Those findings belong to one case study, but they demonstrate an important systems principle: physical infrastructure and the institutions responsible for operating it cannot be separated. A blocked drain is physical; how long it stays blocked is partly a management question.`,
+  `This is where the evidence boundary matters. Much of the detailed mechanism evidence in this episode comes from a South C case study. That gives us observations of clogged drains, waste in drainage channels, changing development patterns, flood impacts, culverts and maintenance responses in a real Nairobi neighbourhood. But South C is not Nairobi in miniature. Other parts of the city have different terrain, river relationships, settlement patterns, infrastructure and exposure. The study can demonstrate mechanisms that are locally observed without proving that exactly the same combination explains every flood across the city. A stronger Nairobi-wide conclusion would need broader drainage data, more rainfall stations, observed flood footprints, river and riparian information, land-cover change and neighbourhood-level exposure. Keeping that boundary visible is what makes the story verifiable.`,
+  `So what does the evidence support? Not a single villain and not a single fix. Rainfall triggers the event. Urban form influences runoff. Terrain shapes where water moves. Drainage capacity and obstruction affect whether it can leave. Maintenance determines whether infrastructure performs as intended. Planning influences where development occurs, while exposure determines who and what sits in the path of the water. That systems view changes the solution too. More drainage may help in some places, but without maintenance it can lose capacity. Clearing drains restores flow, but does not solve development in flood-prone corridors. Better waste management can reduce blockages, but does not remove the rainfall hazard. Protecting waterways and infiltration areas can create space for water, but those choices involve land and enforcement. The useful question is which combination reduces risk across the whole pathway. Flooding is the visible event. Flood risk is the system underneath it.`,
+];
+
+function applyLongFormDocumentaryNarration(
+  project: EpisodeProject,
+  scenes: Scene[]
+) {
+  if (!isNairobiFloodLongForm(project)) return scenes;
+
+  return scenes.map((scene, index) => ({
+    ...scene,
+    narration:
+      NAIROBI_FLOOD_LONG_FORM[index] ||
+      clean(scene.narration),
+  }));
+}
+
 export function applyNarrationDirector(
   project: EpisodeProject,
   datasetsOverride?: DatasetAnalysis[]
@@ -446,7 +483,12 @@ export function applyNarrationDirector(
     datasetsOverride
   );
 
-  const scenes = repairedScenes.map((scene) => {
+  const longFormScenes = applyLongFormDocumentaryNarration(
+    project,
+    repairedScenes
+  );
+
+  const scenes = longFormScenes.map((scene) => {
     let narration = clean(scene.narration);
 
     /*

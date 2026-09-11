@@ -5,7 +5,10 @@ import {
   estimateNarration,
   timingsFromAlignment,
 } from "@/lib/narration";
-import type { EpisodeProject, NarrationTrack } from "@/lib/types";
+import type {
+  EpisodeProject,
+  NarrationTrack,
+} from "@/lib/types";
 
 const BodySchema = z.object({
   project: z.any(),
@@ -14,6 +17,37 @@ const BodySchema = z.object({
   voiceId: z.string().optional(),
   modelId: z.string().optional(),
 });
+
+function isLongFormDocumentary(project: EpisodeProject) {
+  return (
+    project.episode.storyMode === "world_explained" &&
+    project.episode.targetMinutes >= 7
+  );
+}
+
+function documentaryWordsPerMinute(
+  project: EpisodeProject,
+  requested?: number
+) {
+  if (!isLongFormDocumentary(project)) {
+    return requested || 155;
+  }
+
+  /*
+   * Premium evidence documentaries need slightly more breathing room than
+   * fast social narration. Keep World Explained planning around 145 wpm.
+   */
+  return Math.min(requested || 145, 145);
+}
+
+function documentaryVoiceSpeed(project: EpisodeProject) {
+  /*
+   * ElevenLabs speed 1.0 was reading the current documentary too quickly.
+   * 0.94 gives charts, maps, source reveals and visual evidence more room
+   * without making the delivery feel artificially slow.
+   */
+  return isLongFormDocumentary(project) ? 0.94 : 1;
+}
 
 export async function POST(request: Request) {
   try {
@@ -28,14 +62,42 @@ export async function POST(request: Request) {
     }
 
     if (body.provider === "estimate") {
+      const wordsPerMinute = documentaryWordsPerMinute(
+        project,
+        body.wordsPerMinute
+      );
+
+      const track = estimateNarration(
+        project,
+        wordsPerMinute
+      );
+
+      const built = buildNarrationText(project);
+      const wordCount =
+        built.text.match(/\S+/g)?.length || 0;
+
       return Response.json({
-        track: estimateNarration(project, body.wordsPerMinute || 155),
+        track,
         audioGenerated: false,
+        narrationPlan: {
+          wordCount,
+          wordsPerMinute,
+          targetMinutes:
+            project.episode.targetMinutes,
+          estimatedMinutes: Number(
+            (track.durationSec / 60).toFixed(2)
+          ),
+          style: isLongFormDocumentary(project)
+            ? "long-form evidence documentary"
+            : "standard",
+        },
       });
     }
 
     const apiKey = process.env.ELEVENLABS_API_KEY;
-    const voiceId = body.voiceId?.trim() || process.env.ELEVENLABS_VOICE_ID;
+    const voiceId =
+      body.voiceId?.trim() ||
+      process.env.ELEVENLABS_VOICE_ID;
     const modelId =
       body.modelId?.trim() ||
       process.env.ELEVENLABS_MODEL_ID ||
@@ -43,14 +105,20 @@ export async function POST(request: Request) {
 
     if (!apiKey) {
       return Response.json(
-        { error: "ELEVENLABS_API_KEY is not configured in .env.local." },
+        {
+          error:
+            "ELEVENLABS_API_KEY is not configured in .env.local.",
+        },
         { status: 503 }
       );
     }
 
     if (!voiceId) {
       return Response.json(
-        { error: "Enter a voice ID or set ELEVENLABS_VOICE_ID in .env.local." },
+        {
+          error:
+            "Enter a voice ID or set ELEVENLABS_VOICE_ID in .env.local.",
+        },
         { status: 400 }
       );
     }
@@ -63,6 +131,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const voiceSpeed =
+      documentaryVoiceSpeed(project);
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(
@@ -80,7 +151,7 @@ export async function POST(request: Request) {
           voice_settings: {
             stability: 0.48,
             similarity_boost: 0.82,
-            speed: 1,
+            speed: voiceSpeed,
           },
         }),
       }
@@ -105,8 +176,10 @@ export async function POST(request: Request) {
 
     if (
       !alignment?.characters ||
-      !alignment?.character_start_times_seconds ||
-      !alignment?.character_end_times_seconds
+      !alignment
+        ?.character_start_times_seconds ||
+      !alignment
+        ?.character_end_times_seconds
     ) {
       return Response.json(
         {
@@ -117,10 +190,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const sentences = timingsFromAlignment(project, alignment);
+    const sentences = timingsFromAlignment(
+      project,
+      alignment
+    );
+
     const durationSec =
       alignment.character_end_times_seconds[
-        alignment.character_end_times_seconds.length - 1
+        alignment.character_end_times_seconds
+          .length - 1
       ] || 0;
 
     const track: NarrationTrack = {
@@ -135,13 +213,32 @@ export async function POST(request: Request) {
       captionStyle: "kinetic",
     };
 
+    const wordCount =
+      built.text.match(/\S+/g)?.length || 0;
+
     return Response.json({
       track,
       audioGenerated: true,
+      narrationPlan: {
+        wordCount,
+        voiceSpeed,
+        targetMinutes:
+          project.episode.targetMinutes,
+        actualMinutes: Number(
+          (durationSec / 60).toFixed(2)
+        ),
+        style: isLongFormDocumentary(project)
+          ? "long-form evidence documentary"
+          : "standard",
+      },
     });
   } catch (error: any) {
     return Response.json(
-      { error: error?.message || "Unable to generate narration." },
+      {
+        error:
+          error?.message ||
+          "Unable to generate narration.",
+      },
       { status: 500 }
     );
   }
