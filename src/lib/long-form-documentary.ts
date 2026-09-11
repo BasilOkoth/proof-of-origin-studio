@@ -327,7 +327,8 @@ function roleAnalysis(role: DocumentarySceneRole) {
       ];
     case "synthesis":
       return [
-        "The strongest explanation connects the trigger, the surface response, the available flow paths, drainage capacity, maintenance, exposure and the choices made about how the city develops.",
+        "The strongest explanation connects the trigger, the surface response, the available flow paths, drainage capacity, blockage, maintenance, development and exposure.",
+        "Heavy rain starts the event, but flood risk is produced by the urban system that receives that rain.",
         "The visible flood is therefore the end of a chain, not the whole explanation.",
       ];
     default:
@@ -378,19 +379,7 @@ function selectUnique(
         (Math.min(wordCount(existing), wordCount(text)) <= 12 ? 0.5 : 0.58)
     );
 
-    const mechanismDuplicate = [...globalSentences, ...accepted].some((existing) => {
-      const a = normalise(existing);
-      const b = normalise(text);
-      const bothSurface =
-        /infiltration|sealed surface|paved|paving|runoff/.test(a) &&
-        /infiltration|sealed surface|paved|paving|runoff/.test(b);
-      const bothDevelopment =
-        /densification|development|drainage capacity|stormwater/.test(a) &&
-        /densification|development|drainage capacity|stormwater/.test(b);
-      return bothSurface || bothDevelopment;
-    });
-
-    if (duplicate || mechanismDuplicate) continue;
+    if (duplicate) continue;
     accepted.push(text);
   }
 
@@ -509,9 +498,8 @@ function composeScene(
         usedLayers
       ),
       "This is where the evidence becomes narrower.",
-      "The most detailed evidence on paving, drainage condition, blockage, maintenance and local flood impacts in this story comes from the South C case study.",
+      "The most detailed evidence on drainage, paving, blockage and maintenance comes from the South C case study.",
       "That gives us a well-documented local mechanism, but it does not prove that exactly the same combination of drivers operates in every flood-prone part of Nairobi.",
-      "What can travel beyond South C is the causal logic; what cannot be assumed is that every Nairobi neighbourhood has the same drainage condition, land-use pattern or exposure.",
       ...roleAnalysis(role),
     ];
   } else if (role === "synthesis") {
@@ -536,8 +524,11 @@ function composeScene(
         remainingLayers,
         usedLayers
       ),
+      "Before drawing the final conclusion, one evidence boundary has to stay visible.",
+      "The most detailed evidence on paving, drainage condition, blockage, maintenance and local flood impacts in this story comes from the South C case study.",
+      "That gives us a well-documented local mechanism, but it does not prove that exactly the same combination of drivers operates in every flood-prone part of Nairobi.",
+      "What can travel beyond South C is the causal logic; what cannot be assumed is that every neighbourhood has the same drainage condition, land-use pattern or exposure.",
       "Taken together, the evidence points to a chain of conditions rather than one simple cause.",
-      "Heavy rain starts the event, but flood risk is produced by the urban system that receives that rain.",
       ...roleAnalysis(role),
     ];
   }

@@ -26,7 +26,7 @@ export function premiumEndingNarration(
 
   const resolution =
     existing ||
-    "The evidence points to a chain of conditions rather than one simple cause.";
+    "The evidence points to a chain of conditions rather than one simple cause. Heavy rain starts the event, but flood risk is produced by the urban system that receives that rain.";
 
   const callback = question
     ? `We started with a simple question: ${question} The answer is clearer now, but the limits of the current evidence still matter.`

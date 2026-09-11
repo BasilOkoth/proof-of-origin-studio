@@ -50,8 +50,7 @@ function cleanup(scene: Scene) {
         !/urban flooding is significantly differs/i.test(sentence) &&
         !/this has built up by the fact that/i.test(sentence) &&
         !/rainfall .*decreased from .*jan .* to .*dec/i.test(sentence) &&
-        !/^the evidence indicates that clogged drainage systems\.?$/i.test(sentence) &&
-        !/^source\s*:/i.test(sentence)
+        !/^the evidence indicates that clogged drainage systems\.?$/i.test(sentence)
     );
 
   return {
@@ -71,6 +70,93 @@ function totalWords(scenes: Scene[]) {
   );
 }
 
+
+function includesAnyNarration(
+  scenes: Scene[],
+  patterns: RegExp[]
+) {
+  const text = scenes
+    .map((scene) => clean(scene.narration))
+    .join(" ");
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function ensureFinalThird(
+  project: EpisodeProject,
+  scenes: Scene[]
+): Scene[] {
+  const next = scenes.map((scene) => ({ ...scene }));
+
+  const ctaIndex = next
+    .map((scene, index) => ({ scene, index }))
+    .reverse()
+    .find(({ scene }) => scene.kind === "cta")?.index;
+
+  if (ctaIndex === undefined || ctaIndex < 1) {
+    return next;
+  }
+
+  const targetIndex = ctaIndex - 1;
+  const target = next[targetIndex];
+
+  const additions: string[] = [];
+
+  if (
+    !includesAnyNarration(next, [
+      /flooded roads/i,
+      /stranded vehicles/i,
+      /mobility.+safety/i,
+    ])
+  ) {
+    additions.push(
+      "The consequences become visible when water interrupts movement, damages property or cuts access through the city.",
+      "The South C evidence includes flooded roads and stranded vehicles, showing the point where a drainage problem becomes an urban mobility and safety problem.",
+      "At that stage, the cost of flooding spreads beyond stormwater infrastructure into access, travel time, property and everyday urban life."
+    );
+  }
+
+  if (
+    !includesAnyNarration(next, [
+      /planning trade-off/i,
+      /planning tradeoff/i,
+      /maintenance alone cannot/i,
+    ])
+  ) {
+    additions.push(
+      "There is also a planning trade-off.",
+      "Nairobi needs housing, roads and continued development, but changes in land cover can increase runoff and add pressure to existing drainage.",
+      "Maintenance alone cannot solve a structural mismatch if runoff keeps increasing faster than drainage capacity.",
+      "The response therefore has to combine drainage investment, land-use control, routine maintenance and protection of natural flow paths."
+    );
+  }
+
+  if (
+    !includesAnyNarration(next, [
+      /most detailed evidence.+south c/i,
+      /what can travel beyond south c/i,
+      /does not prove.+every.+nairobi/i,
+    ])
+  ) {
+    additions.push(
+      "Before the final conclusion, one evidence boundary has to stay visible.",
+      "The most detailed evidence on paving, drainage condition, blockage, maintenance and local flood impacts in this story comes from the South C case study.",
+      "That gives us a well-documented local mechanism, but it does not prove that exactly the same combination of drivers operates in every flood-prone part of Nairobi.",
+      "What can travel beyond South C is the causal logic; what cannot be assumed is that every neighbourhood has the same drainage condition, land-use pattern or exposure."
+    );
+  }
+
+  if (additions.length) {
+    next[targetIndex] = {
+      ...target,
+      narration: clean(
+        `${target.narration} ${additions.join(" ")}`
+      ),
+    };
+  }
+
+  return next;
+}
+
 export function applyNarrationDirector(
   project: EpisodeProject,
   datasetsOverride?: DatasetAnalysis[]
@@ -81,10 +167,16 @@ export function applyNarrationDirector(
       datasetsOverride
     ).map(cleanup);
 
+  const withFinalThird =
+    ensureFinalThird(
+      project,
+      composed
+    );
+
   const finalScenes =
     applyPremiumEnding(
       project,
-      composed
+      withFinalThird
     );
 
   const plan = buildLongFormPlan(project);
