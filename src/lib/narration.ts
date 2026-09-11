@@ -4,6 +4,7 @@ import type {
   NarrationTrack,
   NarrationWord,
 } from "./types";
+import { analyzeRetention } from "./retention";
 
 export type NarrationAlignment = {
   characters: string[];
@@ -309,10 +310,19 @@ export function applyNarrationTiming(
     };
   });
 
-  return {
+  const timedProject: EpisodeProject = {
     ...project,
     scenes,
     narration: track,
+  };
+
+  // CRITICAL:
+  // Retention must be recomputed only after the new narration track and
+  // scene timings are attached. This prevents stale warnings/scores from
+  // earlier narration builds from surviving into the Retention Lab.
+  return {
+    ...timedProject,
+    retention: analyzeRetention(timedProject),
   };
 }
 
