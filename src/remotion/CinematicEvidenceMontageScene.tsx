@@ -2,13 +2,17 @@ import React from "react";
 import {
   AbsoluteFill,
   Img,
+  Video,
   interpolate,
   spring,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
 
-import { rankedAssetsForScene } from "@/lib/cinematic-director";
+import {
+  openingAssetsForScene,
+  rankedAssetsForScene,
+} from "@/lib/cinematic-director";
 import type {
   EpisodeProject,
   EvidenceAsset,
@@ -104,6 +108,11 @@ function EvidenceImage({
     },
   });
 
+  const isVideo =
+    asset.mimeType.startsWith(
+      "video/"
+    );
+
   return (
     <div
       style={{
@@ -129,19 +138,36 @@ function EvidenceImage({
           reveal,
       }}
     >
-      <Img
-        src={asset.dataUrl}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          ...imageMotion(
-            frame,
-            fps,
-            index
-          ),
-        }}
-      />
+      {isVideo ? (
+        <Video
+          src={asset.dataUrl}
+          muted
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            ...imageMotion(
+              frame,
+              fps,
+              index
+            ),
+          }}
+        />
+      ) : (
+        <Img
+          src={asset.dataUrl}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            ...imageMotion(
+              frame,
+              fps,
+              index
+            ),
+          }}
+        />
+      )}
 
       <div
         style={{
@@ -192,6 +218,254 @@ function EvidenceImage({
   );
 }
 
+function openingHeadline(
+  project: EpisodeProject,
+  scene: Scene
+) {
+  const text =
+    `${project.episode.question} ${scene.headline}`;
+
+  if (
+    /\bnairobi\b/i.test(text) &&
+    /\bflood/i.test(text)
+  ) {
+    return "Why does Nairobi flood so often?";
+  }
+
+  return (
+    project.episode.question ||
+    scene.headline
+  );
+}
+
+function OpeningRhythmScene({
+  scene,
+  project,
+}: {
+  scene: Scene;
+  project: EpisodeProject;
+}) {
+  const frame =
+    useCurrentFrame();
+  const { fps } =
+    useVideoConfig();
+
+  const assets =
+    openingAssetsForScene(
+      project,
+      scene
+    ).slice(0, 4);
+
+  if (!assets.length) {
+    return (
+      <AbsoluteFill
+        style={{
+          background: BG,
+        }}
+      />
+    );
+  }
+
+  const shotSeconds = 5.5;
+  const shotFrames =
+    Math.max(
+      1,
+      Math.round(
+        shotSeconds * fps
+      )
+    );
+
+  const shotNumber =
+    Math.floor(
+      frame / shotFrames
+    );
+
+  const asset =
+    assets[
+      shotNumber %
+        assets.length
+    ];
+
+  const localFrame =
+    frame % shotFrames;
+
+  const opacity =
+    interpolate(
+      localFrame,
+      [0, 8],
+      [0.28, 1],
+      {
+        extrapolateLeft:
+          "clamp",
+        extrapolateRight:
+          "clamp",
+      }
+    );
+
+  const localProgress =
+    interpolate(
+      localFrame,
+      [0, shotFrames],
+      [0, 1],
+      {
+        extrapolateLeft:
+          "clamp",
+        extrapolateRight:
+          "clamp",
+      }
+    );
+
+  const scale =
+    1.03 +
+    localProgress * 0.06;
+
+  const titleOpacity =
+    interpolate(
+      frame,
+      [
+        0,
+        Math.round(fps * 0.4),
+        Math.round(fps * 7.2),
+        Math.round(fps * 8.4),
+      ],
+      [0, 1, 1, 0],
+      {
+        extrapolateLeft:
+          "clamp",
+        extrapolateRight:
+          "clamp",
+      }
+    );
+
+  const isVideo =
+    asset.mimeType.startsWith(
+      "video/"
+    );
+
+  return (
+    <AbsoluteFill
+      style={{
+        background: BG,
+        color: WHITE,
+        overflow: "hidden",
+        fontFamily:
+          "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+      }}
+    >
+      {isVideo ? (
+        <Video
+          key={asset.id}
+          src={asset.dataUrl}
+          muted
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            opacity,
+            transform:
+              `scale(${scale})`,
+          }}
+        />
+      ) : (
+        <Img
+          key={asset.id}
+          src={asset.dataUrl}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            opacity,
+            transform:
+              `scale(${scale})`,
+          }}
+        />
+      )}
+
+      <AbsoluteFill
+        style={{
+          background:
+            "linear-gradient(90deg, rgba(4,7,15,.80) 0%, rgba(4,7,15,.36) 48%, rgba(4,7,15,.10) 76%), linear-gradient(0deg, rgba(4,7,15,.70), transparent 46%)",
+        }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          left: 84,
+          top: 70,
+          color: CYAN,
+          fontSize: 15,
+          letterSpacing: 3.4,
+          fontWeight: 900,
+          textTransform:
+            "uppercase",
+        }}
+      >
+        THE WORLD EXPLAINED THROUGH EVIDENCE
+      </div>
+
+      <div
+        style={{
+          position: "absolute",
+          left: 84,
+          bottom: 120,
+          width: 1040,
+          opacity:
+            titleOpacity,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 78,
+            lineHeight: 0.96,
+            letterSpacing: -3.6,
+            fontWeight: 1000,
+          }}
+        >
+          {openingHeadline(
+            project,
+            scene
+          )}
+        </div>
+
+        <div
+          style={{
+            marginTop: 22,
+            fontSize: 25,
+            lineHeight: 1.35,
+            color:
+              "#d8deed",
+            maxWidth: 900,
+          }}
+        >
+          Heavy rain is part of the answer. The city determines what happens next.
+        </div>
+      </div>
+
+      <div
+        style={{
+          position: "absolute",
+          right: 72,
+          bottom: 46,
+          color: MUTED,
+          fontSize: 14,
+          letterSpacing: 0.3,
+          background:
+            "rgba(5,9,20,.55)",
+          padding:
+            "8px 12px",
+          borderRadius: 999,
+          border:
+            "1px solid rgba(255,255,255,.10)",
+        }}
+      >
+        Visual evidence ·{" "}
+        {sourceLabel(asset)}
+      </div>
+    </AbsoluteFill>
+  );
+}
+
 export function CinematicEvidenceMontageScene({
   scene,
   project,
@@ -206,6 +480,18 @@ export function CinematicEvidenceMontageScene({
 
   const { fps } =
     useVideoConfig();
+
+  if (
+    sceneIndex === 0 &&
+    scene.kind === "hook"
+  ) {
+    return (
+      <OpeningRhythmScene
+        scene={scene}
+        project={project}
+      />
+    );
+  }
 
   const assets =
     rankedAssetsForScene(

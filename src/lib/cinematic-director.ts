@@ -108,6 +108,64 @@ function relevance(
   );
 }
 
+function openingImpactScore(asset: EvidenceAsset) {
+  const text = assetText(asset).toLowerCase();
+  let score = 0;
+
+  /*
+   * For a documentary hook, begin with consequence/place before response
+   * infrastructure. A culvert or maintenance image can be excellent evidence
+   * later, but it is a weak first emotional/causal anchor.
+   */
+  if (/\bflooded?\b|\bsubmerged\b|\bstranded\b|\bmotorist\b|\bvehicle\b/.test(text)) {
+    score += 120;
+  }
+  if (/\broad\b|\bstreet\b|\bwater\b|\bflood\b/.test(text)) {
+    score += 80;
+  }
+  if (/\brain\b|\brainfall\b|\bstorm\b/.test(text)) {
+    score += 55;
+  }
+  if (/\bnairobi\b|\bsouth c\b/.test(text)) {
+    score += 25;
+  }
+
+  if (/\bculvert\b|\btrench\b|\bclearing\b|\bmaintenance\b/.test(text)) {
+    score -= 100;
+  }
+  if (/\bconstruction\b|\binfrastructure\b/.test(text)) {
+    score -= 45;
+  }
+
+  return score;
+}
+
+export function openingAssetsForScene(
+  project: EpisodeProject,
+  scene: Scene
+) {
+  return project.assets
+    .filter(
+      (asset) =>
+        Boolean(asset.dataUrl) &&
+        (
+          asset.mimeType.startsWith("image/") ||
+          asset.mimeType.startsWith("video/")
+        )
+    )
+    .map((asset) => ({
+      asset,
+      impact: openingImpactScore(asset),
+      semantic: relevance(scene, asset),
+    }))
+    .sort(
+      (a, b) =>
+        b.impact - a.impact ||
+        b.semantic - a.semantic
+    )
+    .map(({ asset }) => asset);
+}
+
 function sceneHasRealVisual(
   project: EpisodeProject,
   scene: Scene
@@ -227,6 +285,23 @@ export function shouldUseCinematicMontage(
     scene.chart
   ) {
     return false;
+  }
+
+  /*
+   * Opening scenes are now allowed to use the cinematic montage when at
+   * least two usable visuals exist. This prevents one assigned image from
+   * occupying a 30–45 second hook.
+   */
+  if (
+    sceneIndex === 0 &&
+    scene.kind === "hook"
+  ) {
+    return (
+      openingAssetsForScene(
+        project,
+        scene
+      ).length >= 2
+    );
   }
 
   if (
@@ -455,18 +530,28 @@ export function buildCinematicPresentationReport(
   const opening =
     scenes[0];
 
+  const openingAssets =
+    opening
+      ? openingAssetsForScene(
+          project,
+          opening
+        )
+      : [];
+
   const openingStrength =
     opening
       ? clamp(
-          (sceneHasRealVisual(
-            project,
-            opening
-          )
-            ? 70
-            : 40) +
+          (openingAssets.length >= 2
+            ? 82
+            : sceneHasRealVisual(
+                project,
+                opening
+              )
+              ? 70
+              : 40) +
             (opening.kind ===
             "hook"
-              ? 20
+              ? 18
               : 0)
         )
       : 0;
@@ -486,7 +571,7 @@ export function buildCinematicPresentationReport(
       message:
         "The opening still lacks a strong concrete visual anchor.",
       recommendation:
-        "Use the strongest real image, footage frame, map reveal or source detail in the first seconds rather than starting with a title card.",
+        "Use the strongest real flood/impact image or footage in the first seconds and change visual grammar within the hook rather than holding one response-infrastructure image.",
     });
   }
 
