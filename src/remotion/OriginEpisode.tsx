@@ -9,6 +9,7 @@ import {
 
 import { buildEditorialDirection } from "@/lib/editorial-director";
 import { buildIllustrationDirection } from "@/lib/illustration-director";
+import { shouldUseCinematicMontage } from "@/lib/cinematic-director";
 import type {
   EpisodeProject,
   Scene,
@@ -17,6 +18,7 @@ import { AnimatedCaptions } from "./Captions";
 import { EditorialBeatScene } from "./EditorialBeatScene";
 import { IllustrationConceptScene } from "./IllustrationConceptScene";
 import { PremiumOutroScene } from "./PremiumOutroScene";
+import { CinematicEvidenceMontageScene } from "./CinematicEvidenceMontageScene";
 
 const bg = "#070b16";
 
@@ -180,6 +182,16 @@ export const OriginEpisode: React.FC<
       )
     );
 
+  const sceneIndexById =
+    new Map(
+      project.scenes.map(
+        (scene, index) => [
+          scene.id,
+          index,
+        ]
+      )
+    );
+
   const illustrationByScene =
     new Map(
       illustration.scenes.map(
@@ -210,6 +222,18 @@ export const OriginEpisode: React.FC<
           const illustrationPlan =
             illustrationByScene.get(
               scene.id
+            );
+
+          const sceneIndex =
+            sceneIndexById.get(
+              scene.id
+            ) ?? 0;
+
+          const useCinematicMontage =
+            shouldUseCinematicMontage(
+              project,
+              scene,
+              sceneIndex
             );
 
           const from =
@@ -259,6 +283,12 @@ export const OriginEpisode: React.FC<
                   project={
                     project
                   }
+                />
+              ) : useCinematicMontage ? (
+                <CinematicEvidenceMontageScene
+                  scene={scene}
+                  project={project}
+                  sceneIndex={sceneIndex}
                 />
               ) : executeIllustration &&
                 illustrationPlan ? (

@@ -1,4 +1,5 @@
 import { analyzeRetention } from "./retention";
+import { buildCinematicPresentationReport } from "./cinematic-director";
 import {
   applyVisualAssetRequirements,
   visualRequirementWarnings,
@@ -559,6 +560,15 @@ function visualScore(
 
   warnings.push(
     ...visualRequests
+  );
+
+  const cinematic =
+    buildCinematicPresentationReport(
+      project
+    );
+
+  warnings.push(
+    ...cinematic.warnings
   );
 
   const overall = clamp(
