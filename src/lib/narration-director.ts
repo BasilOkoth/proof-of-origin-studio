@@ -48,7 +48,9 @@ function cleanup(scene: Scene) {
         !/\bsteven\s*\(\d{4}\)/i.test(sentence) &&
         !/\bworld meteorological organization\b/i.test(sentence) &&
         !/urban flooding is significantly differs/i.test(sentence) &&
-        !/this has built up by the fact that/i.test(sentence)
+        !/this has built up by the fact that/i.test(sentence) &&
+        !/rainfall .*decreased from .*jan .* to .*dec/i.test(sentence) &&
+        !/^the evidence indicates that clogged drainage systems\.?$/i.test(sentence)
     );
 
   return {

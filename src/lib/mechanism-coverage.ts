@@ -13,7 +13,10 @@ export type CoverageLayer =
   | "blockage"
   | "maintenance"
   | "development"
-  | "exposure";
+  | "exposure"
+  | "impact"
+  | "response"
+  | "tradeoff";
 
 export type CoverageBeat = {
   layer: CoverageLayer;
@@ -150,6 +153,21 @@ function layerScore(layer: CoverageLayer, value: string) {
       /exposure/, /settlement/, /household/, /people/,
       /damage/, /livelihood/, /road/, /property/, /vehicle/,
     ],
+    impact: [
+      /submerged/, /stuck/, /flooded road/, /flooded vehicle/,
+      /motorist/, /mobility/, /disruption/, /property damage/,
+      /road closure/, /loss/,
+    ],
+    response: [
+      /clearing/, /culvert/, /trench/, /maintenance/, /upgrade/,
+      /drainage improvement/, /stormwater management/, /development control/,
+      /bylaw/, /enforcement/,
+    ],
+    tradeoff: [
+      /trade-off/, /tradeoff/, /development control/, /densification/,
+      /upgrade cost/, /land use/, /planning/, /enforcement/,
+      /maintenance budget/, /infrastructure investment/,
+    ],
   };
 
   return patterns[layer].reduce(
@@ -249,6 +267,33 @@ function transformEvidence(
     return "The local case indicates that development has increased pressure on drainage infrastructure without equivalent upgrades in carrying capacity.";
   }
 
+  if (
+    layer === "impact" &&
+    /submerged vehicle|motorists stuck|flooded road|flooded .*road|floods? .*road/i.test(
+      text
+    )
+  ) {
+    return "The local case documents flooded roads and stranded vehicles, showing how drainage failure can quickly become a mobility and access problem.";
+  }
+
+  if (
+    layer === "response" &&
+    /drainage systems? being cleared|culvert|trench|stormwater management/i.test(
+      text
+    )
+  ) {
+    return "The local evidence records drainage clearing and small infrastructure works, showing that restoring flow and improving capacity are part of the practical response.";
+  }
+
+  if (
+    layer === "tradeoff" &&
+    /development control|densification|planning|land use|drainage upgrade/i.test(
+      text
+    )
+  ) {
+    return "The evidence points to a planning trade-off: continued urban development increases demand on drainage systems, so growth and stormwater capacity have to be managed together.";
+  }
+
   if (isRawAcademic(text)) return "";
 
   if (wordCount(text) <= 30) {
@@ -291,6 +336,18 @@ function layerExplanation(layer: CoverageLayer) {
     exposure: [
       "Water becomes a disaster when it meets exposed people, roads, homes, businesses and public infrastructure.",
       "Flood risk is therefore not only about the physical volume of water; it is also about what lies in the path of that water.",
+    ],
+    impact: [
+      "The consequences become visible when water interrupts movement, damages property or cuts access through the city.",
+      "Flooded roads and stranded vehicles are not separate from the drainage story; they are the social expression of a physical system that has exceeded its effective capacity.",
+    ],
+    response: [
+      "The evidence also points toward practical responses: keeping drainage paths open, restoring blocked sections and increasing capacity where pressure has outgrown the existing network.",
+      "Those measures work best when maintenance is continuous rather than only reactive after flooding has already occurred.",
+    ],
+    tradeoff: [
+      "There is also a planning trade-off. Cities need development, housing and infrastructure, but every new paved surface can change runoff and every new building can add pressure to existing drainage.",
+      "The response is therefore not simply to build more drains, but to coordinate drainage upgrades, land-use control, maintenance and protection of natural flow paths.",
     ],
   };
 
@@ -381,6 +438,9 @@ export function buildMechanismCoveragePlan(
     "maintenance",
     "development",
     "exposure",
+    "impact",
+    "response",
+    "tradeoff",
   ];
 
   const beats = layers.map((layer) =>
@@ -447,6 +507,9 @@ export function sceneCoverageLayers(
     "maintenance",
     "development",
     "exposure",
+    "impact",
+    "response",
+    "tradeoff",
   ] as CoverageLayer[])
     .map((layer) => ({
       layer,
@@ -484,8 +547,14 @@ export function sceneCoverageLayers(
   if (ordinal === 2) {
     return ["blockage", "development"];
   }
-  if (ordinal >= 3) {
+  if (ordinal === 3) {
     return ["maintenance", "exposure"];
+  }
+  if (ordinal === 4) {
+    return ["impact", "response"];
+  }
+  if (ordinal >= 5) {
+    return ["tradeoff"];
   }
 
   return [];

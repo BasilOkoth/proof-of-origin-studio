@@ -327,7 +327,7 @@ function roleAnalysis(role: DocumentarySceneRole) {
       ];
     case "synthesis":
       return [
-        "The strongest explanation connects the trigger, the surface response, the available flow paths, drainage capacity, maintenance and exposure.",
+        "The strongest explanation connects the trigger, the surface response, the available flow paths, drainage capacity, maintenance, exposure and the choices made about how the city develops.",
         "The visible flood is therefore the end of a chain, not the whole explanation.",
       ];
     default:
@@ -348,7 +348,9 @@ function cleanBody(scene: Scene) {
     /\bsteven\s*\(\d{4}\)/i.test(text) ||
     /\bworld meteorological organization\b/i.test(text) ||
     /urban flooding is significantly differs/i.test(text) ||
-    /this has built up by the fact that/i.test(text)
+    /this has built up by the fact that/i.test(text) ||
+    /rainfall .*decreased from .*jan .* to .*dec/i.test(text) ||
+    /clogged drainage systems?\.?$/i.test(text)
   ) {
     return "";
   }
@@ -481,6 +483,9 @@ function composeScene(
     const requiredBeforeBoundary = ([
       "blockage",
       "exposure",
+      "impact",
+      "response",
+      "tradeoff",
     ] as CoverageLayer[]).filter(
       (layer) => !usedLayers.has(layer)
     );
@@ -492,6 +497,8 @@ function composeScene(
         usedLayers
       ),
       "This is where the evidence becomes narrower.",
+      "The most detailed evidence on drainage, paving, blockage and maintenance comes from the South C case study.",
+      "That gives us a well-documented local mechanism, but it does not prove that exactly the same combination of drivers operates in every flood-prone part of Nairobi.",
       ...roleAnalysis(role),
     ];
   } else if (role === "synthesis") {
@@ -503,6 +510,9 @@ function composeScene(
       "maintenance",
       "development",
       "exposure",
+      "impact",
+      "response",
+      "tradeoff",
     ] as CoverageLayer[]).filter(
       (layer) => !usedLayers.has(layer)
     );
