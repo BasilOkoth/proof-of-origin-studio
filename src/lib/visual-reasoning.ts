@@ -60,7 +60,7 @@ function isTrustBoundary(text: string) {
 }
 
 function isMechanism(text: string) {
-  return /what happens after|what turns it into|system|flow|runoff|pathway|path way|cycle|cause|driver|mechanism|process|interact|relationship|after water hits|moves through|where water can go/i.test(
+  return /what happens after|what turns it into|flow path|flow|runoff|pathway|path way|cycle|cause chain|driver|mechanism|process|after water hits|moves through/i.test(
     text
   );
 }
@@ -145,6 +145,56 @@ function chooseVisual(
       evidenceIds:
         scene.factIds,
       confidence: 99,
+    };
+  }
+
+  /*
+   * A strong real-world opening should remain photographic even if the hook
+   * uses words such as system, interaction or cause. Those words describe the
+   * argument, not necessarily the best visual grammar for the first scene.
+   */
+  if (
+    scene.kind === "hook" &&
+    scene.assetId
+  ) {
+    return {
+      kind: "field_evidence",
+      reason:
+        "Production treatment: cinematic full-screen documentary image. Open in the physical world first, then move into diagrams and data as the explanation develops.",
+      evidenceIds: scene.factIds,
+      confidence: 96,
+    };
+  }
+
+  /*
+   * When a scene is explicitly about urban form or maintenance and already has
+   * a relevant real image, keep the physical evidence on screen. The image can
+   * carry explanatory overlays without converting the entire scene into a
+   * systems diagram.
+   */
+  if (
+    scene.assetId &&
+    isUrbanForm(text)
+  ) {
+    return {
+      kind: "field_evidence",
+      reason:
+        "Production treatment: documentary photo with explanatory overlay. Keep the real urban-form image full-screen or near full-screen and annotate only the mechanism that the evidence supports.",
+      evidenceIds: scene.factIds,
+      confidence: 96,
+    };
+  }
+
+  if (
+    scene.assetId &&
+    isMaintenance(text)
+  ) {
+    return {
+      kind: "field_evidence",
+      reason:
+        "Production treatment: documentary maintenance/source visual. Show the real infrastructure, blockage, culvert or clearing image with restrained provenance and subtle camera movement.",
+      evidenceIds: scene.factIds,
+      confidence: 96,
     };
   }
 
@@ -261,36 +311,6 @@ function chooseVisual(
    * Real-world images remain valuable, but their treatment is differentiated
    * by editorial purpose.
    */
-  if (
-    scene.assetId &&
-    isUrbanForm(text)
-  ) {
-    return {
-      kind:
-        "field_evidence",
-      reason:
-        "Production treatment: documentary photo with explanatory overlay. Keep the real urban-form image full-screen or near full-screen and add only the minimum annotation needed to explain infiltration/runoff.",
-      evidenceIds:
-        scene.factIds,
-      confidence: 96,
-    };
-  }
-
-  if (
-    scene.assetId &&
-    isMaintenance(text)
-  ) {
-    return {
-      kind:
-        "field_evidence",
-      reason:
-        "Production treatment: documentary maintenance/source visual. Show the real drainage, blockage, culvert or clearing image with restrained provenance and subtle camera movement.",
-      evidenceIds:
-        scene.factIds,
-      confidence: 96,
-    };
-  }
-
   if (
     scene.assetId
   ) {

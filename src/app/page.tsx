@@ -570,6 +570,43 @@ function assetSceneScore(asset: EvidenceAsset, scene: StudioScene, index: number
   return score;
 }
 
+function shouldPreserveSemanticVisualPlan(scene: StudioScene) {
+  const kind = scene.visualPlan?.kind;
+
+  return (
+    kind === "systems_diagram" ||
+    kind === "source_highlight" ||
+    kind === "data_chart" ||
+    kind === "map_story" ||
+    kind === "comparison" ||
+    kind === "timeline" ||
+    kind === "quote"
+  );
+}
+
+function visualPlanWithAsset(
+  scene: StudioScene,
+  asset: EvidenceAsset,
+  reason: string,
+  confidence: number
+) {
+  if (shouldPreserveSemanticVisualPlan(scene) && scene.visualPlan) {
+    return {
+      ...scene.visualPlan,
+      evidenceIds: scene.visualPlan.evidenceIds || scene.factIds || [],
+      confidence: Math.max(scene.visualPlan.confidence || 0, confidence),
+      reason: `${scene.visualPlan.reason} Supporting visual asset: ${asset.name}.`,
+    };
+  }
+
+  return {
+    kind: "field_evidence" as const,
+    reason,
+    evidenceIds: scene.visualPlan?.evidenceIds || scene.factIds || [],
+    confidence,
+  };
+}
+
 function improveVisualAssetDirector(project: EpisodeProject) {
   if (!project.assets?.length) return project;
 
@@ -598,14 +635,12 @@ function improveVisualAssetDirector(project: EpisodeProject) {
               assignedAsset.sourceLabel ||
               assignedAsset.name,
           } as any),
-          visualPlan: {
-            kind: "field_evidence",
-            reason:
-              scene.visualPlan?.reason ||
-              `Persisted visual evidence restored for this scene from uploaded asset ${assignedAsset.name}.`,
-            evidenceIds: scene.visualPlan?.evidenceIds || scene.factIds || [],
-            confidence: Math.max(90, scene.visualPlan?.confidence || 0),
-          },
+          visualPlan: visualPlanWithAsset(
+            scene,
+            assignedAsset,
+            `Persisted visual evidence restored for this scene from uploaded asset ${assignedAsset.name}.`,
+            90
+          ),
           visualLabels: Array.from(
             new Set([
               ...(scene.visualLabels || []),
@@ -636,12 +671,12 @@ function improveVisualAssetDirector(project: EpisodeProject) {
         assetUrl: candidate.asset.dataUrl,
         assetCaption: candidate.asset.sourceLabel || candidate.asset.name,
       } as any),
-      visualPlan: {
-        kind: "field_evidence",
-        reason: `Uploaded visual evidence classified as ${visualAssetRole(candidate.asset)} matches this scene's visual job.`,
-        evidenceIds: scene.factIds || [],
-        confidence: Math.min(99, Math.max(82, candidate.score)),
-      },
+      visualPlan: visualPlanWithAsset(
+        scene,
+        candidate.asset,
+        `Uploaded visual evidence classified as ${visualAssetRole(candidate.asset)} matches this scene's visual job.`,
+        Math.min(99, Math.max(82, candidate.score))
+      ),
       visualLabels: Array.from(
         new Set([
           ...(scene.visualLabels || []),
