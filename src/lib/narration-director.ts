@@ -8,6 +8,7 @@ import {
 import {
   applyPremiumEnding,
 } from "./premium-ending";
+import { analyzeRetention } from "./retention";
 import type {
   DatasetAnalysis,
   EpisodeProject,
@@ -201,20 +202,17 @@ export function applyNarrationDirector(
     );
   }
 
-  return {
+  const nextProject: EpisodeProject = {
     ...project,
     episode: {
       ...project.episode,
       targetMinutes: project.episode.targetMinutes,
     },
     scenes: finalScenes,
-    retention: project.retention
-      ? {
-          ...project.retention,
-          warnings: Array.from(
-            new Set(directorWarnings)
-          ),
-        }
-      : project.retention,
+  };
+
+  return {
+    ...nextProject,
+    retention: analyzeRetention(nextProject),
   };
 }
