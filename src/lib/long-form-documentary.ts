@@ -35,22 +35,6 @@ const LONG_FORM_MODES = new Set([
   "report",
 ]);
 
-const META_PATTERNS = [
-  /the story is built only from evidence.*?(?:\.|$)/gi,
-  /the evidence card remains visible.*?(?:\.|$)/gi,
-  /the point of the chart is not decoration.*?(?:\.|$)/gi,
-  /the analytical value of this scene.*?(?:\.|$)/gi,
-  /a mechanism is convincing only when the arrows.*?(?:\.|$)/gi,
-  /location is not decoration here.*?(?:\.|$)/gi,
-  /numbers are most useful when they change the question.*?(?:\.|$)/gi,
-  /the chart makes the comparison visible.*?(?:\.|$)/gi,
-  /the chart establishes the measured pattern.*?(?:\.|$)/gi,
-  /the comparison establishes the pattern in the measured data.*?(?:\.|$)/gi,
-  /the map should therefore show where the evidence exists.*?(?:\.|$)/gi,
-  /geography matters because evidence from one place.*?(?:\.|$)/gi,
-  /geography matters because the same process.*?(?:\.|$)/gi,
-];
-
 function clean(value?: string) {
   return (value || "")
     .replace(/\s+/g, " ")
@@ -71,7 +55,7 @@ function sentences(value: string) {
     .filter(Boolean);
 }
 
-function normaliseSentence(value: string) {
+function normalise(value: string) {
   return clean(value)
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s.%-]/gu, "")
@@ -79,23 +63,23 @@ function normaliseSentence(value: string) {
     .trim();
 }
 
-function sentenceTokens(value: string) {
+function tokens(value: string) {
   const stop = new Set([
-    "the", "a", "an", "and", "or", "of", "to", "in", "on",
-    "for", "with", "from", "that", "this", "these", "those",
-    "is", "are", "was", "were", "be", "been", "being", "it",
-    "its", "as", "at", "by", "into", "than", "then", "now",
-    "evidence", "data", "scene", "story", "shows", "show",
+    "the", "a", "an", "and", "or", "of", "to", "in", "on", "for",
+    "with", "from", "that", "this", "these", "those", "is", "are",
+    "was", "were", "be", "been", "being", "it", "its", "as", "at",
+    "by", "into", "than", "then", "now", "evidence", "data", "scene",
+    "story", "shows", "show", "question", "answer", "system",
   ]);
 
-  return normaliseSentence(value)
+  return normalise(value)
     .split(/\s+/)
     .filter((token) => token.length >= 3 && !stop.has(token));
 }
 
 function similarity(a: string, b: string) {
-  const aa = new Set(sentenceTokens(a));
-  const bb = new Set(sentenceTokens(b));
+  const aa = new Set(tokens(a));
+  const bb = new Set(tokens(b));
 
   if (!aa.size || !bb.size) return 0;
 
@@ -110,81 +94,163 @@ function similarity(a: string, b: string) {
 
 function numericFingerprint(value: string) {
   return Array.from(
-    new Set(
-      clean(value)
-        .match(/\b\d+(?:\.\d+)?\b/g) || []
-    )
+    new Set(clean(value).match(/\b\d+(?:\.\d+)?\b/g) || [])
   )
     .sort()
     .join("|");
 }
 
+function naturalQuestion(project: EpisodeProject) {
+  const original = clean(project.episode.question);
+  const title = clean(project.episode.workingTitle);
+
+  if (
+    original &&
+    !/forces behind\s+why\b/i.test(original) &&
+    !/how do the forces behind/i.test(original)
+  ) {
+    return original.replace(/[?.!]+$/, "") + "?";
+  }
+
+  const source = title || original;
+
+  const flood = source.match(/^why\s+(.+?)\s+floods?$/i);
+  if (flood) {
+    return `Why does ${flood[1]} flood so often?`;
+  }
+
+  const keeps = source.match(/^why\s+(.+?)\s+keeps?\s+(.+)$/i);
+  if (keeps) {
+    return `Why does ${keeps[1]} keep ${keeps[2].replace(/[?.!]+$/, "")}?`;
+  }
+
+  if (/^why\b/i.test(source)) {
+    return source.replace(/[?.!]+$/, "") + "?";
+  }
+
+  return original
+    ? original.replace(/[?.!]+$/, "") + "?"
+    : title
+      ? `What is really driving ${title.replace(/[?.!]+$/, "")}?`
+      : "";
+}
+
 function stripProductionLanguage(value: string) {
-  let next = clean(value);
-
-  META_PATTERNS.forEach((pattern) => {
-    next = next.replace(pattern, " ");
-  });
-
-  next = next
-    .replace(
-      /\b(?:the source is|source:)\s+[^.]+\.?/gi,
-      " "
-    )
-    .replace(
-      /\bthe source-backed observation is:\s*/gi,
-      ""
-    )
-    .replace(
-      /\bthe current interpretation is:\s*/gi,
-      ""
-    )
-    .replace(
-      /\bone limitation is explicit:\s*/gi,
-      ""
-    )
-    .replace(
-      /^\s*[a-z]\)\s+/i,
-      ""
-    )
-    .replace(
-      /\b(?:figure|plate|table|map)\s+\d+(?:[-.:]\d+)*:\s*/gi,
-      ""
-    )
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return next;
-}
-
-function readableEvidenceStatement(value: string) {
-  return stripProductionLanguage(value)
-    .replace(
-      /^this has built up by the fact that\s+/i,
-      ""
-    )
-    .replace(
-      /^on top of the storm,\s*/i,
-      ""
-    )
-    .replace(
-      /^urban flooding is significantly differs from rural flooding as\s+/i,
-      ""
-    )
-    .replace(
-      /^apart from\s+/i,
-      ""
-    )
+  return clean(value)
+    .replace(/\b(?:the source is|source:)\s+[^.]+\.?/gi, " ")
+    .replace(/\bthe source-backed observation is:\s*/gi, "")
+    .replace(/\bthe current interpretation is:\s*/gi, "")
+    .replace(/\bone limitation is explicit:\s*/gi, "")
+    .replace(/\bthe story is built only from evidence[^.]*\.?/gi, " ")
+    .replace(/\bthe evidence card remains visible[^.]*\.?/gi, " ")
+    .replace(/\bthe analytical value of this scene[^.]*\.?/gi, " ")
+    .replace(/\ba mechanism is convincing only when the arrows[^.]*\.?/gi, " ")
+    .replace(/\bthe chart makes the comparison visible\.?/gi, " ")
+    .replace(/\bthe point of the chart is not decoration\.?/gi, " ")
+    .replace(/\blocation is not decoration here[^.]*\.?/gi, " ")
+    .replace(/\bnumbers are most useful when they change the question[^.]*\.?/gi, " ")
+    .replace(/\b(?:figure|plate|table|map)\s+\d+(?:[-.:]\d+)*:\s*/gi, "")
+    .replace(/^\s*[a-z]\)\s+/i, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function evidenceForScene(
-  project: EpisodeProject,
-  scene: Scene
-) {
+function looksLikeRawSource(value: string) {
+  const text = clean(value);
+
+  if (!text) return true;
+  if (/^\s*[a-z]\)\s+/i.test(text)) return true;
+  if (/^(?:figure|plate|table|map)\s+\d/i.test(text)) return true;
+  if (/\bsource:\b/i.test(text)) return true;
+  if (wordCount(text) > 42) return true;
+
+  const awkward = [
+    /this has built up by the fact that/i,
+    /urban flooding is significantly differs/i,
+    /another form of .* identified takes place when/i,
+    /apart from the rising of/i,
+    /on top of the storm/i,
+    /secondly,\s*flooding has been seen over time as either/i,
+  ];
+
+  return awkward.some((pattern) => pattern.test(text));
+}
+
+function sentenceScore(value: string) {
+  let score = 0;
+  const count = wordCount(value);
+
+  if (count >= 7 && count <= 28) score += 4;
+  if (count > 28 && count <= 36) score += 2;
+  if (/[.!?]$/.test(value)) score += 1;
+  if (/\d/.test(value)) score += 1;
+  if (looksLikeRawSource(value)) score -= 8;
+
+  return score;
+}
+
+function readableExisting(scene: Scene) {
+  const cleaned = stripProductionLanguage(scene.narration);
+
+  return sentences(cleaned)
+    .filter((sentence) => !looksLikeRawSource(sentence))
+    .sort((a, b) => sentenceScore(b) - sentenceScore(a))
+    .slice(0, 4)
+    .sort(
+      (a, b) =>
+        sentences(cleaned).indexOf(a) -
+        sentences(cleaned).indexOf(b)
+    )
+    .join(" ");
+}
+
+function readableBody(scene: Scene) {
+  const cleaned = stripProductionLanguage(scene.body);
+
+  return sentences(cleaned)
+    .filter((sentence) => !looksLikeRawSource(sentence))
+    .slice(0, 2)
+    .join(" ");
+}
+
+function evidenceForScene(project: EpisodeProject, scene: Scene) {
   const ids = new Set(scene.factIds || []);
   return project.evidence.filter((item) => ids.has(item.id));
+}
+
+function conciseEvidence(
+  project: EpisodeProject,
+  scene: Scene,
+  usedEvidence: Set<string>,
+  kind: "observation" | "limitation"
+) {
+  const candidates = evidenceForScene(project, scene)
+    .filter((item) =>
+      kind === "limitation"
+        ? item.kind === "limitation"
+        : item.kind !== "limitation"
+    )
+    .map((item) => stripProductionLanguage(item.statement))
+    .filter(
+      (text) =>
+        text.length >= 25 &&
+        !looksLikeRawSource(text)
+    );
+
+  for (const text of candidates) {
+    const key = normalise(text);
+    if (usedEvidence.has(key)) continue;
+
+    usedEvidence.add(key);
+
+    if (kind === "limitation") {
+      return `The limitation is that ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+    }
+
+    return `The evidence indicates that ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+  }
+
+  return "";
 }
 
 function roleForScene(
@@ -214,7 +280,7 @@ function roleForScene(
   }
 
   if (
-    /trust boundary|limitation|uncertain|does not prove|not establish|evidence stops|scope/.test(text) ||
+    /trust boundary|limitation|uncertain|does not prove|not establish|scope/.test(text) ||
     scene.kind === "quote"
   ) {
     return "trust_boundary";
@@ -250,15 +316,15 @@ function roleForScene(
 function roleWeight(role: DocumentarySceneRole) {
   const weights: Record<DocumentarySceneRole, number> = {
     hook: 1.05,
-    frame: 0.9,
-    data: 1.0,
-    geography: 0.9,
+    frame: 0.85,
+    data: 0.95,
+    geography: 0.85,
     mechanism: 1.15,
     consequence: 1.0,
-    governance: 1.0,
-    trust_boundary: 0.85,
+    governance: 1.05,
+    trust_boundary: 0.8,
     synthesis: 1.05,
-    closure: 0.65,
+    closure: 0.55,
   };
 
   return weights[role];
@@ -277,16 +343,13 @@ export function documentaryWordsPerMinute(project: EpisodeProject) {
 
 function targetWordCount(project: EpisodeProject) {
   const target = Math.round(
-    project.episode.targetMinutes *
-      documentaryWordsPerMinute(project)
+    project.episode.targetMinutes * documentaryWordsPerMinute(project)
   );
 
   return Math.max(850, Math.min(1800, target));
 }
 
-export function buildLongFormPlan(
-  project: EpisodeProject
-): LongFormPlan {
+export function buildLongFormPlan(project: EpisodeProject): LongFormPlan {
   const targetWords = targetWordCount(project);
   const wordsPerMinute = documentaryWordsPerMinute(project);
 
@@ -295,36 +358,30 @@ export function buildLongFormPlan(
     role: roleForScene(project, scene, index),
   }));
 
-  const weightTotal =
-    rows.reduce(
-      (sum, row) => sum + roleWeight(row.role),
-      0
-    ) || 1;
+  const totalWeight =
+    rows.reduce((sum, row) => sum + roleWeight(row.role), 0) || 1;
 
   const sceneTargets = rows.map((row) => {
     const raw = Math.round(
-      targetWords *
-        (roleWeight(row.role) / weightTotal)
+      targetWords * (roleWeight(row.role) / totalWeight)
     );
 
-    const minimum =
+    const min =
       row.role === "closure" ? 45 :
-      row.role === "trust_boundary" ? 65 :
-      70;
+      row.role === "trust_boundary" ? 60 :
+      65;
 
-    const maximum =
-      row.role === "hook" ? 125 :
-      row.role === "mechanism" ? 155 :
-      row.role === "closure" ? 95 :
-      140;
+    const max =
+      row.role === "hook" ? 115 :
+      row.role === "mechanism" ? 145 :
+      row.role === "governance" ? 140 :
+      row.role === "closure" ? 85 :
+      130;
 
     return {
       sceneId: row.sceneId,
       role: row.role,
-      targetWords: Math.max(
-        minimum,
-        Math.min(maximum, raw)
-      ),
+      targetWords: Math.max(min, Math.min(max, raw)),
     };
   });
 
@@ -345,29 +402,24 @@ function chartSentence(scene: Scene) {
 
   const first = ranked[0];
   const second = ranked[1];
-
   if (!first) return "";
 
   const unit = clean(chart.unit || chart.yLabel || "");
 
-  if (second) {
-    return clean(
-      `${first.label} records the highest plotted value at ${first.value.toLocaleString(
-        undefined,
-        { maximumFractionDigits: 1 }
-      )}${unit ? ` ${unit}` : ""}, followed by ${second.label} at ${second.value.toLocaleString(
-        undefined,
-        { maximumFractionDigits: 1 }
-      )}${unit ? ` ${unit}` : ""}.`
-    );
-  }
-
-  return clean(
-    `${first.label} records the highest plotted value at ${first.value.toLocaleString(
+  if (!second) {
+    return `${first.label} records the highest plotted value at ${first.value.toLocaleString(
       undefined,
       { maximumFractionDigits: 1 }
-    )}${unit ? ` ${unit}` : ""}.`
-  );
+    )}${unit ? ` ${unit}` : ""}.`;
+  }
+
+  return `${first.label} records the highest plotted value at ${first.value.toLocaleString(
+    undefined,
+    { maximumFractionDigits: 1 }
+  )}${unit ? ` ${unit}` : ""}, followed by ${second.label} at ${second.value.toLocaleString(
+    undefined,
+    { maximumFractionDigits: 1 }
+  )}${unit ? ` ${unit}` : ""}.`;
 }
 
 function mapSentence(scene: Scene) {
@@ -378,101 +430,22 @@ function mapSentence(scene: Scene) {
     .map((point) => clean(point.label))
     .filter(Boolean);
 
-  if (!labels.length) return "";
-
-  return `The mapped observations are ${labels.join(", ")}.`;
-}
-
-function evidenceSentence(
-  project: EpisodeProject,
-  scene: Scene,
-  usedEvidence: Set<string>
-) {
-  const candidates = evidenceForScene(project, scene)
-    .filter((item) => item.kind !== "limitation")
-    .map((item) => ({
-      item,
-      text: readableEvidenceStatement(item.statement),
-    }))
-    .filter(({ text }) => text.length >= 35);
-
-  for (const candidate of candidates) {
-    const key = normaliseSentence(candidate.text);
-
-    if (usedEvidence.has(key)) continue;
-
-    usedEvidence.add(key);
-
-    const text = candidate.text
-      .replace(/\bSource\b.*$/i, "")
-      .trim();
-
-    if (!text) continue;
-
-    return clean(
-      `The evidence indicates that ${text.charAt(0).toLowerCase()}${text.slice(1)}`
-    );
-  }
-
-  return "";
-}
-
-function limitationSentence(
-  project: EpisodeProject,
-  scene: Scene,
-  usedEvidence: Set<string>
-) {
-  const limitation = evidenceForScene(project, scene)
-    .filter((item) => item.kind === "limitation")
-    .map((item) => readableEvidenceStatement(item.statement))
-    .find((text) => {
-      const key = normaliseSentence(text);
-      if (!text || usedEvidence.has(key)) return false;
-      usedEvidence.add(key);
-      return true;
-    });
-
-  return limitation
-    ? clean(`The limit is important: ${limitation}`)
+  return labels.length
+    ? `The mapped observations are ${labels.join(", ")}.`
     : "";
 }
 
-function safeExistingNarration(scene: Scene) {
-  const text = stripProductionLanguage(scene.narration);
-
-  return sentences(text)
-    .filter((sentence) => {
-      if (/^(?:source|the source)\b/i.test(sentence)) return false;
-      if (/^(?:plate|figure|table|map)\s+\d/i.test(sentence)) return false;
-      if (/^the story is built/i.test(sentence)) return false;
-      return sentence.length >= 18;
-    })
-    .join(" ");
-}
-
-function sceneBodySentence(scene: Scene) {
-  const body = stripProductionLanguage(scene.body);
-
-  if (!body) return "";
-
-  return sentences(body)
-    .filter((sentence) => sentence.length >= 20)
-    .slice(0, 2)
-    .join(" ");
-}
-
-function editorialBridge(
+function bridge(
   project: EpisodeProject,
-  scene: Scene,
   role: DocumentarySceneRole
 ) {
-  const question = clean(project.episode.question);
-
   switch (role) {
-    case "hook":
+    case "hook": {
+      const question = naturalQuestion(project);
       return question
-        ? `The question is simple to ask: ${question} The answer is not.`
-        : "The visible event is simple to describe. The system behind it is not.";
+        ? `${question} The obvious answer is only the beginning.`
+        : "The visible event is easy to describe. The system behind it is not.";
+    }
 
     case "data":
       return "Start with what can be measured.";
@@ -481,13 +454,13 @@ function editorialBridge(
       return "Then put those measurements back on the map.";
 
     case "mechanism":
-      return "The next question is what happens between the trigger and the outcome.";
+      return "The next step is to follow what happens between the trigger and the outcome.";
 
     case "consequence":
       return "That process matters because its effects are experienced on the ground.";
 
     case "governance":
-      return "But the physical system is only part of the story.";
+      return "The physical system is only part of the story.";
 
     case "trust_boundary":
       return "This is where the evidence becomes narrower.";
@@ -495,8 +468,30 @@ function editorialBridge(
     case "synthesis":
       return "Taken together, the evidence points to a system rather than a single cause.";
 
-    case "closure":
+    default:
       return "";
+  }
+}
+
+function usefulAnalysis(role: DocumentarySceneRole) {
+  switch (role) {
+    case "data":
+      return "Those measurements establish the pattern, but they do not by themselves explain why the outcome occurs.";
+
+    case "geography":
+      return "The map shows where the current observations exist; it should not be read as evidence for places the dataset does not cover.";
+
+    case "mechanism":
+      return "The important point is the pathway: a trigger becomes a larger problem only when conditions along that pathway amplify it.";
+
+    case "governance":
+      return "That means technical capacity and the way the system is maintained or managed have to be considered together.";
+
+    case "trust_boundary":
+      return "That boundary does not weaken the story; it defines how far the conclusion can responsibly travel.";
+
+    case "synthesis":
+      return "The strongest explanation therefore connects the trigger, the pathway, the conditions that amplify it, and the people or places exposed to the result.";
 
     default:
       return "";
@@ -511,41 +506,31 @@ function uniqueSentences(
   const accepted: string[] = [];
 
   for (const candidate of candidates.flatMap(sentences)) {
-    const cleanCandidate = clean(candidate);
-    if (!cleanCandidate) continue;
+    const text = clean(candidate);
+    if (!text || looksLikeRawSource(text)) continue;
 
-    const numberKey = numericFingerprint(cleanCandidate);
+    const duplicate = [...globalSentences, ...accepted].some((existing) => {
+      const score = similarity(existing, text);
+      const threshold =
+        Math.min(wordCount(existing), wordCount(text)) <= 12 ? 0.48 : 0.58;
 
-    const duplicate = [...globalSentences, ...accepted].some(
-      (existing) =>
-        similarity(existing, cleanCandidate) >= 0.68
-    );
+      return score >= threshold;
+    });
 
     if (duplicate) continue;
 
-    if (
-      numberKey &&
-      globalNumbers.has(numberKey) &&
-      /\d/.test(cleanCandidate)
-    ) {
-      continue;
-    }
+    const numeric = numericFingerprint(text);
+    if (numeric && globalNumbers.has(numeric)) continue;
 
-    accepted.push(cleanCandidate);
-
-    if (numberKey) {
-      globalNumbers.add(numberKey);
-    }
+    accepted.push(text);
+    if (numeric) globalNumbers.add(numeric);
   }
 
   globalSentences.push(...accepted);
   return accepted;
 }
 
-function trimToWords(
-  value: string,
-  maxWords: number
-) {
+function trimToWords(value: string, maxWords: number) {
   const parts = sentences(value);
   const kept: string[] = [];
   let count = 0;
@@ -553,17 +538,9 @@ function trimToWords(
   for (const sentence of parts) {
     const length = wordCount(sentence);
 
-    if (
-      kept.length &&
-      count + length > maxWords
-    ) {
-      break;
-    }
+    if (kept.length && count + length > maxWords) break;
 
-    if (
-      !kept.length &&
-      length > maxWords
-    ) {
+    if (!kept.length && length > maxWords) {
       return clean(sentence)
         .split(/\s+/)
         .filter(Boolean)
@@ -589,59 +566,56 @@ function composeScene(
   globalSentences: string[],
   globalNumbers: Set<string>
 ) {
-  const existing = safeExistingNarration(scene);
-  const body = sceneBodySentence(scene);
+  const existing = readableExisting(scene);
+  const body = readableBody(scene);
 
   let candidates: string[] = [];
 
   if (role === "data") {
     candidates = [
-      editorialBridge(project, scene, role),
+      bridge(project, role),
       chartSentence(scene),
-      body,
       existing,
-      "Those measurements establish the pattern, but they do not by themselves explain the mechanism.",
+      body,
+      usefulAnalysis(role),
     ];
   } else if (role === "geography") {
     candidates = [
-      editorialBridge(project, scene, role),
+      bridge(project, role),
       mapSentence(scene),
-      body,
       existing,
-      "The map shows where the current observations exist; it should not be read as evidence for places the dataset does not cover.",
+      body,
+      usefulAnalysis(role),
     ];
   } else if (role === "trust_boundary") {
     candidates = [
-      editorialBridge(project, scene, role),
-      limitationSentence(project, scene, usedEvidence),
-      body,
+      bridge(project, role),
+      conciseEvidence(project, scene, usedEvidence, "limitation"),
       existing,
-      "That boundary does not weaken the story. It defines how far the conclusion can responsibly travel.",
+      body,
+      usefulAnalysis(role),
     ];
   } else if (role === "closure") {
-    candidates = [
-      existing,
-      body,
-    ];
+    candidates = [existing, body];
   } else {
     candidates = [
-      editorialBridge(project, scene, role),
+      bridge(project, role),
       existing,
       body,
-      evidenceSentence(project, scene, usedEvidence),
+      conciseEvidence(project, scene, usedEvidence, "observation"),
+      usefulAnalysis(role),
     ];
   }
 
-  const unique = uniqueSentences(
+  const selected = uniqueSentences(
     candidates.filter(Boolean),
     globalSentences,
     globalNumbers
   );
 
-  const composed = clean(unique.join(" "));
   return trimToWords(
-    composed,
-    Math.max(45, Math.round(targetWords * 1.08))
+    selected.join(" "),
+    Math.max(45, Math.round(targetWords * 1.05))
   );
 }
 
@@ -656,7 +630,7 @@ export function buildGenericLongFormNarration(
   if (!isLongForm) {
     return project.scenes.map((scene) => ({
       ...scene,
-      narration: stripProductionLanguage(scene.narration),
+      narration: readableExisting(scene) || readableBody(scene),
     }));
   }
 
@@ -669,13 +643,13 @@ export function buildGenericLongFormNarration(
   const globalSentences: string[] = [];
   const globalNumbers = new Set<string>();
 
-  return project.scenes.map((scene, index) => {
+  return project.scenes.map((scene) => {
     const target = targetById.get(scene.id);
 
     if (!target) {
       return {
         ...scene,
-        narration: stripProductionLanguage(scene.narration),
+        narration: readableExisting(scene) || readableBody(scene),
       };
     }
 
@@ -693,8 +667,12 @@ export function buildGenericLongFormNarration(
       ...scene,
       narration:
         narration ||
-        stripProductionLanguage(scene.narration) ||
-        stripProductionLanguage(scene.body),
+        readableExisting(scene) ||
+        readableBody(scene),
     };
   });
+}
+
+export function resolvedNarrationQuestion(project: EpisodeProject) {
+  return naturalQuestion(project);
 }

@@ -28,52 +28,19 @@ function spokenUnits(value: string) {
     .replace(/\b%\b/g, " percent");
 }
 
-function finalNarrationCleanup(scene: Scene) {
-  let narration = spokenUnits(scene.narration);
-
-  narration = narration
-    .replace(
-      /\b(?:the source is|source:)\s+[^.]+\.?/gi,
-      " "
-    )
-    .replace(
-      /\bthe source-backed observation is:\s*/gi,
-      ""
-    )
-    .replace(
-      /\bthe story is built only from evidence[^.]*\.?/gi,
-      ""
-    )
-    .replace(
-      /\bthe analytical value of this scene[^.]*\.?/gi,
-      ""
-    )
-    .replace(
-      /\ba mechanism is convincing only when the arrows[^.]*\.?/gi,
-      ""
-    )
-    .replace(
-      /\bthe chart makes the comparison visible\.?/gi,
-      ""
-    )
-    .replace(
-      /\bnow move from description to measurement\.?/gi,
-      ""
-    )
-    .replace(
-      /\blocation is not decoration here[^.]*\.?/gi,
-      ""
-    )
-    .replace(
-      /\b(?:figure|plate|table|map)\s+\d+(?:[-.:]\d+)*:\s*/gi,
-      ""
-    )
-    .replace(/\s+/g, " ")
-    .trim();
-
+function cleanup(scene: Scene) {
   return {
     ...scene,
-    narration,
+    narration: spokenUnits(scene.narration)
+      .replace(/\b(?:the source is|source:)\s+[^.]+\.?/gi, " ")
+      .replace(/\bthe source-backed observation is:\s*/gi, "")
+      .replace(/\bthe story is built only from evidence[^.]*\.?/gi, "")
+      .replace(/\bthe analytical value of this scene[^.]*\.?/gi, "")
+      .replace(/\ba mechanism is convincing only when the arrows[^.]*\.?/gi, "")
+      .replace(/\b(?:figure|plate|table|map)\s+\d+(?:[-.:]\d+)*:\s*/gi, "")
+      .replace(/^\s*[a-z]\)\s+/i, "")
+      .replace(/\s+/g, " ")
+      .trim(),
   };
 }
 
@@ -89,21 +56,16 @@ function removeExactGlobalRepeats(scenes: Scene[]) {
   const seen = new Set<string>();
 
   return scenes.map((scene) => {
-    const parts = clean(scene.narration)
+    const kept = clean(scene.narration)
       .split(/(?<=[.!?])\s+/)
       .map(clean)
-      .filter(Boolean);
-
-    const kept = parts.filter((sentence) => {
-      const key = sentenceKey(sentence);
-
-      if (!key || seen.has(key)) {
-        return false;
-      }
-
-      seen.add(key);
-      return true;
-    });
+      .filter(Boolean)
+      .filter((sentence) => {
+        const key = sentenceKey(sentence);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
 
     return {
       ...scene,
@@ -116,23 +78,19 @@ export function applyNarrationDirector(
   project: EpisodeProject,
   datasetsOverride?: DatasetAnalysis[]
 ): EpisodeProject {
-  /*
-   * The long-form composer is now the only place that builds documentary
-   * narration. Do not separately append chart, map, source or analytical
-   * paragraphs here; that was the main cause of repetition.
-   */
   const composed = buildGenericLongFormNarration(
     project,
     datasetsOverride
-  )
-    .map(finalNarrationCleanup);
+  ).map(cleanup);
 
-  const deduped = removeExactGlobalRepeats(composed);
+  const deduped =
+    removeExactGlobalRepeats(composed);
 
-  const finalScenes = applyPremiumEnding(
-    project,
-    deduped
-  );
+  const finalScenes =
+    applyPremiumEnding(
+      project,
+      deduped
+    );
 
   return {
     ...project,
