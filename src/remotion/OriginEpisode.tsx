@@ -48,9 +48,9 @@ function captionPlacementFor(
   }
 
   /*
-   * Maps and charts often reserve their lower edge for axes, labels or legends.
-   * Move captions upward, but keep them centred so they still feel connected
-   * to the narration rather than becoming a corner badge.
+   * Charts and maps keep narration in the centered lower-third rail.
+   * This avoids the scene title and keeps captions visually connected
+   * to the narration instead of floating over the chart header.
    */
   if (
     scene.map ||
@@ -58,7 +58,7 @@ function captionPlacementFor(
     shotRole === "map" ||
     shotRole === "chart"
   ) {
-    return "upper_center";
+    return "lower_center";
   }
 
   /*
