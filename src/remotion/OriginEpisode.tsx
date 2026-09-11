@@ -14,13 +14,70 @@ import type {
   EpisodeProject,
   Scene,
 } from "@/lib/types";
-import { AnimatedCaptions } from "./Captions";
+import {
+  AnimatedCaptions,
+  type CaptionPlacement,
+} from "./Captions";
 import { EditorialBeatScene } from "./EditorialBeatScene";
 import { IllustrationConceptScene } from "./IllustrationConceptScene";
 import { PremiumOutroScene } from "./PremiumOutroScene";
 import { CinematicEvidenceMontageScene } from "./CinematicEvidenceMontageScene";
 
 const bg = "#070b16";
+
+function captionPlacementFor(
+  scene: Scene | undefined,
+  shotRole: string | undefined
+): CaptionPlacement {
+  if (!scene) {
+    return "bottom_center";
+  }
+
+  /*
+   * Hooks, B-roll and headline-led scenes commonly place their editorial
+   * headline on the left. Keep captions away from that block.
+   */
+  if (
+    scene.kind === "hook" ||
+    shotRole === "broll" ||
+    shotRole === "archive" ||
+    shotRole === "headline"
+  ) {
+    return "bottom_right";
+  }
+
+  /*
+   * Maps and charts often use labels, axes or legends near the bottom.
+   * A compact top-right caption is less likely to cover the evidence.
+   */
+  if (
+    scene.map ||
+    scene.chart ||
+    shotRole === "map" ||
+    shotRole === "chart"
+  ) {
+    return "top_right";
+  }
+
+  /*
+   * Documents frequently place the source object on the right-hand side,
+   * so keep captions on the opposite lower corner.
+   */
+  if (
+    scene.kind === "document" ||
+    scene.kind === "source_highlight" ||
+    scene.kind === "proof_card" ||
+    shotRole === "document"
+  ) {
+    return "bottom_left";
+  }
+
+  /*
+   * Diagrams and explanatory scenes usually reserve the middle of the frame
+   * for nodes/arrows. Keep captions in a consistent bottom safe rail.
+   */
+  return "bottom_center";
+}
 
 function CaptionDirector({
   project,
@@ -57,38 +114,53 @@ function CaptionDirector({
             beat.durationSec
     );
 
+  if (!activeBeat) {
+    return (
+      <AnimatedCaptions
+        track={project.narration}
+        placement="bottom_center"
+      />
+    );
+  }
+
+  const activeScene =
+    project.scenes.find(
+      (scene) =>
+        scene.id ===
+        activeBeat.sceneId
+    );
+
+  /*
+   * The branded outro already carries substantial authored text.
+   * Do not place kinetic narration text over it.
+   */
   if (
-    activeBeat
-      ?.captionAction ===
-    "off"
+    activeScene?.kind ===
+    "cta"
   ) {
     return null;
   }
 
   if (
-    activeBeat
-      ?.captionAction ===
-    "reduced"
+    activeBeat.captionAction ===
+    "off"
   ) {
-    return (
-      <div
-        style={{
-          opacity: 0.52,
-        }}
-      >
-        <AnimatedCaptions
-          track={
-            project.narration
-          }
-        />
-      </div>
-    );
+    return null;
   }
+
+  const placement =
+    captionPlacementFor(
+      activeScene,
+      activeBeat.shotRole
+    );
 
   return (
     <AnimatedCaptions
-      track={
-        project.narration
+      track={project.narration}
+      placement={placement}
+      reduced={
+        activeBeat.captionAction ===
+        "reduced"
       }
     />
   );

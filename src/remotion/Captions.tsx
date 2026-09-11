@@ -12,6 +12,12 @@ import type {
   NarrationWord,
 } from "@/lib/types";
 
+export type CaptionPlacement =
+  | "bottom_center"
+  | "bottom_right"
+  | "bottom_left"
+  | "top_right";
+
 function activeSentence(
   track: NarrationTrack,
   time: number
@@ -23,169 +29,381 @@ function activeSentence(
   );
 }
 
-function fallbackWords(sentence: NarrationSentence): NarrationWord[] {
-  const parts = sentence.text.split(/\s+/).filter(Boolean);
-  const duration = Math.max(0.2, sentence.endSec - sentence.startSec);
-  const perWord = duration / Math.max(1, parts.length);
+function fallbackWords(
+  sentence: NarrationSentence
+): NarrationWord[] {
+  const parts = sentence.text
+    .split(/\s+/)
+    .filter(Boolean);
 
-  return parts.map((text, index) => ({
-    text,
-    startSec: sentence.startSec + index * perWord,
-    endSec: sentence.startSec + (index + 1) * perWord,
-  }));
+  const duration = Math.max(
+    0.2,
+    sentence.endSec -
+      sentence.startSec
+  );
+
+  const perWord =
+    duration /
+    Math.max(1, parts.length);
+
+  return parts.map(
+    (text, index) => ({
+      text,
+      startSec:
+        sentence.startSec +
+        index * perWord,
+      endSec:
+        sentence.startSec +
+        (index + 1) *
+          perWord,
+    })
+  );
+}
+
+function placementStyle(
+  placement: CaptionPlacement
+): React.CSSProperties {
+  switch (placement) {
+    case "bottom_right":
+      return {
+        left: "auto",
+        right: 64,
+        bottom: 54,
+        justifyContent: "flex-end",
+      };
+
+    case "bottom_left":
+      return {
+        left: 64,
+        right: "auto",
+        bottom: 54,
+        justifyContent: "flex-start",
+      };
+
+    case "top_right":
+      return {
+        left: "auto",
+        right: 64,
+        top: 64,
+        bottom: "auto",
+        justifyContent: "flex-end",
+      };
+
+    default:
+      return {
+        left: 64,
+        right: 64,
+        bottom: 54,
+        justifyContent: "center",
+      };
+  }
+}
+
+function captionWidth(
+  placement: CaptionPlacement
+) {
+  if (
+    placement ===
+      "bottom_right" ||
+    placement ===
+      "bottom_left" ||
+    placement ===
+      "top_right"
+  ) {
+    return 760;
+  }
+
+  return 980;
 }
 
 export function AnimatedCaptions({
   track,
+  placement =
+    "bottom_center",
+  reduced = false,
 }: {
   track?: NarrationTrack;
+  placement?: CaptionPlacement;
+  reduced?: boolean;
 }) {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const frame =
+    useCurrentFrame();
 
-  if (!track?.sentences.length) return null;
+  const { fps } =
+    useVideoConfig();
 
-  const time = frame / fps;
-  const sentence = activeSentence(track, time);
+  if (
+    !track?.sentences.length
+  ) {
+    return null;
+  }
 
-  if (!sentence) return null;
+  const time =
+    frame / fps;
+
+  const sentence =
+    activeSentence(
+      track,
+      time
+    );
+
+  if (!sentence) {
+    return null;
+  }
 
   const words =
-    sentence.words?.length > 0
+    sentence.words?.length >
+    0
       ? sentence.words
-      : fallbackWords(sentence);
+      : fallbackWords(
+          sentence
+        );
 
-  let activeIndex = words.findIndex(
-    (word) =>
-      time >= word.startSec - 0.02 &&
-      time <= word.endSec + 0.02
-  );
-
-  if (activeIndex < 0) {
-    activeIndex = words.findLastIndex(
-      (word) => time > word.endSec
+  let activeIndex =
+    words.findIndex(
+      (word) =>
+        time >=
+          word.startSec -
+            0.02 &&
+        time <=
+          word.endSec +
+            0.02
     );
-    activeIndex = Math.max(0, activeIndex);
+
+  if (
+    activeIndex < 0
+  ) {
+    activeIndex =
+      words.findLastIndex(
+        (word) =>
+          time >
+          word.endSec
+      );
+
+    activeIndex =
+      Math.max(
+        0,
+        activeIndex
+      );
   }
 
   /*
-   * Keep subtitle groups short enough to remain inside a true lower-third
-   * safe area. Five words works better than the previous six on long names.
+   * Shorter word groups improve readability and stop captions from becoming
+   * a second headline. Four words is a good documentary rhythm at 1080p.
    */
-  const groupSize = 5;
-  const groupStart =
-    Math.floor(activeIndex / groupSize) * groupSize;
-  const visibleWords = words.slice(
-    groupStart,
-    groupStart + groupSize
-  );
+  const groupSize = 4;
 
-  const sentenceEnter = interpolate(
-    time,
-    [sentence.startSec, sentence.startSec + 0.14],
-    [0, 1],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    }
-  );
+  const groupStart =
+    Math.floor(
+      activeIndex /
+        groupSize
+    ) * groupSize;
+
+  const visibleWords =
+    words.slice(
+      groupStart,
+      groupStart +
+        groupSize
+    );
+
+  const sentenceEnter =
+    interpolate(
+      time,
+      [
+        sentence.startSec,
+        sentence.startSec +
+          0.12,
+      ],
+      [0, 1],
+      {
+        extrapolateLeft:
+          "clamp",
+        extrapolateRight:
+          "clamp",
+      }
+    );
+
+  const baseFontSize =
+    reduced ? 27 : 31;
 
   return (
     <div
       style={{
-        position: "absolute",
-        left: 86,
-        right: 86,
-        bottom: 118,
+        position:
+          "absolute",
         zIndex: 100,
-        display: "flex",
-        justifyContent: "center",
-        pointerEvents: "none",
-        opacity: sentenceEnter,
-        transform: `translateY(${interpolate(
-          sentenceEnter,
-          [0, 1],
-          [18, 0]
-        )}px)`,
+        display:
+          "flex",
+        pointerEvents:
+          "none",
+        opacity:
+          sentenceEnter *
+          (reduced
+            ? 0.72
+            : 1),
+        transform:
+          `translateY(${interpolate(
+            sentenceEnter,
+            [0, 1],
+            [12, 0]
+          )}px)`,
+        ...placementStyle(
+          placement
+        ),
       }}
     >
       <div
         style={{
-          width: "fit-content",
-          maxWidth: 1260,
-          minHeight: 62,
-          padding: "14px 22px 16px",
-          borderRadius: 18,
-          background: "rgba(4,7,15,.82)",
-          border: "1px solid rgba(255,255,255,.105)",
-          boxShadow: "0 16px 50px rgba(0,0,0,.34)",
-          backdropFilter: "blur(12px)",
+          width:
+            "fit-content",
+          maxWidth:
+            captionWidth(
+              placement
+            ),
+          minHeight:
+            reduced
+              ? 50
+              : 56,
+          padding:
+            reduced
+              ? "10px 16px 11px"
+              : "12px 18px 13px",
+          borderRadius:
+            15,
+          background:
+            reduced
+              ? "rgba(4,7,15,.70)"
+              : "rgba(4,7,15,.88)",
+          border:
+            "1px solid rgba(255,255,255,.11)",
+          boxShadow:
+            "0 12px 38px rgba(0,0,0,.34)",
+          backdropFilter:
+            "blur(12px)",
           fontFamily:
             "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "6px 11px",
-          textAlign: "center",
+          display:
+            "flex",
+          justifyContent:
+            placement ===
+              "bottom_left"
+              ? "flex-start"
+              : placement ===
+                  "bottom_right" ||
+                placement ===
+                  "top_right"
+                ? "flex-end"
+                : "center",
+          alignItems:
+            "center",
+          flexWrap:
+            "wrap",
+          gap:
+            "4px 8px",
+          textAlign:
+            placement ===
+              "bottom_left"
+              ? "left"
+              : placement ===
+                  "bottom_right" ||
+                placement ===
+                  "top_right"
+                ? "right"
+                : "center",
         }}
       >
-        {visibleWords.map((word, localIndex) => {
-          const index = groupStart + localIndex;
-          const active =
-            time >= word.startSec - 0.02 &&
-            time <= word.endSec + 0.02;
+        {visibleWords.map(
+          (
+            word,
+            localIndex
+          ) => {
+            const index =
+              groupStart +
+              localIndex;
 
-          const wordFrame = Math.max(
-            0,
-            Math.round((time - word.startSec) * fps)
-          );
+            const active =
+              time >=
+                word.startSec -
+                  0.02 &&
+              time <=
+                word.endSec +
+                  0.02;
 
-          const pop = active
-            ? spring({
-                frame: wordFrame,
-                fps,
-                config: {
-                  damping: 16,
-                  stiffness: 240,
-                },
-              })
-            : 0;
+            const wordFrame =
+              Math.max(
+                0,
+                Math.round(
+                  (time -
+                    word.startSec) *
+                    fps
+                )
+              );
 
-          const completed = index < activeIndex;
+            const pop =
+              active
+                ? spring({
+                    frame:
+                      wordFrame,
+                    fps,
+                    config: {
+                      damping:
+                        17,
+                      stiffness:
+                        220,
+                    },
+                  })
+                : 0;
 
-          return (
-            <span
-              key={`${word.startSec}-${localIndex}`}
-              style={{
-                display: "inline-block",
-                color: active
-                  ? "#55d8ff"
-                  : completed
-                    ? "#f7f9ff"
-                    : "#9faac3",
-                fontSize: 35,
-                lineHeight: 1.08,
-                fontWeight: active ? 950 : 820,
-                letterSpacing: -0.8,
-                transform: `scale(${
-                  active
-                    ? interpolate(
-                        pop,
-                        [0, 1],
-                        [0.92, 1.045]
-                      )
-                    : 1
-                })`,
-                textShadow: active
-                  ? "0 0 24px rgba(85,216,255,.24)"
-                  : "none",
-              }}
-            >
-              {word.text}
-            </span>
-          );
-        })}
+            const completed =
+              index <
+              activeIndex;
+
+            return (
+              <span
+                key={`${word.startSec}-${localIndex}`}
+                style={{
+                  display:
+                    "inline-block",
+                  color:
+                    active
+                      ? "#55d8ff"
+                      : completed
+                        ? "#f7f9ff"
+                        : "#aab4ca",
+                  fontSize:
+                    baseFontSize,
+                  lineHeight:
+                    1.12,
+                  fontWeight:
+                    active
+                      ? 900
+                      : 760,
+                  letterSpacing:
+                    -0.45,
+                  transform:
+                    `scale(${
+                      active
+                        ? interpolate(
+                            pop,
+                            [0, 1],
+                            [
+                              0.95,
+                              1.025,
+                            ]
+                          )
+                        : 1
+                    })`,
+                  textShadow:
+                    active
+                      ? "0 0 18px rgba(85,216,255,.18)"
+                      : "0 2px 8px rgba(0,0,0,.3)",
+                }}
+              >
+                {word.text}
+              </span>
+            );
+          }
+        )}
       </div>
     </div>
   );
