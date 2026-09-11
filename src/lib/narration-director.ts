@@ -1,4 +1,5 @@
 import type { DatasetAnalysis, EpisodeProject, Scene } from "./types";
+import { applyPremiumEnding } from "./premium-ending";
 
 function clean(value?: string) {
   return (value || "")
@@ -516,8 +517,14 @@ export function applyNarrationDirector(
     };
   });
 
+  const premiumScenes =
+    applyPremiumEnding(
+      project,
+      scenes
+    );
+
   return {
     ...project,
-    scenes,
+    scenes: premiumScenes,
   };
 }
