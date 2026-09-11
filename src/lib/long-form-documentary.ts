@@ -564,7 +564,9 @@ function trimToWords(
       !kept.length &&
       length > maxWords
     ) {
-      return words(sentence)
+      return clean(sentence)
+        .split(/\s+/)
+        .filter(Boolean)
         .slice(0, maxWords)
         .join(" ")
         .replace(/[,;:]?$/, ".")
