@@ -50,7 +50,8 @@ function cleanup(scene: Scene) {
         !/urban flooding is significantly differs/i.test(sentence) &&
         !/this has built up by the fact that/i.test(sentence) &&
         !/rainfall .*decreased from .*jan .* to .*dec/i.test(sentence) &&
-        !/^the evidence indicates that clogged drainage systems\.?$/i.test(sentence)
+        !/^the evidence indicates that clogged drainage systems\.?$/i.test(sentence) &&
+        !/^source\s*:/i.test(sentence)
     );
 
   return {

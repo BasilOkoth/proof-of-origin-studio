@@ -311,7 +311,7 @@ function layerExplanation(layer: CoverageLayer) {
     ],
     surface_response: [
       "The first transformation happens at the surface. Soil and other permeable ground can absorb part of the rainfall, while roofs, roads and paved compounds leave more water moving across the surface.",
-      "As the share of sealed ground increases, a larger proportion of rainfall becomes runoff that must be carried by streets, channels, drains or waterways.",
+      "As open ground is replaced by sealed surfaces, a larger share of rainfall becomes runoff that must be carried by streets, channels, drains or waterways.",
     ],
     flow_path: [
       "Runoff still needs somewhere to go. Rivers, natural channels, roadside drains and low points form a network of flow paths through the city.",
@@ -330,8 +330,8 @@ function layerExplanation(layer: CoverageLayer) {
       "Clearing accumulated material, repairing damaged sections and keeping outlets open are therefore part of flood-risk management, not separate from it.",
     ],
     development: [
-      "Urban development changes both sides of the equation: it can increase runoff while also changing the infrastructure expected to carry that runoff.",
-      "Densification, paving and new construction can therefore raise pressure on stormwater systems unless drainage and land-use controls evolve with them.",
+      "Urban development changes both runoff and the infrastructure expected to carry it.",
+      "If densification and paving increase faster than drainage capacity, the pressure on the stormwater network can grow even when rainfall itself has not changed.",
     ],
     exposure: [
       "Water becomes a disaster when it meets exposed people, roads, homes, businesses and public infrastructure.",
@@ -339,15 +339,17 @@ function layerExplanation(layer: CoverageLayer) {
     ],
     impact: [
       "The consequences become visible when water interrupts movement, damages property or cuts access through the city.",
-      "Flooded roads and stranded vehicles are not separate from the drainage story; they are the social expression of a physical system that has exceeded its effective capacity.",
+      "Flooded roads, stranded vehicles and disrupted journeys show the point where a stormwater problem becomes an urban mobility and safety problem.",
+      "At that stage, the cost of flooding is no longer confined to drainage infrastructure; it spreads into access, travel time, property and everyday urban life.",
     ],
     response: [
       "The evidence also points toward practical responses: keeping drainage paths open, restoring blocked sections and increasing capacity where pressure has outgrown the existing network.",
       "Those measures work best when maintenance is continuous rather than only reactive after flooding has already occurred.",
     ],
     tradeoff: [
-      "There is also a planning trade-off. Cities need development, housing and infrastructure, but every new paved surface can change runoff and every new building can add pressure to existing drainage.",
-      "The response is therefore not simply to build more drains, but to coordinate drainage upgrades, land-use control, maintenance and protection of natural flow paths.",
+      "There is also a planning trade-off. Cities need housing, roads and continued development, but each change in land cover can alter runoff and add pressure to existing drainage.",
+      "Maintenance alone cannot solve a structural mismatch if runoff keeps increasing faster than the network is upgraded.",
+      "The response therefore has to combine drainage investment, land-use control, routine maintenance and protection of natural flow paths.",
     ],
   };
 
