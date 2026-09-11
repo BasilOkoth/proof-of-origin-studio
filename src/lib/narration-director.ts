@@ -1,5 +1,6 @@
 import {
   buildGenericLongFormNarration,
+  buildLongFormPlan,
   roleForScene,
 } from "./long-form-documentary";
 import {
@@ -39,6 +40,8 @@ function cleanup(scene: Scene) {
       .replace(/\bthe analytical value of this scene[^.]*\.?/gi, "")
       .replace(/\ba mechanism is convincing only when the arrows[^.]*\.?/gi, "")
       .replace(/\ba strong explanation has to move from the visible event[^.]*\.?/gi, "")
+      .replace(/\bcurrent story-grounded evidence[^.]*\.?/gi, "")
+      .replace(/\bstory-grounded evidence[^.]*\.?/gi, "")
       .replace(/\b(?:figure|plate|table|map)\s+\d+(?:[-.:]\d+)*:\s*/gi, "")
       .replace(/^\s*[a-z]\)\s+/i, "")
       .replace(/\s+/g, " ")
@@ -110,6 +113,25 @@ function conceptualKey(value: string) {
   return "";
 }
 
+function exactSceneLabel(scene: Scene, sentence: string) {
+  const key = (value: string) =>
+    clean(value)
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const candidate = key(sentence);
+
+  return (
+    candidate &&
+    (
+      candidate === key(scene.headline) ||
+      candidate === key(scene.eyebrow)
+    )
+  );
+}
+
 function storyLevelDeduplication(
   project: EpisodeProject,
   scenes: Scene[]
@@ -125,6 +147,15 @@ function storyLevelDeduplication(
       .map(clean)
       .filter(Boolean)
       .filter((sentence) => {
+        if (
+          exactSceneLabel(scene, sentence) ||
+          /current story-grounded evidence|story-grounded evidence|evidence items?|this draft|current story/i.test(
+            sentence
+          )
+        ) {
+          return false;
+        }
+
         const concept = conceptualKey(sentence);
 
         if (
@@ -140,7 +171,7 @@ function storyLevelDeduplication(
           const short =
             Math.min(words(existing).length, words(sentence).length) <= 10;
 
-          return score >= (short ? 0.58 : 0.66);
+          return score >= (short ? 0.6 : 0.7);
         });
 
         if (duplicate) {
@@ -162,46 +193,19 @@ function storyLevelDeduplication(
   });
 }
 
-function removeEmptyNarration(
-  project: EpisodeProject,
-  scenes: Scene[]
-) {
-  return scenes.map((scene, index) => {
-    if (clean(scene.narration)) {
-      return scene;
-    }
-
-    const role = roleForScene(project, scene, index);
-
-    if (role === "closure") {
-      return scene;
-    }
-
-    return {
-      ...scene,
-      narration:
-        clean(scene.body) ||
-        clean(scene.headline),
-    };
-  });
+function narrationWordCount(scenes: Scene[]) {
+  return scenes.reduce(
+    (sum, scene) =>
+      sum +
+      (clean(scene.narration).match(/\S+/g)?.length || 0),
+    0
+  );
 }
 
 export function applyNarrationDirector(
   project: EpisodeProject,
   datasetsOverride?: DatasetAnalysis[]
 ): EpisodeProject {
-  /*
-   * Story-level narration architecture:
-   *
-   * approved evidence + scene purpose + chart/map facts
-   * -> one newly composed narration block per scene
-   * -> global semantic/concept deduplication
-   * -> premium closure
-   *
-   * Legacy scene.narration is deliberately NOT used as a default ingredient.
-   * This prevents old scaffolding, production notes and duplicate transitions
-   * from surviving into the approved voice script.
-   */
   const composed =
     buildGenericLongFormNarration(
       project,
@@ -214,20 +218,48 @@ export function applyNarrationDirector(
       composed
     );
 
-  const complete =
-    removeEmptyNarration(
+  const finalScenes =
+    applyPremiumEnding(
       project,
       deduped
     );
 
-  const finalScenes =
-    applyPremiumEnding(
-      project,
-      complete
-    );
+  const plan = buildLongFormPlan(project);
+  const actualWords = narrationWordCount(finalScenes);
 
+  /*
+   * Keep the original requested duration. The narration route reports
+   * coverage separately, but the director must never silently rewrite
+   * episode.targetMinutes to match a short script.
+   */
   return {
     ...project,
+    episode: {
+      ...project.episode,
+      targetMinutes:
+        project.episode.targetMinutes,
+    },
     scenes: finalScenes,
+    titles: project.titles,
+    publishing: project.publishing,
+    ...(actualWords < plan.targetWords * 0.72
+      ? {
+          retention: project.retention
+            ? {
+                ...project.retention,
+                warnings: Array.from(
+                  new Set([
+                    ...(project.retention.warnings || []),
+                    `Narration coverage is only ${Math.round(
+                      (actualWords /
+                        Math.max(1, plan.targetWords)) *
+                        100
+                    )}% of the requested ${project.episode.targetMinutes}-minute episode. Add more source-backed evidence rather than padding with generic filler.`,
+                  ])
+                ),
+              }
+            : project.retention,
+        }
+      : {}),
   };
 }

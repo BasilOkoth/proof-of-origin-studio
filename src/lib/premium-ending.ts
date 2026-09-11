@@ -18,6 +18,8 @@ function stripWeakCta(text: string) {
       /\b(?:like|share|subscribe)\b[^.?!]*[.?!]?/gi,
       ""
     )
+    .replace(/current story-grounded evidence[^.?!]*[.?!]?/gi, "")
+    .replace(/story-grounded evidence[^.?!]*[.?!]?/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
