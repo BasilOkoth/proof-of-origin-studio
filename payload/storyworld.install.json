@@ -1,9 +1,0 @@
-{
-  "name": "Storyworld Engine",
-  "release": "v1.0-complete",
-  "includes": ["v0.1", "v0.2", "v0.3"],
-  "worlds": ["kamau-will", "217", "sanctuary-7"],
-  "primaryRoute": "/storyworld",
-  "generationRoute": "/storyworld/generate",
-  "installedBy": "install-storyworld-complete-v1.mjs"
-}
