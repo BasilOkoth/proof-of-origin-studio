@@ -3,6 +3,7 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   ArrowRight,
+  Play,
   CheckCircle2,
   Clapperboard,
   Copy,
@@ -90,7 +91,7 @@ export default function StoryworldPage() {
                 fontWeight: 800,
               }}
             >
-              <Sparkles size={15} /> Storyworld Production Engine · V0.1
+              <Sparkles size={15} /> Storyworld Studio · Original IP Production System
             </div>
             <h1
               style={{
@@ -104,8 +105,7 @@ export default function StoryworldPage() {
               Build the world once. Keep the story coherent forever.
             </h1>
             <p style={{ color: "#abb2bd", fontSize: 18, lineHeight: 1.65, maxWidth: 820, margin: 0 }}>
-              Story Bible → Character Vault → Episode Manifest → Shot Prompts → Continuity Gate → Audio Brief → Render Package.
-              The generation models are replaceable. The storyworld memory is not.
+              World → Story → Characters → Shots → Generate → Review → Render. The generation models are replaceable; the storyworld memory, character identity and episode logic are the durable assets.
             </p>
           </div>
 
@@ -130,7 +130,9 @@ export default function StoryworldPage() {
           </div>
         </header>
 
-        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12 }}>
+        <StudioTabs active="Story" />
+
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12, marginTop: 18 }}>
           {storyworlds.map((item) => {
             const selected = item.id === world.id;
             return (
@@ -163,6 +165,7 @@ export default function StoryworldPage() {
         </section>
 
         <section
+          id="story"
           style={{
             marginTop: 18,
             border: "1px solid #272d36",
@@ -182,11 +185,57 @@ export default function StoryworldPage() {
               <span>{world.setting}</span><span>•</span><span>{world.format}</span><span>•</span><span>Episode {pkg.episode.number}</span>
             </div>
             <h2 style={{ fontSize: "clamp(38px,6vw,68px)", margin: "12px 0 4px", letterSpacing: -2.4 }}>{world.title}</h2>
-            <h3 style={{ margin: 0, fontSize: 22, color: accent }}>EP01 · {pkg.episode.title}</h3>
+            <h3 style={{ margin: 0, fontSize: 22, color: accent }}>EP{String(pkg.episode.number).padStart(2, "0")} · {pkg.episode.title}</h3>
             <p style={{ color: "#c4cad3", fontSize: 17, lineHeight: 1.65, maxWidth: 900, marginTop: 18 }}>{world.premise}</p>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 24 }}>
-              <button onClick={rebuild} style={primaryButton(accent)}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))",
+                gap: 12,
+                marginTop: 24,
+                maxWidth: 920,
+              }}
+            >
+              <label style={selectorCard()}>
+                <span style={eyebrow()}>World</span>
+                <select
+                  value={world.id}
+                  onChange={(event) => setWorldId(event.target.value)}
+                  style={selectStyle()}
+                >
+                  {storyworlds.map((item) => (
+                    <option key={item.id} value={item.id}>{item.title}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={selectorCard()}>
+                <span style={eyebrow()}>Episode</span>
+                <select value={pkg.episode.id} onChange={() => undefined} style={selectStyle()}>
+                  <option value={pkg.episode.id}>EP{String(pkg.episode.number).padStart(2, "0")} · {pkg.episode.title}</option>
+                </select>
+                <span style={{ color: "#77818e", fontSize: 11 }}>1 episode currently available in this world</span>
+              </label>
+
+              <div style={selectorCard()}>
+                <span style={eyebrow()}>Status</span>
+                <strong style={{ marginTop: 10, color: "#9ed9ad", fontSize: 18 }}>Ready for production</strong>
+                <span style={{ color: "#77818e", fontSize: 11 }}>{pkg.episode.shots.length} shots · {pkg.episode.runtimeSec}s · {pkg.episode.aspectRatio}</span>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
+              <button
+                onClick={() => {
+                  rebuild();
+                  window.location.assign(`/storyworld/generate?world=${encodeURIComponent(world.id)}&episode=${encodeURIComponent(pkg.episode.id)}`);
+                }}
+                style={primaryButton(accent)}
+              >
+                <Play size={17} fill="currentColor" /> Build Episode
+              </button>
+              <button onClick={rebuild} style={secondaryButton()}>
                 Build production manifest <ArrowRight size={17} />
               </button>
               <button onClick={downloadJson} style={secondaryButton()}>
@@ -213,7 +262,7 @@ export default function StoryworldPage() {
               ))}
             </div>
 
-            <SectionTitle icon={<LockKeyhole size={18} />} title="Character Vault" copy="These identity locks feed every visual prompt. Change them deliberately, never accidentally." />
+            <div id="characters"><SectionTitle icon={<LockKeyhole size={18} />} title="Character Vault" copy="These identity locks feed every visual prompt. Change them deliberately, never accidentally." />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(245px,1fr))", gap: 12 }}>
               {world.characters.map((character) => (
                 <div key={character.id} style={cardStyle()}>
@@ -230,9 +279,9 @@ export default function StoryworldPage() {
                   </ul>
                 </div>
               ))}
-            </div>
+            </div></div>
 
-            <SectionTitle icon={<Clapperboard size={18} />} title="Shot Manifest" copy={`${pkg.episode.shots.length} shots · ${pkg.episode.runtimeSec}s · ${pkg.episode.aspectRatio}. Every shot already carries world and character continuity into its generation prompt.`} />
+            <div id="shots"><SectionTitle icon={<Clapperboard size={18} />} title="Shot Manifest" copy={`${pkg.episode.shots.length} shots · ${pkg.episode.runtimeSec}s · ${pkg.episode.aspectRatio}. Every shot already carries world and character continuity into its generation prompt.`} />
             <div style={{ display: "grid", gap: 10 }}>
               {pkg.episode.shots.map((shot, index) => (
                 <details key={shot.id} style={{ ...cardStyle(), padding: 0, overflow: "hidden" }} open={index < 3}>
@@ -261,9 +310,9 @@ export default function StoryworldPage() {
                   </div>
                 </details>
               ))}
-            </div>
+            </div></div>
 
-            <SectionTitle icon={<ShieldCheck size={18} />} title="Pre-generation Quality Gate" copy="Block structural or continuity problems before spending credits on images, video or voices." />
+            <div id="review"><SectionTitle icon={<ShieldCheck size={18} />} title="Pre-generation Quality Gate" copy="Block structural or continuity problems before spending credits on images, video or voices." />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 10 }}>
               {[
                 ["Hook", pkg.quality.hook],
@@ -289,9 +338,9 @@ export default function StoryworldPage() {
                   <span style={{ color: "#b6bec8", lineHeight: 1.5 }}>{issue.message}</span>
                 </div>
               ))}
-            </div>
+            </div></div>
 
-            <SectionTitle icon={<Volume2 size={18} />} title="Render Handoff" copy="V0 ends at a premium deterministic manifest. Next adapters will turn approved shots into generated assets, voices and a Remotion timeline." />
+            <div id="render"><SectionTitle icon={<Volume2 size={18} />} title="Render Handoff" copy="The episode package now hands approved character locks, shot jobs, audio jobs and timing data into the generation workspace and Remotion render pipeline." />
             <div style={{ ...cardStyle(), borderColor: `${accent}55` }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 14 }}>
                 {[
@@ -305,12 +354,85 @@ export default function StoryworldPage() {
                   "8 · Distribution Analytics",
                 ].map((step) => <div key={step} style={{ color: "#cbd1d9", fontWeight: 700 }}>{step}</div>)}
               </div>
-            </div>
+            </div></div>
           </div>
         </section>
       </div>
     </main>
   );
+}
+
+function StudioTabs({ active }: { active: string }) {
+  const tabs = [
+    ["Story", "/storyworld#story"],
+    ["Characters", "/storyworld#characters"],
+    ["Shots", "/storyworld#shots"],
+    ["Generate", "/storyworld/generate"],
+    ["Review", "/storyworld#review"],
+    ["Render", "/storyworld#render"],
+  ];
+
+  return (
+    <nav
+      aria-label="Storyworld workflow"
+      style={{
+        display: "flex",
+        gap: 8,
+        overflowX: "auto",
+        padding: 7,
+        border: "1px solid #252b34",
+        borderRadius: 999,
+        background: "#0b0e13",
+      }}
+    >
+      {tabs.map(([label, href]) => (
+        <a
+          key={label}
+          href={href}
+          style={{
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+            padding: "10px 15px",
+            borderRadius: 999,
+            fontSize: 13,
+            fontWeight: 850,
+            color: active === label ? "#08090d" : "#aab2bf",
+            background: active === label ? "#f0d595" : "transparent",
+          }}
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+function selectorCard(): CSSProperties {
+  return {
+    minHeight: 104,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    gap: 7,
+    border: "1px solid #2a3039",
+    background: "#0a0d12",
+    borderRadius: 16,
+    padding: "14px 16px",
+  };
+}
+
+function selectStyle(): CSSProperties {
+  return {
+    width: "100%",
+    border: 0,
+    outline: 0,
+    background: "transparent",
+    color: "#f6f3eb",
+    fontSize: 17,
+    fontWeight: 800,
+    padding: 0,
+    cursor: "pointer",
+  };
 }
 
 function SectionTitle({ icon, title, copy }: { icon: ReactNode; title: string; copy: string }) {
