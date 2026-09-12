@@ -1,0 +1,1512 @@
+{
+  "schemaVersion": "storyworld-v0.2",
+  "generatedAt": "2026-09-12T07:14:40.054Z",
+  "sourcePackage": {
+    "world": {
+      "id": "217",
+      "title": "2:17",
+      "subtitle": "A city. A truth. A choice.",
+      "genre": "Climate noir / conspiracy thriller",
+      "format": "60–90 second vertical thriller → premium long-form",
+      "setting": "Nairobi, 2049",
+      "status": "pilot-ready",
+      "seasonQuestion": "Who gets protected when a city cannot protect everyone?",
+      "premise": "A municipal cartographer discovers that Nairobi's flood system is not merely predicting disasters: at exactly 2:17 a.m., it deliberately redirects water toward neighbourhoods the city's priority model considers less valuable.",
+      "visualIdentity": [
+        "recognizable Nairobi evolved into a near-future city",
+        "rain, concrete, expressways, tunnels and restrained civic technology",
+        "cyan infrastructure maps; red only for sacrifice decisions",
+        "avoid generic neon cyberpunk"
+      ],
+      "soundIdentity": [
+        "distant thunder and underground water movement",
+        "hydraulic gates as signature sonic motif",
+        "electrical hum and sudden silence before system reveals"
+      ],
+      "palette": [
+        "#070c12",
+        "#59bfd4",
+        "#d44747",
+        "#9da8b5",
+        "#d7d4c9"
+      ],
+      "characters": [
+        {
+          "id": "amani",
+          "name": "Amani Njeri",
+          "age": 25,
+          "role": "Municipal mapping contractor",
+          "essence": "Analytical, brave and driven by spatial patterns others miss.",
+          "appearance": "Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build.",
+          "wardrobe": "Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.",
+          "voice": "Clear Kenyan English; controlled curiosity that tightens into urgency.",
+          "visualMotifs": [
+            "maps across her face",
+            "rain on glass",
+            "red sector overlays"
+          ],
+          "continuityRules": [
+            "Same rain shell, bag and hair throughout pilot.",
+            "No futuristic costume styling."
+          ]
+        },
+        {
+          "id": "kito",
+          "name": "Kito Mwangi",
+          "age": 29,
+          "role": "Hydraulic engineer",
+          "essence": "Practical, loyal to systems until evidence forces doubt.",
+          "appearance": "Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance.",
+          "wardrobe": "Dark navy technical workwear, rolled sleeves, compact engineering tools.",
+          "voice": "Measured Kenyan English, technically confident until uncertainty enters.",
+          "visualMotifs": [
+            "valves",
+            "gauges",
+            "maintenance corridors"
+          ],
+          "continuityRules": [
+            "Workwear stays functional and understated.",
+            "Avoid sci-fi armour or gadgets."
+          ]
+        },
+        {
+          "id": "mara",
+          "name": "Mara Wekesa",
+          "age": 33,
+          "role": "Investigative journalist",
+          "essence": "Curious, persistent and hungry to prove a story she once could not.",
+          "appearance": "Kenyan woman in her early thirties, natural textured hair, alert expressive eyes.",
+          "wardrobe": "Dark green structured jacket, practical trousers, phone/recorder.",
+          "voice": "Fast, precise Kenyan English with reporter economy.",
+          "visualMotifs": [
+            "archived documents",
+            "phone recordings",
+            "screenshots"
+          ],
+          "continuityRules": [
+            "Reporter tools are practical, not stylized.",
+            "Maintain dark green jacket in pilot references."
+          ]
+        },
+        {
+          "id": "karanja",
+          "name": "Governor Daniel Karanja",
+          "age": 56,
+          "role": "Architect of Resilient Nairobi",
+          "essence": "Charismatic strategist who believes brutal choices can still be moral.",
+          "appearance": "Kenyan man in his fifties, composed, authoritative, charismatic rather than menacing.",
+          "wardrobe": "Minimal stone or charcoal tailoring.",
+          "voice": "Calm, persuasive Kenyan English; never cartoonishly evil.",
+          "visualMotifs": [
+            "glass architecture",
+            "city-wide views",
+            "symmetry"
+          ],
+          "continuityRules": [
+            "Do not code him visually as a villain.",
+            "Keep presentation calm and civic."
+          ]
+        }
+      ]
+    },
+    "episode": {
+      "id": "217-e01",
+      "worldId": "217",
+      "number": 1,
+      "title": "The Map",
+      "runtimeSec": 70,
+      "aspectRatio": "9:16",
+      "episodeQuestion": "How can the city know exactly when Amani's neighbourhood will flood?",
+      "payoff": "Amani proves the historical red zones align with controlled relief gates.",
+      "cliffhanger": "The map is not predicting floods. It is scheduling them.",
+      "firstFrame": "Rain-soaked wristwatch reading 2:17 against a dark Nairobi street while water rises around a curb drain.",
+      "beats": [
+        {
+          "id": "hook",
+          "label": "Tomorrow at 2:17",
+          "startSec": 0,
+          "endSec": 8,
+          "purpose": "State an impossible prediction."
+        },
+        {
+          "id": "map",
+          "label": "To the minute",
+          "startSec": 8,
+          "endSec": 24,
+          "purpose": "Show the anomaly is too precise to be weather forecasting."
+        },
+        {
+          "id": "history",
+          "label": "Pattern",
+          "startSec": 24,
+          "endSec": 46,
+          "purpose": "Turn one anomaly into a repeated system pattern."
+        },
+        {
+          "id": "home",
+          "label": "Her street",
+          "startSec": 46,
+          "endSec": 60,
+          "purpose": "Make the system personal."
+        },
+        {
+          "id": "reversal",
+          "label": "Scheduling",
+          "startSec": 60,
+          "endSec": 70,
+          "purpose": "Reveal human agency behind the flood."
+        }
+      ],
+      "shots": [
+        {
+          "id": "t01",
+          "startSec": 0,
+          "endSec": 4,
+          "label": "2:17",
+          "camera": "macro street-level close-up",
+          "visual": "Rain beads on a dark wristwatch reading 2:17; curb water moves in an unexpected direction.",
+          "purpose": "Immediate mystery image.",
+          "characters": [],
+          "narration": "At 2:17 tomorrow morning, my neighbourhood will flood.",
+          "sound": "Rain, low water movement, distant thunder.",
+          "durationSec": 4,
+          "imagePrompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. No featured character face; prioritize environment and story object continuity. SHOT: Rain beads on a dark wristwatch reading 2:17; curb water moves in an unexpected direction. CAMERA: macro street-level close-up. STORY PURPOSE: Immediate mystery image.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text.",
+          "continuityFingerprint": ""
+        },
+        {
+          "id": "t02",
+          "startSec": 4,
+          "endSec": 8,
+          "label": "Red sector",
+          "camera": "over-shoulder map screen",
+          "visual": "Amani studies a civic map of Nairobi. One district pulses red with RELIEF SECTOR 12 and 02:17.",
+          "purpose": "Attach the impossible time to a system.",
+          "characters": [
+            "amani"
+          ],
+          "onScreenText": [
+            "RELIEF SECTOR 12",
+            "02:17",
+            "EXPECTED DEPTH 1.8 M"
+          ],
+          "sound": "Electrical room hum.",
+          "durationSec": 4,
+          "imagePrompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Amani studies a civic map of Nairobi. One district pulses red with RELIEF SECTOR 12 and 02:17. CAMERA: over-shoulder map screen. STORY PURPOSE: Attach the impossible time to a system.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text.",
+          "continuityFingerprint": "amani | Amani Njeri | 25 | Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. | Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. | Same rain shell, bag and hair throughout pilot. | No futuristic costume styling."
+        },
+        {
+          "id": "t03",
+          "startSec": 8,
+          "endSec": 15,
+          "label": "Moderate rain",
+          "camera": "screen insert then profile",
+          "visual": "Weather forecast shows moderate rain, while Amani compares it to the severe flood depth forecast.",
+          "purpose": "Show contradiction.",
+          "characters": [
+            "amani"
+          ],
+          "dialogue": [
+            {
+              "speaker": "AMANI",
+              "text": "That doesn't make sense.",
+              "delivery": "Quiet analytical disbelief."
+            }
+          ],
+          "sound": "Rain against window.",
+          "durationSec": 7,
+          "imagePrompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Weather forecast shows moderate rain, while Amani compares it to the severe flood depth forecast. CAMERA: screen insert then profile. STORY PURPOSE: Show contradiction.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text.",
+          "continuityFingerprint": "amani | Amani Njeri | 25 | Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. | Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. | Same rain shell, bag and hair throughout pilot. | No futuristic costume styling."
+        },
+        {
+          "id": "t04",
+          "startSec": 15,
+          "endSec": 24,
+          "label": "Kito",
+          "camera": "split visual / call close-ups",
+          "visual": "Amani calls Kito; he is in a hydraulic maintenance space.",
+          "purpose": "Let a trusted engineer offer the normal explanation, then undermine it.",
+          "characters": [
+            "amani",
+            "kito"
+          ],
+          "dialogue": [
+            {
+              "speaker": "KITO",
+              "text": "It's a predictive layer. It shows where flooding might happen.",
+              "delivery": "Routine technical confidence."
+            },
+            {
+              "speaker": "AMANI",
+              "text": "Tomorrow?",
+              "delivery": "Testing him."
+            },
+            {
+              "speaker": "KITO",
+              "text": "Yes.",
+              "delivery": "Matter-of-fact."
+            },
+            {
+              "speaker": "AMANI",
+              "text": "To the minute?",
+              "delivery": "Quiet."
+            }
+          ],
+          "sound": "Call compression, machinery underneath Kito.",
+          "durationSec": 9,
+          "imagePrompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. || Kito Mwangi: Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance. Wardrobe: Dark navy technical workwear, rolled sleeves, compact engineering tools.. SHOT: Amani calls Kito; he is in a hydraulic maintenance space. CAMERA: split visual / call close-ups. STORY PURPOSE: Let a trusted engineer offer the normal explanation, then undermine it.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text.",
+          "continuityFingerprint": "amani | Amani Njeri | 25 | Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. | Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. | Same rain shell, bag and hair throughout pilot. | No futuristic costume styling.\n---\nkito | Kito Mwangi | 29 | Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance. | Dark navy technical workwear, rolled sleeves, compact engineering tools. | Workwear stays functional and understated. | Avoid sci-fi armour or gadgets."
+        },
+        {
+          "id": "t05",
+          "startSec": 24,
+          "endSec": 34,
+          "label": "Archive",
+          "camera": "rapid controlled map montage",
+          "visual": "Amani pulls historical flood maps: April 2047, November 2047, March 2048. Each red sector matches an actual flood record.",
+          "purpose": "Establish repeated pattern, not coincidence.",
+          "characters": [
+            "amani"
+          ],
+          "onScreenText": [
+            "APR 2047",
+            "NOV 2047",
+            "MAR 2048"
+          ],
+          "sound": "Subtle rhythmic data ticks, no beat.",
+          "durationSec": 10,
+          "imagePrompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Amani pulls historical flood maps: April 2047, November 2047, March 2048. Each red sector matches an actual flood record. CAMERA: rapid controlled map montage. STORY PURPOSE: Establish repeated pattern, not coincidence.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text.",
+          "continuityFingerprint": "amani | Amani Njeri | 25 | Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. | Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. | Same rain shell, bag and hair throughout pilot. | No futuristic costume styling."
+        },
+        {
+          "id": "t06",
+          "startSec": 34,
+          "endSec": 46,
+          "label": "Infrastructure overlay",
+          "camera": "top-down digital map animation",
+          "visual": "She overlays stormwater infrastructure. Every flooded district sits downstream of a controlled relief gate.",
+          "purpose": "Connect outcome to controllable infrastructure.",
+          "characters": [
+            "amani"
+          ],
+          "sound": "Hydraulic motif begins quietly.",
+          "durationSec": 12,
+          "imagePrompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: She overlays stormwater infrastructure. Every flooded district sits downstream of a controlled relief gate. CAMERA: top-down digital map animation. STORY PURPOSE: Connect outcome to controllable infrastructure.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text.",
+          "continuityFingerprint": "amani | Amani Njeri | 25 | Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. | Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. | Same rain shell, bag and hair throughout pilot. | No futuristic costume styling."
+        },
+        {
+          "id": "t07",
+          "startSec": 46,
+          "endSec": 55,
+          "label": "Her building",
+          "camera": "screen to face rack focus",
+          "visual": "Amani zooms into tomorrow's red zone until her own street and building number appear.",
+          "purpose": "Make abstract system personally dangerous.",
+          "characters": [
+            "amani"
+          ],
+          "sound": "Rain louder, room tone falls away.",
+          "durationSec": 9,
+          "imagePrompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Amani zooms into tomorrow's red zone until her own street and building number appear. CAMERA: screen to face rack focus. STORY PURPOSE: Make abstract system personally dangerous.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text.",
+          "continuityFingerprint": "amani | Amani Njeri | 25 | Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. | Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. | Same rain shell, bag and hair throughout pilot. | No futuristic costume styling."
+        },
+        {
+          "id": "t08",
+          "startSec": 55,
+          "endSec": 60,
+          "label": "The question",
+          "camera": "tight profile",
+          "visual": "Red map light crosses Amani's face.",
+          "purpose": "Set up the final inference.",
+          "characters": [
+            "amani",
+            "kito"
+          ],
+          "dialogue": [
+            {
+              "speaker": "AMANI",
+              "text": "Kito…",
+              "delivery": "Recognition, not panic."
+            },
+            {
+              "speaker": "KITO",
+              "text": "What?",
+              "delivery": "Now concerned."
+            }
+          ],
+          "sound": "Hydraulic metal strain begins.",
+          "durationSec": 5,
+          "imagePrompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. || Kito Mwangi: Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance. Wardrobe: Dark navy technical workwear, rolled sleeves, compact engineering tools.. SHOT: Red map light crosses Amani's face. CAMERA: tight profile. STORY PURPOSE: Set up the final inference.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text.",
+          "continuityFingerprint": "amani | Amani Njeri | 25 | Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. | Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. | Same rain shell, bag and hair throughout pilot. | No futuristic costume styling.\n---\nkito | Kito Mwangi | 29 | Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance. | Dark navy technical workwear, rolled sleeves, compact engineering tools. | Workwear stays functional and understated. | Avoid sci-fi armour or gadgets."
+        },
+        {
+          "id": "t09",
+          "startSec": 60,
+          "endSec": 67,
+          "label": "The gate",
+          "camera": "underground cinematic reveal",
+          "visual": "Somewhere beneath Nairobi, a huge relief gate begins to open. Water changes direction.",
+          "purpose": "Reveal physical agency before verbal conclusion.",
+          "characters": [],
+          "sound": "Deep hydraulic release and rushing water.",
+          "durationSec": 7,
+          "imagePrompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. No featured character face; prioritize environment and story object continuity. SHOT: Somewhere beneath Nairobi, a huge relief gate begins to open. Water changes direction. CAMERA: underground cinematic reveal. STORY PURPOSE: Reveal physical agency before verbal conclusion.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text.",
+          "continuityFingerprint": ""
+        },
+        {
+          "id": "t10",
+          "startSec": 67,
+          "endSec": 70,
+          "label": "Scheduling",
+          "camera": "black title lock",
+          "visual": "Black after a final flash of the red map.",
+          "purpose": "State the franchise thesis as cliffhanger.",
+          "characters": [
+            "amani"
+          ],
+          "narration": "The map isn't predicting the floods. It's scheduling them.",
+          "onScreenText": [
+            "2:17",
+            "EPISODE 1 — THE MAP"
+          ],
+          "sound": "Hard cut after the word 'them'.",
+          "durationSec": 3,
+          "imagePrompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Black after a final flash of the red map. CAMERA: black title lock. STORY PURPOSE: State the franchise thesis as cliffhanger.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text.",
+          "continuityFingerprint": "amani | Amani Njeri | 25 | Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. | Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. | Same rain shell, bag and hair throughout pilot. | No futuristic costume styling."
+        }
+      ],
+      "musicDirection": "Sparse low synth texture beneath real rain and hydraulic machinery. The infrastructure itself is the score.",
+      "subtitleDirection": "Compact white captions with occasional cyan system terms and red only for sacrifice-zone data.",
+      "platformCaption": "Amani discovers tomorrow's flood map. The strange part is not where the water will go. It is that the city knows the exact minute.",
+      "pinnedComment": "If a flood-control system could save most of a city only by sacrificing one neighbourhood, who should be allowed to make that decision?"
+    },
+    "quality": {
+      "score": 94,
+      "hook": 93,
+      "clarity": 94,
+      "progress": 95,
+      "payoff": 92,
+      "cliffhanger": 96,
+      "continuity": 100,
+      "visual": 90,
+      "sound": 96,
+      "issues": [
+        {
+          "severity": "info",
+          "message": "No structural blockers detected. Human editorial approval is still required before generation/render."
+        }
+      ]
+    },
+    "generatedAt": "2026-09-12T07:14:40.053Z",
+    "schemaVersion": "storyworld-v0.1"
+  },
+  "characterReferences": [
+    {
+      "characterId": "amani",
+      "characterName": "Amani Njeri",
+      "faceLockKey": "amani::25::Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build.::Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.",
+      "referencePath": "public/storyworld/217/217-e01/characters/amani-reference.png",
+      "approved": false,
+      "prompt": "Create a premium photorealistic character reference sheet for a prestige African drama. SERIES: 2:17. SETTING: Nairobi, 2049. CHARACTER: Amani Njeri, age 25, Municipal mapping contractor. APPEARANCE LOCK: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. WARDROBE LOCK: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. ESSENCE: Analytical, brave and driven by spatial patterns others miss. VISUAL MOTIFS: maps across her face; rain on glass; red sector overlays. CONTINUITY RULES: Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Sheet must include a clean front portrait, three-quarter portrait, neutral profile, full-body wardrobe reference, and two subtle emotional expressions. Natural skin texture, believable Kenyan/East African casting, restrained styling, no beauty-filter look, no celebrity resemblance, no text artifacts on face or clothing. The reference is an identity lock for later shots, so facial geometry, hairstyle, skin tone, apparent age, proportions and wardrobe must be unambiguous.",
+      "notes": [
+        "Approve this identity before generating any shot that contains the character.",
+        "Same rain shell, bag and hair throughout pilot.",
+        "No futuristic costume styling."
+      ]
+    },
+    {
+      "characterId": "kito",
+      "characterName": "Kito Mwangi",
+      "faceLockKey": "kito::29::Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance.::Dark navy technical workwear, rolled sleeves, compact engineering tools.",
+      "referencePath": "public/storyworld/217/217-e01/characters/kito-reference.png",
+      "approved": false,
+      "prompt": "Create a premium photorealistic character reference sheet for a prestige African drama. SERIES: 2:17. SETTING: Nairobi, 2049. CHARACTER: Kito Mwangi, age 29, Hydraulic engineer. APPEARANCE LOCK: Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance. WARDROBE LOCK: Dark navy technical workwear, rolled sleeves, compact engineering tools. ESSENCE: Practical, loyal to systems until evidence forces doubt. VISUAL MOTIFS: valves; gauges; maintenance corridors. CONTINUITY RULES: Workwear stays functional and understated. Avoid sci-fi armour or gadgets. Sheet must include a clean front portrait, three-quarter portrait, neutral profile, full-body wardrobe reference, and two subtle emotional expressions. Natural skin texture, believable Kenyan/East African casting, restrained styling, no beauty-filter look, no celebrity resemblance, no text artifacts on face or clothing. The reference is an identity lock for later shots, so facial geometry, hairstyle, skin tone, apparent age, proportions and wardrobe must be unambiguous.",
+      "notes": [
+        "Approve this identity before generating any shot that contains the character.",
+        "Workwear stays functional and understated.",
+        "Avoid sci-fi armour or gadgets."
+      ]
+    },
+    {
+      "characterId": "mara",
+      "characterName": "Mara Wekesa",
+      "faceLockKey": "mara::33::Kenyan woman in her early thirties, natural textured hair, alert expressive eyes.::Dark green structured jacket, practical trousers, phone/recorder.",
+      "referencePath": "public/storyworld/217/217-e01/characters/mara-reference.png",
+      "approved": false,
+      "prompt": "Create a premium photorealistic character reference sheet for a prestige African drama. SERIES: 2:17. SETTING: Nairobi, 2049. CHARACTER: Mara Wekesa, age 33, Investigative journalist. APPEARANCE LOCK: Kenyan woman in her early thirties, natural textured hair, alert expressive eyes. WARDROBE LOCK: Dark green structured jacket, practical trousers, phone/recorder. ESSENCE: Curious, persistent and hungry to prove a story she once could not. VISUAL MOTIFS: archived documents; phone recordings; screenshots. CONTINUITY RULES: Reporter tools are practical, not stylized. Maintain dark green jacket in pilot references. Sheet must include a clean front portrait, three-quarter portrait, neutral profile, full-body wardrobe reference, and two subtle emotional expressions. Natural skin texture, believable Kenyan/East African casting, restrained styling, no beauty-filter look, no celebrity resemblance, no text artifacts on face or clothing. The reference is an identity lock for later shots, so facial geometry, hairstyle, skin tone, apparent age, proportions and wardrobe must be unambiguous.",
+      "notes": [
+        "Approve this identity before generating any shot that contains the character.",
+        "Reporter tools are practical, not stylized.",
+        "Maintain dark green jacket in pilot references."
+      ]
+    },
+    {
+      "characterId": "karanja",
+      "characterName": "Governor Daniel Karanja",
+      "faceLockKey": "karanja::56::Kenyan man in his fifties, composed, authoritative, charismatic rather than menacing.::Minimal stone or charcoal tailoring.",
+      "referencePath": "public/storyworld/217/217-e01/characters/karanja-reference.png",
+      "approved": false,
+      "prompt": "Create a premium photorealistic character reference sheet for a prestige African drama. SERIES: 2:17. SETTING: Nairobi, 2049. CHARACTER: Governor Daniel Karanja, age 56, Architect of Resilient Nairobi. APPEARANCE LOCK: Kenyan man in his fifties, composed, authoritative, charismatic rather than menacing. WARDROBE LOCK: Minimal stone or charcoal tailoring. ESSENCE: Charismatic strategist who believes brutal choices can still be moral. VISUAL MOTIFS: glass architecture; city-wide views; symmetry. CONTINUITY RULES: Do not code him visually as a villain. Keep presentation calm and civic. Sheet must include a clean front portrait, three-quarter portrait, neutral profile, full-body wardrobe reference, and two subtle emotional expressions. Natural skin texture, believable Kenyan/East African casting, restrained styling, no beauty-filter look, no celebrity resemblance, no text artifacts on face or clothing. The reference is an identity lock for later shots, so facial geometry, hairstyle, skin tone, apparent age, proportions and wardrobe must be unambiguous.",
+      "notes": [
+        "Approve this identity before generating any shot that contains the character.",
+        "Do not code him visually as a villain.",
+        "Keep presentation calm and civic."
+      ]
+    }
+  ],
+  "jobs": [
+    {
+      "id": "character-amani",
+      "kind": "character-reference",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Create a premium photorealistic character reference sheet for a prestige African drama. SERIES: 2:17. SETTING: Nairobi, 2049. CHARACTER: Amani Njeri, age 25, Municipal mapping contractor. APPEARANCE LOCK: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. WARDROBE LOCK: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. ESSENCE: Analytical, brave and driven by spatial patterns others miss. VISUAL MOTIFS: maps across her face; rain on glass; red sector overlays. CONTINUITY RULES: Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Sheet must include a clean front portrait, three-quarter portrait, neutral profile, full-body wardrobe reference, and two subtle emotional expressions. Natural skin texture, believable Kenyan/East African casting, restrained styling, no beauty-filter look, no celebrity resemblance, no text artifacts on face or clothing. The reference is an identity lock for later shots, so facial geometry, hairstyle, skin tone, apparent age, proportions and wardrobe must be unambiguous.",
+      "outputPath": "public/storyworld/217/217-e01/characters/amani-reference.png",
+      "characterIds": [
+        "amani"
+      ]
+    },
+    {
+      "id": "character-kito",
+      "kind": "character-reference",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Create a premium photorealistic character reference sheet for a prestige African drama. SERIES: 2:17. SETTING: Nairobi, 2049. CHARACTER: Kito Mwangi, age 29, Hydraulic engineer. APPEARANCE LOCK: Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance. WARDROBE LOCK: Dark navy technical workwear, rolled sleeves, compact engineering tools. ESSENCE: Practical, loyal to systems until evidence forces doubt. VISUAL MOTIFS: valves; gauges; maintenance corridors. CONTINUITY RULES: Workwear stays functional and understated. Avoid sci-fi armour or gadgets. Sheet must include a clean front portrait, three-quarter portrait, neutral profile, full-body wardrobe reference, and two subtle emotional expressions. Natural skin texture, believable Kenyan/East African casting, restrained styling, no beauty-filter look, no celebrity resemblance, no text artifacts on face or clothing. The reference is an identity lock for later shots, so facial geometry, hairstyle, skin tone, apparent age, proportions and wardrobe must be unambiguous.",
+      "outputPath": "public/storyworld/217/217-e01/characters/kito-reference.png",
+      "characterIds": [
+        "kito"
+      ]
+    },
+    {
+      "id": "character-mara",
+      "kind": "character-reference",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Create a premium photorealistic character reference sheet for a prestige African drama. SERIES: 2:17. SETTING: Nairobi, 2049. CHARACTER: Mara Wekesa, age 33, Investigative journalist. APPEARANCE LOCK: Kenyan woman in her early thirties, natural textured hair, alert expressive eyes. WARDROBE LOCK: Dark green structured jacket, practical trousers, phone/recorder. ESSENCE: Curious, persistent and hungry to prove a story she once could not. VISUAL MOTIFS: archived documents; phone recordings; screenshots. CONTINUITY RULES: Reporter tools are practical, not stylized. Maintain dark green jacket in pilot references. Sheet must include a clean front portrait, three-quarter portrait, neutral profile, full-body wardrobe reference, and two subtle emotional expressions. Natural skin texture, believable Kenyan/East African casting, restrained styling, no beauty-filter look, no celebrity resemblance, no text artifacts on face or clothing. The reference is an identity lock for later shots, so facial geometry, hairstyle, skin tone, apparent age, proportions and wardrobe must be unambiguous.",
+      "outputPath": "public/storyworld/217/217-e01/characters/mara-reference.png",
+      "characterIds": [
+        "mara"
+      ]
+    },
+    {
+      "id": "character-karanja",
+      "kind": "character-reference",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Create a premium photorealistic character reference sheet for a prestige African drama. SERIES: 2:17. SETTING: Nairobi, 2049. CHARACTER: Governor Daniel Karanja, age 56, Architect of Resilient Nairobi. APPEARANCE LOCK: Kenyan man in his fifties, composed, authoritative, charismatic rather than menacing. WARDROBE LOCK: Minimal stone or charcoal tailoring. ESSENCE: Charismatic strategist who believes brutal choices can still be moral. VISUAL MOTIFS: glass architecture; city-wide views; symmetry. CONTINUITY RULES: Do not code him visually as a villain. Keep presentation calm and civic. Sheet must include a clean front portrait, three-quarter portrait, neutral profile, full-body wardrobe reference, and two subtle emotional expressions. Natural skin texture, believable Kenyan/East African casting, restrained styling, no beauty-filter look, no celebrity resemblance, no text artifacts on face or clothing. The reference is an identity lock for later shots, so facial geometry, hairstyle, skin tone, apparent age, proportions and wardrobe must be unambiguous.",
+      "outputPath": "public/storyworld/217/217-e01/characters/karanja-reference.png",
+      "characterIds": [
+        "karanja"
+      ]
+    },
+    {
+      "id": "image-t01",
+      "kind": "shot-image",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. No featured character face; prioritize environment and story object continuity. SHOT: Rain beads on a dark wristwatch reading 2:17; curb water moves in an unexpected direction. CAMERA: macro street-level close-up. STORY PURPOSE: Immediate mystery image.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: No recurring character face in this shot. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t01.png",
+      "shotId": "t01",
+      "characterIds": [],
+      "metadata": {
+        "durationSec": 4,
+        "camera": "macro street-level close-up",
+        "motionInstruction": "subtle 2.5D push-in, realistic focus breathing, no morphing"
+      }
+    },
+    {
+      "id": "video-t01",
+      "kind": "shot-video",
+      "provider": "video-provider",
+      "status": "blocked",
+      "blockedBy": [
+        "image-t01"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. No featured character face; prioritize environment and story object continuity. SHOT: Rain beads on a dark wristwatch reading 2:17; curb water moves in an unexpected direction. CAMERA: macro street-level close-up. STORY PURPOSE: Immediate mystery image.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: No recurring character face in this shot. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale. MOTION: subtle 2.5D push-in, realistic focus breathing, no morphing. Keep exact identity and geometry from the approved still/reference; avoid face drift, limb morphing, flicker, warped hands or changing wardrobe.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t01.mp4",
+      "shotId": "t01",
+      "characterIds": [],
+      "metadata": {
+        "durationSec": 4,
+        "camera": "macro street-level close-up"
+      }
+    },
+    {
+      "id": "image-t02",
+      "kind": "shot-image",
+      "provider": "manual",
+      "status": "blocked",
+      "blockedBy": [
+        "character-amani"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Amani studies a civic map of Nairobi. One district pulses red with RELIEF SECTOR 12 and 02:17. CAMERA: over-shoulder map screen. STORY PURPOSE: Attach the impossible time to a system.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t02.png",
+      "shotId": "t02",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 4,
+        "camera": "over-shoulder map screen",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing"
+      }
+    },
+    {
+      "id": "video-t02",
+      "kind": "shot-video",
+      "provider": "video-provider",
+      "status": "blocked",
+      "blockedBy": [
+        "image-t02"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Amani studies a civic map of Nairobi. One district pulses red with RELIEF SECTOR 12 and 02:17. CAMERA: over-shoulder map screen. STORY PURPOSE: Attach the impossible time to a system.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale. MOTION: restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing. Keep exact identity and geometry from the approved still/reference; avoid face drift, limb morphing, flicker, warped hands or changing wardrobe.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t02.mp4",
+      "shotId": "t02",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 4,
+        "camera": "over-shoulder map screen"
+      }
+    },
+    {
+      "id": "image-t03",
+      "kind": "shot-image",
+      "provider": "manual",
+      "status": "blocked",
+      "blockedBy": [
+        "character-amani"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Weather forecast shows moderate rain, while Amani compares it to the severe flood depth forecast. CAMERA: screen insert then profile. STORY PURPOSE: Show contradiction.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t03.png",
+      "shotId": "t03",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 7,
+        "camera": "screen insert then profile",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing"
+      }
+    },
+    {
+      "id": "video-t03",
+      "kind": "shot-video",
+      "provider": "video-provider",
+      "status": "blocked",
+      "blockedBy": [
+        "image-t03"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Weather forecast shows moderate rain, while Amani compares it to the severe flood depth forecast. CAMERA: screen insert then profile. STORY PURPOSE: Show contradiction.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale. MOTION: restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing. Keep exact identity and geometry from the approved still/reference; avoid face drift, limb morphing, flicker, warped hands or changing wardrobe.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t03.mp4",
+      "shotId": "t03",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 7,
+        "camera": "screen insert then profile"
+      }
+    },
+    {
+      "id": "image-t04",
+      "kind": "shot-image",
+      "provider": "manual",
+      "status": "blocked",
+      "blockedBy": [
+        "character-amani",
+        "character-kito"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. || Kito Mwangi: Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance. Wardrobe: Dark navy technical workwear, rolled sleeves, compact engineering tools.. SHOT: Amani calls Kito; he is in a hydraulic maintenance space. CAMERA: split visual / call close-ups. STORY PURPOSE: Let a trusted engineer offer the normal explanation, then undermine it.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. || Kito Mwangi: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Workwear stays functional and understated. Avoid sci-fi armour or gadgets. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t04.png",
+      "shotId": "t04",
+      "characterIds": [
+        "amani",
+        "kito"
+      ],
+      "metadata": {
+        "durationSec": 9,
+        "camera": "split visual / call close-ups",
+        "motionInstruction": "very subtle breathing and eye movement, micro push-in, no face drift"
+      }
+    },
+    {
+      "id": "video-t04",
+      "kind": "shot-video",
+      "provider": "video-provider",
+      "status": "blocked",
+      "blockedBy": [
+        "image-t04"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. || Kito Mwangi: Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance. Wardrobe: Dark navy technical workwear, rolled sleeves, compact engineering tools.. SHOT: Amani calls Kito; he is in a hydraulic maintenance space. CAMERA: split visual / call close-ups. STORY PURPOSE: Let a trusted engineer offer the normal explanation, then undermine it.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. || Kito Mwangi: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Workwear stays functional and understated. Avoid sci-fi armour or gadgets. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale. MOTION: very subtle breathing and eye movement, micro push-in, no face drift. Keep exact identity and geometry from the approved still/reference; avoid face drift, limb morphing, flicker, warped hands or changing wardrobe.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t04.mp4",
+      "shotId": "t04",
+      "characterIds": [
+        "amani",
+        "kito"
+      ],
+      "metadata": {
+        "durationSec": 9,
+        "camera": "split visual / call close-ups"
+      }
+    },
+    {
+      "id": "image-t05",
+      "kind": "shot-image",
+      "provider": "manual",
+      "status": "blocked",
+      "blockedBy": [
+        "character-amani"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Amani pulls historical flood maps: April 2047, November 2047, March 2048. Each red sector matches an actual flood record. CAMERA: rapid controlled map montage. STORY PURPOSE: Establish repeated pattern, not coincidence.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t05.png",
+      "shotId": "t05",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 10,
+        "camera": "rapid controlled map montage",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing"
+      }
+    },
+    {
+      "id": "video-t05",
+      "kind": "shot-video",
+      "provider": "video-provider",
+      "status": "blocked",
+      "blockedBy": [
+        "image-t05"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Amani pulls historical flood maps: April 2047, November 2047, March 2048. Each red sector matches an actual flood record. CAMERA: rapid controlled map montage. STORY PURPOSE: Establish repeated pattern, not coincidence.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale. MOTION: restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing. Keep exact identity and geometry from the approved still/reference; avoid face drift, limb morphing, flicker, warped hands or changing wardrobe.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t05.mp4",
+      "shotId": "t05",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 10,
+        "camera": "rapid controlled map montage"
+      }
+    },
+    {
+      "id": "image-t06",
+      "kind": "shot-image",
+      "provider": "manual",
+      "status": "blocked",
+      "blockedBy": [
+        "character-amani"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: She overlays stormwater infrastructure. Every flooded district sits downstream of a controlled relief gate. CAMERA: top-down digital map animation. STORY PURPOSE: Connect outcome to controllable infrastructure.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t06.png",
+      "shotId": "t06",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 12,
+        "camera": "top-down digital map animation",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing"
+      }
+    },
+    {
+      "id": "video-t06",
+      "kind": "shot-video",
+      "provider": "video-provider",
+      "status": "blocked",
+      "blockedBy": [
+        "image-t06"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: She overlays stormwater infrastructure. Every flooded district sits downstream of a controlled relief gate. CAMERA: top-down digital map animation. STORY PURPOSE: Connect outcome to controllable infrastructure.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale. MOTION: restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing. Keep exact identity and geometry from the approved still/reference; avoid face drift, limb morphing, flicker, warped hands or changing wardrobe.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t06.mp4",
+      "shotId": "t06",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 12,
+        "camera": "top-down digital map animation"
+      }
+    },
+    {
+      "id": "image-t07",
+      "kind": "shot-image",
+      "provider": "manual",
+      "status": "blocked",
+      "blockedBy": [
+        "character-amani"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Amani zooms into tomorrow's red zone until her own street and building number appear. CAMERA: screen to face rack focus. STORY PURPOSE: Make abstract system personally dangerous.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t07.png",
+      "shotId": "t07",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 9,
+        "camera": "screen to face rack focus",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing"
+      }
+    },
+    {
+      "id": "video-t07",
+      "kind": "shot-video",
+      "provider": "video-provider",
+      "status": "blocked",
+      "blockedBy": [
+        "image-t07"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Amani zooms into tomorrow's red zone until her own street and building number appear. CAMERA: screen to face rack focus. STORY PURPOSE: Make abstract system personally dangerous.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale. MOTION: restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing. Keep exact identity and geometry from the approved still/reference; avoid face drift, limb morphing, flicker, warped hands or changing wardrobe.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t07.mp4",
+      "shotId": "t07",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 9,
+        "camera": "screen to face rack focus"
+      }
+    },
+    {
+      "id": "image-t08",
+      "kind": "shot-image",
+      "provider": "manual",
+      "status": "blocked",
+      "blockedBy": [
+        "character-amani",
+        "character-kito"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. || Kito Mwangi: Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance. Wardrobe: Dark navy technical workwear, rolled sleeves, compact engineering tools.. SHOT: Red map light crosses Amani's face. CAMERA: tight profile. STORY PURPOSE: Set up the final inference.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. || Kito Mwangi: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Workwear stays functional and understated. Avoid sci-fi armour or gadgets. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t08.png",
+      "shotId": "t08",
+      "characterIds": [
+        "amani",
+        "kito"
+      ],
+      "metadata": {
+        "durationSec": 5,
+        "camera": "tight profile",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing"
+      }
+    },
+    {
+      "id": "video-t08",
+      "kind": "shot-video",
+      "provider": "video-provider",
+      "status": "blocked",
+      "blockedBy": [
+        "image-t08"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet. || Kito Mwangi: Young Kenyan man, dark skin, close-cropped hair, practical engineer appearance. Wardrobe: Dark navy technical workwear, rolled sleeves, compact engineering tools.. SHOT: Red map light crosses Amani's face. CAMERA: tight profile. STORY PURPOSE: Set up the final inference.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. || Kito Mwangi: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Workwear stays functional and understated. Avoid sci-fi armour or gadgets. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale. MOTION: restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing. Keep exact identity and geometry from the approved still/reference; avoid face drift, limb morphing, flicker, warped hands or changing wardrobe.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t08.mp4",
+      "shotId": "t08",
+      "characterIds": [
+        "amani",
+        "kito"
+      ],
+      "metadata": {
+        "durationSec": 5,
+        "camera": "tight profile"
+      }
+    },
+    {
+      "id": "image-t09",
+      "kind": "shot-image",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. No featured character face; prioritize environment and story object continuity. SHOT: Somewhere beneath Nairobi, a huge relief gate begins to open. Water changes direction. CAMERA: underground cinematic reveal. STORY PURPOSE: Reveal physical agency before verbal conclusion.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: No recurring character face in this shot. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t09.png",
+      "shotId": "t09",
+      "characterIds": [],
+      "metadata": {
+        "durationSec": 7,
+        "camera": "underground cinematic reveal",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing"
+      }
+    },
+    {
+      "id": "video-t09",
+      "kind": "shot-video",
+      "provider": "video-provider",
+      "status": "blocked",
+      "blockedBy": [
+        "image-t09"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. No featured character face; prioritize environment and story object continuity. SHOT: Somewhere beneath Nairobi, a huge relief gate begins to open. Water changes direction. CAMERA: underground cinematic reveal. STORY PURPOSE: Reveal physical agency before verbal conclusion.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: No recurring character face in this shot. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale. MOTION: restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing. Keep exact identity and geometry from the approved still/reference; avoid face drift, limb morphing, flicker, warped hands or changing wardrobe.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t09.mp4",
+      "shotId": "t09",
+      "characterIds": [],
+      "metadata": {
+        "durationSec": 7,
+        "camera": "underground cinematic reveal"
+      }
+    },
+    {
+      "id": "image-t10",
+      "kind": "shot-image",
+      "provider": "manual",
+      "status": "blocked",
+      "blockedBy": [
+        "character-amani"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Black after a final flash of the red map. CAMERA: black title lock. STORY PURPOSE: State the franchise thesis as cliffhanger.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t10.png",
+      "shotId": "t10",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 3,
+        "camera": "black title lock",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing"
+      }
+    },
+    {
+      "id": "video-t10",
+      "kind": "shot-video",
+      "provider": "video-provider",
+      "status": "blocked",
+      "blockedBy": [
+        "image-t10"
+      ],
+      "prompt": "premium cinematic prestige drama, photorealistic, natural skin texture, realistic East African setting, restrained production design, sophisticated lighting, premium color grade, believable architecture, no generic AI gloss, no soap-opera aesthetic vertical 9:16 composition WORLD LANGUAGE: recognizable Nairobi evolved into a near-future city; rain, concrete, expressways, tunnels and restrained civic technology; cyan infrastructure maps; red only for sacrifice decisions; avoid generic neon cyberpunk. CHARACTER LOCKS: Amani Njeri: Young Kenyan woman, dark skin, focused eyes, natural hair in practical protective style, lean build. Wardrobe: Charcoal rain shell, muted teal underlayer, messenger bag, mapping tablet.. SHOT: Black after a final flash of the red map. CAMERA: black title lock. STORY PURPOSE: State the franchise thesis as cliffhanger.. Preserve exact character identity, hair, age, skin tone, wardrobe and proportions from the approved character vault. Avoid text artifacts unless the shot explicitly requires readable on-screen text. REFERENCE REQUIREMENTS: Amani Njeri: use the APPROVED CHARACTER REFERENCE for exact face, hairstyle, apparent age, skin tone, body proportions and Episode 1 wardrobe. Same rain shell, bag and hair throughout pilot. No futuristic costume styling. Render as a clean cinematic master frame without subtitles, platform UI or decorative borders. If a document must contain readable words, keep only the story-critical words and leave other copy indistinct so text can be composited later. Preserve realistic Nairobi architecture, natural skin texture, plausible lighting and physical scale. MOTION: restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing. Keep exact identity and geometry from the approved still/reference; avoid face drift, limb morphing, flicker, warped hands or changing wardrobe.",
+      "outputPath": "public/storyworld/217/217-e01/shots/t10.mp4",
+      "shotId": "t10",
+      "characterIds": [
+        "amani"
+      ],
+      "metadata": {
+        "durationSec": 3,
+        "camera": "black title lock"
+      }
+    },
+    {
+      "id": "voice-t01-narration",
+      "kind": "voice",
+      "provider": "elevenlabs",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "AMANI: At 2:17 tomorrow morning, my neighbourhood will flood.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t01-narration.mp3",
+      "metadata": {
+        "speaker": "AMANI",
+        "startSec": 0,
+        "endSec": 4
+      }
+    },
+    {
+      "id": "voice-t03-dialogue-1",
+      "kind": "voice",
+      "provider": "elevenlabs",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "AMANI: That doesn't make sense. Delivery: Quiet analytical disbelief.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t03-dialogue-1.mp3",
+      "metadata": {
+        "speaker": "AMANI",
+        "startSec": 8,
+        "endSec": 15
+      }
+    },
+    {
+      "id": "voice-t04-dialogue-1",
+      "kind": "voice",
+      "provider": "elevenlabs",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "KITO: It's a predictive layer. It shows where flooding might happen. Delivery: Routine technical confidence.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t04-dialogue-1.mp3",
+      "metadata": {
+        "speaker": "KITO",
+        "startSec": 15,
+        "endSec": 17.25
+      }
+    },
+    {
+      "id": "voice-t04-dialogue-2",
+      "kind": "voice",
+      "provider": "elevenlabs",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "AMANI: Tomorrow? Delivery: Testing him.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t04-dialogue-2.mp3",
+      "metadata": {
+        "speaker": "AMANI",
+        "startSec": 17.25,
+        "endSec": 19.5
+      }
+    },
+    {
+      "id": "voice-t04-dialogue-3",
+      "kind": "voice",
+      "provider": "elevenlabs",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "KITO: Yes. Delivery: Matter-of-fact.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t04-dialogue-3.mp3",
+      "metadata": {
+        "speaker": "KITO",
+        "startSec": 19.5,
+        "endSec": 21.75
+      }
+    },
+    {
+      "id": "voice-t04-dialogue-4",
+      "kind": "voice",
+      "provider": "elevenlabs",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "AMANI: To the minute? Delivery: Quiet.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t04-dialogue-4.mp3",
+      "metadata": {
+        "speaker": "AMANI",
+        "startSec": 21.75,
+        "endSec": 24
+      }
+    },
+    {
+      "id": "voice-t08-dialogue-1",
+      "kind": "voice",
+      "provider": "elevenlabs",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "AMANI: Kito… Delivery: Recognition, not panic.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t08-dialogue-1.mp3",
+      "metadata": {
+        "speaker": "AMANI",
+        "startSec": 55,
+        "endSec": 57.5
+      }
+    },
+    {
+      "id": "voice-t08-dialogue-2",
+      "kind": "voice",
+      "provider": "elevenlabs",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "KITO: What? Delivery: Now concerned.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t08-dialogue-2.mp3",
+      "metadata": {
+        "speaker": "KITO",
+        "startSec": 57.5,
+        "endSec": 60
+      }
+    },
+    {
+      "id": "voice-t10-narration",
+      "kind": "voice",
+      "provider": "elevenlabs",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "AMANI: The map isn't predicting the floods. It's scheduling them.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t10-narration.mp3",
+      "metadata": {
+        "speaker": "AMANI",
+        "startSec": 67,
+        "endSec": 70
+      }
+    },
+    {
+      "id": "captions-master",
+      "kind": "caption",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "outputPath": "public/storyworld/217/217-e01/captions.json",
+      "metadata": {
+        "count": 9
+      }
+    },
+    {
+      "id": "music-master",
+      "kind": "music",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Sparse low synth texture beneath real rain and hydraulic machinery. The infrastructure itself is the score.",
+      "outputPath": "public/storyworld/217/217-e01/audio/music-master.mp3"
+    },
+    {
+      "id": "sfx-t01",
+      "kind": "sfx",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Rain, low water movement, distant thunder.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t01-sfx.mp3",
+      "shotId": "t01"
+    },
+    {
+      "id": "sfx-t02",
+      "kind": "sfx",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Electrical room hum.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t02-sfx.mp3",
+      "shotId": "t02"
+    },
+    {
+      "id": "sfx-t03",
+      "kind": "sfx",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Rain against window.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t03-sfx.mp3",
+      "shotId": "t03"
+    },
+    {
+      "id": "sfx-t04",
+      "kind": "sfx",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Call compression, machinery underneath Kito.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t04-sfx.mp3",
+      "shotId": "t04"
+    },
+    {
+      "id": "sfx-t05",
+      "kind": "sfx",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Subtle rhythmic data ticks, no beat.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t05-sfx.mp3",
+      "shotId": "t05"
+    },
+    {
+      "id": "sfx-t06",
+      "kind": "sfx",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Hydraulic motif begins quietly.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t06-sfx.mp3",
+      "shotId": "t06"
+    },
+    {
+      "id": "sfx-t07",
+      "kind": "sfx",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Rain louder, room tone falls away.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t07-sfx.mp3",
+      "shotId": "t07"
+    },
+    {
+      "id": "sfx-t08",
+      "kind": "sfx",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Hydraulic metal strain begins.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t08-sfx.mp3",
+      "shotId": "t08"
+    },
+    {
+      "id": "sfx-t09",
+      "kind": "sfx",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Deep hydraulic release and rushing water.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t09-sfx.mp3",
+      "shotId": "t09"
+    },
+    {
+      "id": "sfx-t10",
+      "kind": "sfx",
+      "provider": "manual",
+      "status": "ready",
+      "blockedBy": [],
+      "prompt": "Hard cut after the word 'them'.",
+      "outputPath": "public/storyworld/217/217-e01/audio/t10-sfx.mp3",
+      "shotId": "t10"
+    }
+  ],
+  "render": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "durationSec": 70,
+    "compositionId": "StoryworldEpisode",
+    "worldId": "217",
+    "episodeId": "217-e01",
+    "shots": [
+      {
+        "id": "t01",
+        "startSec": 0,
+        "endSec": 4,
+        "durationSec": 4,
+        "label": "2:17",
+        "purpose": "Immediate mystery image.",
+        "camera": "macro street-level close-up",
+        "visual": "Rain beads on a dark wristwatch reading 2:17; curb water moves in an unexpected direction.",
+        "imagePath": "public/storyworld/217/217-e01/shots/t01.png",
+        "videoPath": "public/storyworld/217/217-e01/shots/t01.mp4",
+        "preferredAsset": "video",
+        "motionInstruction": "subtle 2.5D push-in, realistic focus breathing, no morphing",
+        "narration": "At 2:17 tomorrow morning, my neighbourhood will flood.",
+        "sound": "Rain, low water movement, distant thunder."
+      },
+      {
+        "id": "t02",
+        "startSec": 4,
+        "endSec": 8,
+        "durationSec": 4,
+        "label": "Red sector",
+        "purpose": "Attach the impossible time to a system.",
+        "camera": "over-shoulder map screen",
+        "visual": "Amani studies a civic map of Nairobi. One district pulses red with RELIEF SECTOR 12 and 02:17.",
+        "imagePath": "public/storyworld/217/217-e01/shots/t02.png",
+        "videoPath": "public/storyworld/217/217-e01/shots/t02.mp4",
+        "preferredAsset": "video",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing",
+        "onScreenText": [
+          "RELIEF SECTOR 12",
+          "02:17",
+          "EXPECTED DEPTH 1.8 M"
+        ],
+        "sound": "Electrical room hum."
+      },
+      {
+        "id": "t03",
+        "startSec": 8,
+        "endSec": 15,
+        "durationSec": 7,
+        "label": "Moderate rain",
+        "purpose": "Show contradiction.",
+        "camera": "screen insert then profile",
+        "visual": "Weather forecast shows moderate rain, while Amani compares it to the severe flood depth forecast.",
+        "imagePath": "public/storyworld/217/217-e01/shots/t03.png",
+        "videoPath": "public/storyworld/217/217-e01/shots/t03.mp4",
+        "preferredAsset": "video",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing",
+        "dialogue": [
+          {
+            "speaker": "AMANI",
+            "text": "That doesn't make sense.",
+            "delivery": "Quiet analytical disbelief."
+          }
+        ],
+        "sound": "Rain against window."
+      },
+      {
+        "id": "t04",
+        "startSec": 15,
+        "endSec": 24,
+        "durationSec": 9,
+        "label": "Kito",
+        "purpose": "Let a trusted engineer offer the normal explanation, then undermine it.",
+        "camera": "split visual / call close-ups",
+        "visual": "Amani calls Kito; he is in a hydraulic maintenance space.",
+        "imagePath": "public/storyworld/217/217-e01/shots/t04.png",
+        "videoPath": "public/storyworld/217/217-e01/shots/t04.mp4",
+        "preferredAsset": "video",
+        "motionInstruction": "very subtle breathing and eye movement, micro push-in, no face drift",
+        "dialogue": [
+          {
+            "speaker": "KITO",
+            "text": "It's a predictive layer. It shows where flooding might happen.",
+            "delivery": "Routine technical confidence."
+          },
+          {
+            "speaker": "AMANI",
+            "text": "Tomorrow?",
+            "delivery": "Testing him."
+          },
+          {
+            "speaker": "KITO",
+            "text": "Yes.",
+            "delivery": "Matter-of-fact."
+          },
+          {
+            "speaker": "AMANI",
+            "text": "To the minute?",
+            "delivery": "Quiet."
+          }
+        ],
+        "sound": "Call compression, machinery underneath Kito."
+      },
+      {
+        "id": "t05",
+        "startSec": 24,
+        "endSec": 34,
+        "durationSec": 10,
+        "label": "Archive",
+        "purpose": "Establish repeated pattern, not coincidence.",
+        "camera": "rapid controlled map montage",
+        "visual": "Amani pulls historical flood maps: April 2047, November 2047, March 2048. Each red sector matches an actual flood record.",
+        "imagePath": "public/storyworld/217/217-e01/shots/t05.png",
+        "videoPath": "public/storyworld/217/217-e01/shots/t05.mp4",
+        "preferredAsset": "video",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing",
+        "onScreenText": [
+          "APR 2047",
+          "NOV 2047",
+          "MAR 2048"
+        ],
+        "sound": "Subtle rhythmic data ticks, no beat."
+      },
+      {
+        "id": "t06",
+        "startSec": 34,
+        "endSec": 46,
+        "durationSec": 12,
+        "label": "Infrastructure overlay",
+        "purpose": "Connect outcome to controllable infrastructure.",
+        "camera": "top-down digital map animation",
+        "visual": "She overlays stormwater infrastructure. Every flooded district sits downstream of a controlled relief gate.",
+        "imagePath": "public/storyworld/217/217-e01/shots/t06.png",
+        "videoPath": "public/storyworld/217/217-e01/shots/t06.mp4",
+        "preferredAsset": "video",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing",
+        "sound": "Hydraulic motif begins quietly."
+      },
+      {
+        "id": "t07",
+        "startSec": 46,
+        "endSec": 55,
+        "durationSec": 9,
+        "label": "Her building",
+        "purpose": "Make abstract system personally dangerous.",
+        "camera": "screen to face rack focus",
+        "visual": "Amani zooms into tomorrow's red zone until her own street and building number appear.",
+        "imagePath": "public/storyworld/217/217-e01/shots/t07.png",
+        "videoPath": "public/storyworld/217/217-e01/shots/t07.mp4",
+        "preferredAsset": "video",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing",
+        "sound": "Rain louder, room tone falls away."
+      },
+      {
+        "id": "t08",
+        "startSec": 55,
+        "endSec": 60,
+        "durationSec": 5,
+        "label": "The question",
+        "purpose": "Set up the final inference.",
+        "camera": "tight profile",
+        "visual": "Red map light crosses Amani's face.",
+        "imagePath": "public/storyworld/217/217-e01/shots/t08.png",
+        "videoPath": "public/storyworld/217/217-e01/shots/t08.mp4",
+        "preferredAsset": "video",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing",
+        "dialogue": [
+          {
+            "speaker": "AMANI",
+            "text": "Kito…",
+            "delivery": "Recognition, not panic."
+          },
+          {
+            "speaker": "KITO",
+            "text": "What?",
+            "delivery": "Now concerned."
+          }
+        ],
+        "sound": "Hydraulic metal strain begins."
+      },
+      {
+        "id": "t09",
+        "startSec": 60,
+        "endSec": 67,
+        "durationSec": 7,
+        "label": "The gate",
+        "purpose": "Reveal physical agency before verbal conclusion.",
+        "camera": "underground cinematic reveal",
+        "visual": "Somewhere beneath Nairobi, a huge relief gate begins to open. Water changes direction.",
+        "imagePath": "public/storyworld/217/217-e01/shots/t09.png",
+        "videoPath": "public/storyworld/217/217-e01/shots/t09.mp4",
+        "preferredAsset": "video",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing",
+        "sound": "Deep hydraulic release and rushing water."
+      },
+      {
+        "id": "t10",
+        "startSec": 67,
+        "endSec": 70,
+        "durationSec": 3,
+        "label": "Scheduling",
+        "purpose": "State the franchise thesis as cliffhanger.",
+        "camera": "black title lock",
+        "visual": "Black after a final flash of the red map.",
+        "imagePath": "public/storyworld/217/217-e01/shots/t10.png",
+        "videoPath": "public/storyworld/217/217-e01/shots/t10.mp4",
+        "preferredAsset": "video",
+        "motionInstruction": "restrained cinematic micro-motion matching the stated camera direction; no identity drift or object morphing",
+        "narration": "The map isn't predicting the floods. It's scheduling them.",
+        "onScreenText": [
+          "2:17",
+          "EPISODE 1 — THE MAP"
+        ],
+        "sound": "Hard cut after the word 'them'."
+      }
+    ],
+    "voices": [
+      {
+        "id": "t01-narration",
+        "speaker": "AMANI",
+        "startSec": 0,
+        "endSec": 4,
+        "text": "At 2:17 tomorrow morning, my neighbourhood will flood.",
+        "outputPath": "public/storyworld/217/217-e01/audio/t01-narration.mp3"
+      },
+      {
+        "id": "t03-dialogue-1",
+        "speaker": "AMANI",
+        "startSec": 8,
+        "endSec": 15,
+        "text": "That doesn't make sense.",
+        "delivery": "Quiet analytical disbelief.",
+        "outputPath": "public/storyworld/217/217-e01/audio/t03-dialogue-1.mp3"
+      },
+      {
+        "id": "t04-dialogue-1",
+        "speaker": "KITO",
+        "startSec": 15,
+        "endSec": 17.25,
+        "text": "It's a predictive layer. It shows where flooding might happen.",
+        "delivery": "Routine technical confidence.",
+        "outputPath": "public/storyworld/217/217-e01/audio/t04-dialogue-1.mp3"
+      },
+      {
+        "id": "t04-dialogue-2",
+        "speaker": "AMANI",
+        "startSec": 17.25,
+        "endSec": 19.5,
+        "text": "Tomorrow?",
+        "delivery": "Testing him.",
+        "outputPath": "public/storyworld/217/217-e01/audio/t04-dialogue-2.mp3"
+      },
+      {
+        "id": "t04-dialogue-3",
+        "speaker": "KITO",
+        "startSec": 19.5,
+        "endSec": 21.75,
+        "text": "Yes.",
+        "delivery": "Matter-of-fact.",
+        "outputPath": "public/storyworld/217/217-e01/audio/t04-dialogue-3.mp3"
+      },
+      {
+        "id": "t04-dialogue-4",
+        "speaker": "AMANI",
+        "startSec": 21.75,
+        "endSec": 24,
+        "text": "To the minute?",
+        "delivery": "Quiet.",
+        "outputPath": "public/storyworld/217/217-e01/audio/t04-dialogue-4.mp3"
+      },
+      {
+        "id": "t08-dialogue-1",
+        "speaker": "AMANI",
+        "startSec": 55,
+        "endSec": 57.5,
+        "text": "Kito…",
+        "delivery": "Recognition, not panic.",
+        "outputPath": "public/storyworld/217/217-e01/audio/t08-dialogue-1.mp3"
+      },
+      {
+        "id": "t08-dialogue-2",
+        "speaker": "KITO",
+        "startSec": 57.5,
+        "endSec": 60,
+        "text": "What?",
+        "delivery": "Now concerned.",
+        "outputPath": "public/storyworld/217/217-e01/audio/t08-dialogue-2.mp3"
+      },
+      {
+        "id": "t10-narration",
+        "speaker": "AMANI",
+        "startSec": 67,
+        "endSec": 70,
+        "text": "The map isn't predicting the floods. It's scheduling them.",
+        "outputPath": "public/storyworld/217/217-e01/audio/t10-narration.mp3"
+      }
+    ],
+    "captions": [
+      {
+        "id": "caption-t01-narration",
+        "startSec": 0,
+        "endSec": 4,
+        "text": "At 2:17 tomorrow morning, my neighbourhood will flood.",
+        "speaker": "AMANI"
+      },
+      {
+        "id": "caption-t03-dialogue-1",
+        "startSec": 8,
+        "endSec": 15,
+        "text": "That doesn't make sense.",
+        "speaker": "AMANI"
+      },
+      {
+        "id": "caption-t04-dialogue-1",
+        "startSec": 15,
+        "endSec": 17.25,
+        "text": "It's a predictive layer. It shows where flooding might happen.",
+        "speaker": "KITO"
+      },
+      {
+        "id": "caption-t04-dialogue-2",
+        "startSec": 17.25,
+        "endSec": 19.5,
+        "text": "Tomorrow?",
+        "speaker": "AMANI"
+      },
+      {
+        "id": "caption-t04-dialogue-3",
+        "startSec": 19.5,
+        "endSec": 21.75,
+        "text": "Yes.",
+        "speaker": "KITO"
+      },
+      {
+        "id": "caption-t04-dialogue-4",
+        "startSec": 21.75,
+        "endSec": 24,
+        "text": "To the minute?",
+        "speaker": "AMANI"
+      },
+      {
+        "id": "caption-t08-dialogue-1",
+        "startSec": 55,
+        "endSec": 57.5,
+        "text": "Kito…",
+        "speaker": "AMANI"
+      },
+      {
+        "id": "caption-t08-dialogue-2",
+        "startSec": 57.5,
+        "endSec": 60,
+        "text": "What?",
+        "speaker": "KITO"
+      },
+      {
+        "id": "caption-t10-narration",
+        "startSec": 67,
+        "endSec": 70,
+        "text": "The map isn't predicting the floods. It's scheduling them.",
+        "speaker": "AMANI"
+      }
+    ],
+    "musicDirection": "Sparse low synth texture beneath real rain and hydraulic machinery. The infrastructure itself is the score.",
+    "subtitleDirection": "Compact white captions with occasional cyan system terms and red only for sacrifice-zone data.",
+    "title": "2:17",
+    "episodeTitle": "The Map"
+  },
+  "approvalGates": [
+    "Approve recurring character reference sheets before any character shot generation.",
+    "Approve the hero still for each shot before image-to-video generation.",
+    "Reject any shot with face, hair, age, skin-tone, wardrobe or body-proportion drift.",
+    "Composite important readable text in Remotion rather than trusting generated text unless explicitly approved.",
+    "Approve voice casting once per recurring character, then reuse the same voice ID across the series.",
+    "Human editorial approval is mandatory before final render and publication."
+  ]
+}
