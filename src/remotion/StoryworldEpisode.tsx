@@ -41,6 +41,12 @@ function FallbackShot({ label, visual, camera, onScreenText }: { label: string; 
   );
 }
 
+function TitleLock({ title }: { title: string }) {
+  return <AbsoluteFill style={{ background: "#050608", color: "#f4efe6", justifyContent: "center", alignItems: "center", textAlign: "center", padding: 90 }}>
+    <div style={{ fontFamily: "Inter, ui-sans-serif, system-ui", fontSize: 76, lineHeight: 1, fontWeight: 850, letterSpacing: -2 }}>{title}</div>
+  </AbsoluteFill>;
+}
+
 function CaptionTrack({ plan }: { plan: StoryworldGenerationPlan }) {
   const { fps } = useVideoConfig();
   return <>
@@ -73,6 +79,8 @@ export const StoryworldEpisode: React.FC<Props> = ({ plan, assetAvailability = {
                 <Img src={staticFile(publicPath(shot.imagePath))} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : hasSeed && shot.seedImagePath ? (
                 <Img src={staticFile(publicPath(shot.seedImagePath))} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : /title lock/i.test(shot.label) ? (
+                <TitleLock title={plan.render.title} />
               ) : (
                 <FallbackShot label={shot.label} visual={shot.visual} camera={shot.camera} onScreenText={shot.onScreenText} />
               )}
@@ -88,6 +96,15 @@ export const StoryworldEpisode: React.FC<Props> = ({ plan, assetAvailability = {
           </Sequence>
         ) : null
       ))}
+
+      {plan.render.shots.map((shot) => {
+        const sfxPath = `public/storyworld/${plan.render.worldId}/${plan.render.episodeId}/audio/${shot.id}-sfx.mp3`;
+        return assetAvailability[sfxPath] ? (
+          <Sequence key={`sfx-${shot.id}`} from={Math.round(shot.startSec * fps)} durationInFrames={Math.max(1, Math.round(shot.durationSec * fps))}>
+            <Audio src={staticFile(publicPath(sfxPath))} volume={0.55} />
+          </Sequence>
+        ) : null;
+      })}
 
       {assetAvailability[`public/storyworld/${plan.render.worldId}/${plan.render.episodeId}/audio/music-master.mp3`] ? (
         <Audio src={staticFile(`storyworld/${plan.render.worldId}/${plan.render.episodeId}/audio/music-master.mp3`)} volume={0.22} />

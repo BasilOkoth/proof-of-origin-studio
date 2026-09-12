@@ -1,0 +1,16 @@
+# Storyworld V0.4 — Render environment variables
+OPENAI_API_KEY=
+STORYWORLD_IMAGE_MODEL=gpt-image-2.5-sunburst
+STORYWORLD_IMAGE_QUALITY=medium
+
+ELEVENLABS_API_KEY=
+STORYWORLD_VOICE_MAP={"kamau-amara-v1":"","kamau-victor-v1":"","kamau-evelyn-v1":"","kamau-muriuki-v1":"","kamau-elias-v1":""}
+STORYWORLD_TTS_MODEL=eleven_multilingual_v2
+
+# Optional until you want motion generation
+RUNWAYML_API_SECRET=
+STORYWORLD_VIDEO_MODEL=gen4.5
+STORYWORLD_VIDEO_RATIO=720:1280
+
+# Strongly recommended on Render: persistent disk mount path
+STORYWORLD_ASSET_DIR=/var/data/storyworld
