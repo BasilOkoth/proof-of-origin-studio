@@ -10,7 +10,11 @@
     "lint": "next lint",
     "render": "tsx scripts/render.ts",
     "render:short": "tsx scripts/render-short.ts",
-    "render:thumbnail": "tsx scripts/render-thumbnail.ts"
+    "render:thumbnail": "tsx scripts/render-thumbnail.ts",
+    "storyworld:prepare": "tsx scripts/prepare-storyworld.ts",
+    "render:storyworld": "tsx scripts/render-storyworld.ts",
+    "storyworld:verify-vault": "tsx scripts/verify-storyworld-vault.ts",
+    "storyworld:doctor": "tsx scripts/storyworld-doctor.ts"
   },
   "dependencies": {
     "@remotion/bundler": "^4.0.289",
