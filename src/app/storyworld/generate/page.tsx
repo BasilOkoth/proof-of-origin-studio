@@ -55,7 +55,7 @@ export default function StoryworldGeneratePage() {
           <label style={selectorCard()}>
             <span style={eyebrow()}>Episode</span>
             <select value={plan.render.episodeId} onChange={() => undefined} style={selectStyle()}>
-              <option value={plan.render.episodeId}>EP01 · {plan.episodeTitle}</option>
+              <option value={plan.render.episodeId}>EP01 · {plan.render.episodeTitle}</option>
             </select>
           </label>
           <div style={selectorCard()}>
