@@ -50,6 +50,7 @@ type Providers = {
   runway: boolean;
   voiceMapCount: number;
   imageModel: string;
+  imageSize?: string;
   videoModel: string;
   persistentStorageConfigured: boolean;
 };
@@ -180,13 +181,14 @@ export default function StoryworldGeneratePage() {
         </section>
 
         <section style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <ProviderChip ok={Boolean(providers?.openaiImages)} label="OpenAI images" detail={providers?.imageModel}/>
+          <ProviderChip ok={Boolean(providers?.openaiImages)} label="OpenAI images" detail={providers ? `${providers.imageModel} · ${providers.imageSize || "1024x1536"}` : undefined}/>
           <ProviderChip ok={Boolean(providers?.elevenlabs)} label="ElevenLabs audio" />
           <ProviderChip ok={Boolean(providers?.runway)} label="Runway motion" detail={providers?.videoModel}/>
           <ProviderChip ok={Boolean(providers?.voiceMapCount)} label="Voice casting" detail={`${providers?.voiceMapCount || 0} mapped`}/>
           <ProviderChip ok={Boolean(providers?.persistentStorageConfigured)} label="Persistent assets" detail={providers?.persistentStorageConfigured ? "configured" : "ephemeral"}/>
         </section>
 
+        {providers && !providers.openaiImages ? <Notice tone="error">Still generation is disabled because OPENAI_API_KEY is not configured on the Render service. Add OPENAI_API_KEY under Render → Environment, save, then restart/redeploy the service.</Notice> : null}
         {error ? <Notice tone="error">{error}</Notice> : null}
         {message ? <Notice tone="success">{message}</Notice> : null}
         {batchProgress ? <Notice tone="working"><LoaderCircle size={15} className="spin"/> {batchProgress}</Notice> : null}
@@ -233,7 +235,7 @@ export default function StoryworldGeneratePage() {
                   <div style={{ color: "#727d8c", fontSize: 11, marginTop: 8 }}>{shot.camera}</div>
                   {imageState?.error ? <div style={{ color: "#ef9b9b", fontSize: 12, marginTop: 9 }}>{imageState.error}</div> : null}
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 13 }}>
-                    <button disabled={!providers?.openaiImages || busy[imageJob.id]} onClick={() => void act("generate-still", imageJob.id)} style={smallButton()}>{busy[imageJob.id] ? <LoaderCircle size={14}/> : <WandSparkles size={14}/>} {hasGeneratedStill ? "Regenerate" : "Generate still"}</button>
+                    <button title={!providers?.openaiImages ? "Configure OPENAI_API_KEY in Render to enable still generation." : undefined} disabled={!providers?.openaiImages || busy[imageJob.id]} onClick={() => void act("generate-still", imageJob.id)} style={smallButton(Boolean(!providers?.openaiImages || busy[imageJob.id]))}>{busy[imageJob.id] ? <LoaderCircle size={14}/> : <WandSparkles size={14}/>} {hasGeneratedStill ? "Regenerate" : "Generate still"}</button>
                     {hasGeneratedStill && imageState?.status !== "approved" ? <button disabled={busy[imageJob.id]} onClick={() => void act("approve-still", imageJob.id)} style={approveButton()}><Check size={14}/> Approve</button> : null}
                     <button disabled={imageState?.status !== "approved" || !providers?.runway || busy[videoJob.id] || videoState?.status === "generating"} onClick={() => void act("start-video", videoJob.id)} style={smallButton()}><Film size={14}/> {videoStatus === "generated" ? "Regenerate motion" : videoStatus === "generating" ? "Animating…" : "Animate"}</button>
                     {videoState?.status === "generating" ? <button onClick={() => void act("check-video", videoJob.id)} style={ghostButton()}><RefreshCw size={13}/> Check</button> : null}
@@ -314,7 +316,7 @@ function selectorCard(): CSSProperties { return { minHeight: 90, display: "flex"
 function selectStyle(): CSSProperties { return { width: "100%", border: 0, outline: 0, background: "transparent", color: "#f5efe6", fontSize: 17, fontWeight: 800, padding: 0, cursor: "pointer" }; }
 function primaryButton(disabled: boolean): CSSProperties { return { border: 0, borderRadius: 999, padding: "12px 17px", background: disabled ? "#51493b" : "#f0d595", color: disabled ? "#9b9386" : "#08090d", fontWeight: 850, display: "inline-flex", alignItems: "center", gap: 7, cursor: disabled ? "not-allowed" : "pointer" }; }
 function secondaryButton(disabled: boolean): CSSProperties { return { border: "1px solid #555e6c", borderRadius: 999, padding: "11px 15px", background: "transparent", color: disabled ? "#6f7680" : "#e9e3da", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 7, cursor: disabled ? "not-allowed" : "pointer" }; }
-function smallButton(): CSSProperties { return { border: "1px solid #39414d", borderRadius: 9, padding: "8px 10px", background: "#151a21", color: "#e8e4dc", fontSize: 11, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer" }; }
+function smallButton(disabled = false): CSSProperties { return { border: "1px solid #39414d", borderRadius: 9, padding: "8px 10px", background: disabled ? "#111318" : "#151a21", color: disabled ? "#666f7c" : "#e8e4dc", fontSize: 11, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 5, cursor: disabled ? "not-allowed" : "pointer" }; }
 function approveButton(): CSSProperties { return { ...smallButton(), border: "1px solid #42604a", background: "#142019", color: "#a9dfb5" }; }
 function ghostButton(): CSSProperties { return { border: "1px solid #323945", borderRadius: 9, padding: "7px 9px", background: "transparent", color: "#aeb6c2", fontSize: 11, fontWeight: 750, display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer" }; }
 function statusPill(status: string): CSSProperties { const good = status === "approved" || status === "generated" || status === "ready"; return { padding: "5px 8px", borderRadius: 999, fontSize: 9, fontWeight: 900, letterSpacing: .8, background: good ? "rgba(12,45,24,.88)" : status === "failed" ? "rgba(70,20,22,.9)" : "rgba(20,23,29,.85)", color: good ? "#a9dfb5" : status === "failed" ? "#ef9b9b" : "#d6bd84", backdropFilter: "blur(8px)" }; }

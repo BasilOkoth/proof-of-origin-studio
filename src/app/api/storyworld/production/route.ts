@@ -30,7 +30,7 @@ const BodySchema = z.object({
   ]),
   worldId: z.string().min(1),
   jobId: z.string().optional(),
-  quality: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+  quality: z.enum(["low", "medium", "high"]).optional(),
 });
 
 type VoiceMap = Record<string, string>;
@@ -78,6 +78,7 @@ async function openAiStill(plan: StoryworldGenerationPlan, job: GenerationJob, q
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
   const model = process.env.STORYWORLD_IMAGE_MODEL || "gpt-image-2.5-sunburst";
+  const size = process.env.STORYWORLD_IMAGE_SIZE || "1024x1536";
   const referencePaths = Array.isArray(job.metadata?.referencePaths) ? job.metadata?.referencePaths as string[] : [];
   const seedImagePath = String(job.metadata?.seedImagePath || "");
   const allRefs = [...referencePaths, ...(seedImagePath ? [seedImagePath] : [])];
@@ -87,7 +88,7 @@ async function openAiStill(plan: StoryworldGenerationPlan, job: GenerationJob, q
     const form = new FormData();
     form.append("model", model);
     form.append("prompt", referencePrompt(job, plan));
-    form.append("size", "720x1280");
+    form.append("size", size);
     form.append("quality", quality);
     form.append("output_format", "png");
     for (let i = 0; i < allRefs.length; i += 1) await addReference(form, allRefs[i], i);
@@ -100,7 +101,7 @@ async function openAiStill(plan: StoryworldGenerationPlan, job: GenerationJob, q
     response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt: job.prompt, size: "720x1280", quality, output_format: "png", n: 1 }),
+      body: JSON.stringify({ model, prompt: job.prompt, size, quality, output_format: "png", n: 1 }),
     });
   }
 
@@ -214,6 +215,7 @@ function providers() {
     runway: Boolean(process.env.RUNWAYML_API_SECRET),
     voiceMapCount: voiceCount,
     imageModel: process.env.STORYWORLD_IMAGE_MODEL || "gpt-image-2.5-sunburst",
+    imageSize: process.env.STORYWORLD_IMAGE_SIZE || "1024x1536",
     videoModel: process.env.STORYWORLD_VIDEO_MODEL || "gen4.5",
     persistentStorageConfigured: Boolean(process.env.STORYWORLD_ASSET_DIR),
     storageRoot: storyworldStorageRoot(),

@@ -14,3 +14,6 @@ STORYWORLD_VIDEO_RATIO=720:1280
 
 # Strongly recommended on Render: persistent disk mount path
 STORYWORLD_ASSET_DIR=/var/data/storyworld
+
+# Supported portrait image size for OpenAI image generation
+STORYWORLD_IMAGE_SIZE=1024x1536
